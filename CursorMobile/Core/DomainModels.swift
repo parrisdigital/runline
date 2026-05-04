@@ -186,14 +186,72 @@ enum AgentSource: Hashable, Codable {
     case pullRequest(url: URL)
 }
 
+enum AgentRunMode: String, CaseIterable, Identifiable, Hashable, Codable {
+    case cloudAgent
+    case sdkBridge
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .cloudAgent:
+            "Cloud Agent"
+        case .sdkBridge:
+            "SDK Mode"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .cloudAgent:
+            "Direct Cursor Cloud Agents API from iOS."
+        case .sdkBridge:
+            "Routes launch and streaming through the optional Cursor SDK bridge."
+        }
+    }
+}
+
 struct AgentLaunchDraft: Hashable, Codable {
     var prompt: AgentPrompt
     var modelID: String?
     var source: AgentSource
+    var runMode: AgentRunMode
     var branchName: String?
     var autoGenerateBranch: Bool
     var autoCreatePullRequest: Bool
     var skipReviewerRequest: Bool?
+
+    init(
+        prompt: AgentPrompt,
+        modelID: String?,
+        source: AgentSource,
+        runMode: AgentRunMode = .cloudAgent,
+        branchName: String?,
+        autoGenerateBranch: Bool,
+        autoCreatePullRequest: Bool,
+        skipReviewerRequest: Bool?
+    ) {
+        self.prompt = prompt
+        self.modelID = modelID
+        self.source = source
+        self.runMode = runMode
+        self.branchName = branchName
+        self.autoGenerateBranch = autoGenerateBranch
+        self.autoCreatePullRequest = autoCreatePullRequest
+        self.skipReviewerRequest = skipReviewerRequest
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        prompt = try container.decode(AgentPrompt.self, forKey: .prompt)
+        modelID = try container.decodeIfPresent(String.self, forKey: .modelID)
+        source = try container.decode(AgentSource.self, forKey: .source)
+        runMode = try container.decodeIfPresent(AgentRunMode.self, forKey: .runMode) ?? .cloudAgent
+        branchName = try container.decodeIfPresent(String.self, forKey: .branchName)
+        autoGenerateBranch = try container.decode(Bool.self, forKey: .autoGenerateBranch)
+        autoCreatePullRequest = try container.decode(Bool.self, forKey: .autoCreatePullRequest)
+        skipReviewerRequest = try container.decodeIfPresent(Bool.self, forKey: .skipReviewerRequest)
+    }
 }
 
 struct AgentLaunchResult: Hashable, Codable {

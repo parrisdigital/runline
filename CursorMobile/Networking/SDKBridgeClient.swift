@@ -20,8 +20,50 @@ struct SDKBridgeHealthResponse: Decodable, Equatable {
     var sdk: String
 }
 
+enum SDKBridgePreferences {
+    static let isEnabledKey = "sdkBridge.isEnabled"
+    static let baseURLKey = "sdkBridge.baseURL"
+    static let defaultIsEnabled = false
+    static let defaultBaseURLString = "http://localhost:8787"
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: isEnabledKey)
+    }
+
+    static func baseURLString(defaults: UserDefaults = .standard) -> String {
+        defaults.string(forKey: baseURLKey) ?? defaultBaseURLString
+    }
+
+    static func configuredBaseURL(defaults: UserDefaults = .standard) -> URL? {
+        baseURL(from: baseURLString(defaults: defaults))
+    }
+
+    static func baseURL(from value: String) -> URL? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host?.isEmpty == false else {
+            return nil
+        }
+        return url
+    }
+}
+
+struct SDKBridgePromptImageDimensionRequest: Encodable, Equatable {
+    var width: Int
+    var height: Int
+}
+
+struct SDKBridgePromptImageRequest: Encodable, Equatable {
+    var data: String
+    var mimeType: String
+    var dimension: SDKBridgePromptImageDimensionRequest
+}
+
 struct SDKBridgeCloudRunRequest: Encodable, Equatable {
     var prompt: String
+    var images: [SDKBridgePromptImageRequest]? = nil
     var repositoryUrl: String?
     var startingRef: String?
     var prUrl: String?

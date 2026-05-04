@@ -5,6 +5,14 @@ const port = Number(process.env.PORT ?? 8787);
 
 type CloudRunRequest = {
   prompt?: string;
+  images?: Array<{
+    data?: string;
+    mimeType?: string;
+    dimension?: {
+      width: number;
+      height: number;
+    };
+  }>;
   repositoryUrl?: string;
   startingRef?: string;
   prUrl?: string;
@@ -71,6 +79,7 @@ async function createCloudRun(request: IncomingMessage, response: ServerResponse
     sendJSON(response, 400, { error: "prompt_required" });
     return;
   }
+  const promptText = body.prompt.trim();
 
   if (!body.repositoryUrl && !body.prUrl) {
     sendJSON(response, 400, { error: "repository_or_pr_required" });
@@ -102,7 +111,20 @@ async function createCloudRun(request: IncomingMessage, response: ServerResponse
   }
 
   const agent = await Agent.create(createOptions);
-  const run = await agent.send(body.prompt);
+  const prompt = body.images?.length
+    ? {
+        text: promptText,
+        images: body.images
+          .filter((image) => image.data?.trim())
+          .map((image) => ({
+            data: image.data!,
+            mimeType: image.mimeType ?? "image/jpeg",
+            dimension: image.dimension,
+          })),
+      }
+    : promptText;
+
+  const run = await agent.send(prompt);
 
   sendJSON(response, 202, {
     agentId: agent.agentId,

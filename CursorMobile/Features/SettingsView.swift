@@ -13,9 +13,10 @@ struct SettingsView: View {
 struct SettingsFormContent: View {
     @Environment(AppState.self) private var appState
     @AppStorage("appearance.mode") private var appearanceMode = AppAppearanceMode.system.rawValue
-    @AppStorage("sdkBridge.isEnabled") private var isSDKBridgeEnabled = false
-    @AppStorage("sdkBridge.baseURL") private var sdkBridgeBaseURL = "http://localhost:8787"
+    @AppStorage(SDKBridgePreferences.isEnabledKey) private var isSDKBridgeEnabled = SDKBridgePreferences.defaultIsEnabled
+    @AppStorage(SDKBridgePreferences.baseURLKey) private var sdkBridgeBaseURL = SDKBridgePreferences.defaultBaseURLString
     @State private var enterpriseAPIKey = ""
+    @State private var sdkBridgeHealth: SDKBridgeHealthCheckState = .idle
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -60,6 +61,26 @@ struct SettingsFormContent: View {
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .bridgeURL)
                     .disabled(!isSDKBridgeEnabled)
+
+                if isSDKBridgeEnabled {
+                    LabeledContent("Status") {
+                        Label(sdkBridgeHealth.title, systemImage: sdkBridgeHealth.systemImage)
+                            .foregroundStyle(sdkBridgeHealth.tint)
+                    }
+
+                    Button {
+                        Task {
+                            await checkSDKBridgeHealth()
+                        }
+                    } label: {
+                        if sdkBridgeHealth == .checking {
+                            ProgressView()
+                        } else {
+                            Text("Check Connection")
+                        }
+                    }
+                    .disabled(sdkBridgeHealth == .checking)
+                }
             } header: {
                 Text("Cursor SDK Bridge")
             } footer: {
@@ -126,6 +147,12 @@ struct SettingsFormContent: View {
         .task {
             await appState.refreshNotificationStatus()
         }
+        .onChange(of: sdkBridgeBaseURL) { _, _ in
+            sdkBridgeHealth = .idle
+        }
+        .onChange(of: isSDKBridgeEnabled) { _, _ in
+            sdkBridgeHealth = .idle
+        }
     }
 
     private var permissionTitle: String {
@@ -154,6 +181,24 @@ struct SettingsFormContent: View {
         }
     }
 
+    private func checkSDKBridgeHealth() async {
+        focusedField = nil
+        guard let baseURL = SDKBridgePreferences.baseURL(from: sdkBridgeBaseURL) else {
+            sdkBridgeHealth = .failed("Invalid URL")
+            return
+        }
+
+        sdkBridgeHealth = .checking
+        do {
+            let health = try await SDKBridgeClient(baseURL: baseURL).health()
+            sdkBridgeHealth = health.ok
+                ? .healthy("\(health.service) - \(health.sdk)")
+                : .failed("Bridge responded unhealthy")
+        } catch {
+            sdkBridgeHealth = .failed(error.localizedDescription)
+        }
+    }
+
     private func notificationBinding(_ keyPath: WritableKeyPath<NotificationPreferences, Bool>) -> Binding<Bool> {
         Binding {
             appState.notificationPreferences[keyPath: keyPath]
@@ -161,6 +206,48 @@ struct SettingsFormContent: View {
             appState.updateNotificationPreferences { preferences in
                 preferences[keyPath: keyPath] = value
             }
+        }
+    }
+}
+
+private enum SDKBridgeHealthCheckState: Equatable {
+    case idle
+    case checking
+    case healthy(String)
+    case failed(String)
+
+    var title: String {
+        switch self {
+        case .idle:
+            "Not Checked"
+        case .checking:
+            "Checking"
+        case .healthy(let message), .failed(let message):
+            message
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .idle:
+            "circle"
+        case .checking:
+            "clock"
+        case .healthy:
+            "checkmark.circle"
+        case .failed:
+            "exclamationmark.circle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .healthy:
+            .green
+        case .failed:
+            .red
+        case .checking, .idle:
+            .secondary
         }
     }
 }

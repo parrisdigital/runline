@@ -20,6 +20,7 @@ final class LocalAppCacheTests: XCTestCase {
         XCTAssertEqual(loaded.runsByAgentID, snapshot.runsByAgentID)
         XCTAssertEqual(loaded.eventsByRunID, snapshot.eventsByRunID)
         XCTAssertEqual(loaded.artifactsByAgentID, snapshot.artifactsByAgentID)
+        XCTAssertEqual(loaded.sdkBridgeRunIDs, snapshot.sdkBridgeRunIDs)
         XCTAssertEqual(loaded.launchDraft, snapshot.launchDraft)
         XCTAssertEqual(loaded.notificationPreferences, snapshot.notificationPreferences)
 
@@ -79,6 +80,7 @@ final class LocalAppCacheTests: XCTestCase {
                     Artifact(path: "artifacts/run-log.txt", kind: .log, sizeDescription: "1 KB", updatedAtDescription: "now")
                 ]
             ],
+            sdkBridgeRunIDs: [run.id],
             launchDraft: AgentLaunchDraft(
                 prompt: AgentPrompt(text: "Cache this"),
                 modelID: model.id,

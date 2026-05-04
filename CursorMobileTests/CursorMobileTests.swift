@@ -53,6 +53,27 @@ final class CursorMobileTests: XCTestCase {
         XCTAssertEqual(NewChatModelPickerOptions.modelID(from: "composer-2"), "composer-2")
     }
 
+    func testLaunchDraftDecodesLegacyCacheAsCloudAgentRunMode() throws {
+        let draft = AgentLaunchDraft(
+            prompt: AgentPrompt(text: "Build settings"),
+            modelID: "composer-2",
+            source: .repository(url: URL(string: "https://github.com/acme/app")!, startingRef: "main"),
+            runMode: .sdkBridge,
+            branchName: nil,
+            autoGenerateBranch: true,
+            autoCreatePullRequest: true,
+            skipReviewerRequest: false
+        )
+        let data = try JSONEncoder().encode(draft)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "runMode")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(AgentLaunchDraft.self, from: legacyData)
+
+        XCTAssertEqual(decoded.runMode, .cloudAgent)
+    }
+
     @MainActor
     func testDeepLinksFocusChatsTabForAdaptiveShells() {
         let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())

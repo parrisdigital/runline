@@ -66,6 +66,23 @@ struct NewChatForm: View {
         @Bindable var appState = appState
 
         Form {
+            Section("Run Mode") {
+                Picker("Run Mode", selection: runModeBinding) {
+                    ForEach(AgentRunMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                LabeledContent("Mode", value: appState.launchDraft.runMode.detail)
+
+                if let issue = appState.sdkBridgeLaunchIssue {
+                    Text(issue)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Source") {
                 Picker("Source", selection: $sourceMode) {
                     ForEach(SourceMode.allCases) { mode in
@@ -269,6 +286,14 @@ struct NewChatForm: View {
         } set: { url in
             guard let repository = appState.repositories.first(where: { $0.url == url }) else { return }
             selectRepository(repository)
+        }
+    }
+
+    private var runModeBinding: Binding<AgentRunMode> {
+        Binding {
+            appState.launchDraft.runMode
+        } set: { mode in
+            appState.launchDraft.runMode = mode
         }
     }
 
