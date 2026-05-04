@@ -1,0 +1,401 @@
+import SwiftUI
+import XCTest
+@testable import CursorMobile
+
+final class CursorMobileTests: XCTestCase {
+    @MainActor
+    func testMockProviderLaunchCreatesAgentAndRun() async throws {
+        let provider = MockAgentProvider()
+        let repo = try await provider.listRepositories().first!
+        let draft = AgentLaunchDraft(
+            prompt: AgentPrompt(text: "Add regression tests for login"),
+            modelID: "default",
+            source: .repository(url: repo.url, startingRef: repo.defaultBranch),
+            branchName: "tests/login-regression",
+            autoGenerateBranch: true,
+            autoCreatePullRequest: true,
+            skipReviewerRequest: false
+        )
+
+        let result = try await provider.createAgent(draft)
+
+        XCTAssertFalse(result.agent.id.isEmpty)
+        XCTAssertFalse(result.run.id.isEmpty)
+        XCTAssertEqual(result.agent.branchName, "tests/login-regression")
+        XCTAssertEqual(result.run.status, .creating)
+    }
+
+    func testUnknownRunStatusIsNonTerminal() {
+        XCTAssertFalse(RunStatus.unknown("PAUSED").isTerminal)
+    }
+
+    func testPrimaryTabBarUsesThreeExplicitTabs() {
+        XCTAssertEqual(AppTab.allCases, [.chats, .repositories, .settings])
+        XCTAssertEqual(AppTab.allCases.count, 3)
+    }
+
+    func testAppearanceModesMapToPreferredColorSchemes() {
+        XCTAssertNil(AppAppearanceMode.system.colorScheme)
+        XCTAssertEqual(AppAppearanceMode.light.colorScheme, .light)
+        XCTAssertEqual(AppAppearanceMode.dark.colorScheme, .dark)
+    }
+
+    @MainActor
+    func testManualBranchNamingRequiresBranchNameBeforeLaunch() {
+        let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
+        appState.launchDraft.prompt.text = "Build the landing page"
+        appState.launchDraft.autoGenerateBranch = false
+        appState.launchDraft.branchName = nil
+
+        XCTAssertFalse(appState.canLaunchAgent)
+
+        appState.launchDraft.branchName = "runline/landing-page"
+
+        XCTAssertTrue(appState.canLaunchAgent)
+    }
+
+    @MainActor
+    func testWorkspaceRefreshCancellationDoesNotShowGlobalAlert() async {
+        let appState = AppState(provider: CancellingAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
+
+        await appState.reloadWorkspace()
+
+        XCTAssertNil(appState.errorMessage)
+    }
+
+    @MainActor
+    func testConnectKeepsAccountWhenInitialWorkspaceRefreshFails() async {
+        let provider = RefreshFailingAgentProvider()
+        let appState = AppState(
+            apiKeyStore: InMemoryAPIKeyStore(),
+            providerFactory: { _ in provider }
+        )
+
+        await appState.connect(apiKey: "cursor-test-key")
+
+        XCTAssertTrue(appState.isConnected)
+        XCTAssertEqual(appState.account?.apiKeyName, "Runline Test Key")
+        XCTAssertNil(appState.errorMessage)
+        XCTAssertEqual(appState.statusMessage, "Cursor returned data Runline could not parse. Your key is still connected; refresh again shortly.")
+    }
+
+    @MainActor
+    func testWorkspaceRefreshIgnoresPerAgentRunPreloadFailures() async {
+        let appState = AppState(provider: RunPreloadFailingAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
+
+        await appState.reloadWorkspace()
+
+        XCTAssertNil(appState.errorMessage)
+        XCTAssertEqual(appState.agents.count, 1)
+    }
+
+    @MainActor
+    func testStreamExpiredDoesNotShowGlobalAlert() async throws {
+        let provider = StreamExpiredAgentProvider()
+        let agent = try await provider.listAgents().first!
+        let run = try await provider.listRuns(agentID: agent.id).first!
+        let appState = AppState(provider: provider, apiKeyStore: InMemoryAPIKeyStore())
+
+        await appState.loadEvents(for: agent, run: run)
+
+        XCTAssertNil(appState.errorMessage)
+        XCTAssertTrue(appState.isStreamExpired(runID: run.id))
+    }
+
+    @MainActor
+    func testMockProviderArchiveAndDeleteUpdateAgentList() async throws {
+        let provider = MockAgentProvider()
+        let agent = try await provider.listAgents().first!
+
+        try await provider.archiveAgent(agentID: agent.id)
+        let archived = try await provider.listAgents().first { $0.id == agent.id }
+        XCTAssertEqual(archived?.status, .archived)
+
+        try await provider.deleteAgent(agentID: agent.id)
+        let remaining = try await provider.listAgents()
+        XCTAssertFalse(remaining.contains { $0.id == agent.id })
+    }
+}
+
+@MainActor
+private final class CancellingAgentProvider: AgentProvider {
+    let capabilities = ProviderCapabilities()
+
+    func validateConnection() async throws -> ProviderAccount {
+        throw CancellationError()
+    }
+
+    func listRepositories() async throws -> [Repository] {
+        throw CancellationError()
+    }
+
+    func listModels() async throws -> [AgentModel] {
+        throw CancellationError()
+    }
+
+    func listAgents() async throws -> [Agent] {
+        throw CancellationError()
+    }
+
+    func getAgent(agentID: Agent.ID) async throws -> Agent {
+        throw CancellationError()
+    }
+
+    func listRuns(agentID: Agent.ID) async throws -> [AgentRun] {
+        throw CancellationError()
+    }
+
+    func getRun(agentID: Agent.ID, runID: AgentRun.ID) async throws -> AgentRun {
+        throw CancellationError()
+    }
+
+    func streamEvents(agentID: Agent.ID, runID: AgentRun.ID) async throws -> [AgentStreamEvent] {
+        throw CancellationError()
+    }
+
+    func createAgent(_ draft: AgentLaunchDraft) async throws -> AgentLaunchResult {
+        throw CancellationError()
+    }
+
+    func createRun(_ draft: AgentFollowUpDraft) async throws -> AgentRun {
+        throw CancellationError()
+    }
+
+    func cancelRun(agentID: Agent.ID, runID: AgentRun.ID) async throws {
+        throw CancellationError()
+    }
+
+    func archiveAgent(agentID: Agent.ID) async throws {
+        throw CancellationError()
+    }
+
+    func unarchiveAgent(agentID: Agent.ID) async throws {
+        throw CancellationError()
+    }
+
+    func deleteAgent(agentID: Agent.ID) async throws {
+        throw CancellationError()
+    }
+
+    func listArtifacts(agentID: Agent.ID) async throws -> [Artifact] {
+        throw CancellationError()
+    }
+
+    func downloadArtifact(agentID: Agent.ID, path: String) async throws -> ArtifactDownload {
+        throw CancellationError()
+    }
+}
+
+@MainActor
+private final class RefreshFailingAgentProvider: AgentProvider {
+    let capabilities = ProviderCapabilities()
+
+    func validateConnection() async throws -> ProviderAccount {
+        ProviderAccount(apiKeyName: "Runline Test Key", userEmail: "developer@example.com", createdAt: .now)
+    }
+
+    func listRepositories() async throws -> [Repository] {
+        throw CursorAPIError.decodingFailed("Missing repository items")
+    }
+
+    func listModels() async throws -> [AgentModel] {
+        []
+    }
+
+    func listAgents() async throws -> [Agent] {
+        []
+    }
+
+    func getAgent(agentID: Agent.ID) async throws -> Agent {
+        throw CursorAPIError.requestFailed(statusCode: 404, message: "Agent not found")
+    }
+
+    func listRuns(agentID: Agent.ID) async throws -> [AgentRun] {
+        []
+    }
+
+    func getRun(agentID: Agent.ID, runID: AgentRun.ID) async throws -> AgentRun {
+        throw CursorAPIError.requestFailed(statusCode: 404, message: "Run not found")
+    }
+
+    func streamEvents(agentID: Agent.ID, runID: AgentRun.ID) async throws -> [AgentStreamEvent] {
+        []
+    }
+
+    func createAgent(_ draft: AgentLaunchDraft) async throws -> AgentLaunchResult {
+        throw CursorAPIError.unsupportedResponse("Not supported in this test.")
+    }
+
+    func createRun(_ draft: AgentFollowUpDraft) async throws -> AgentRun {
+        throw CursorAPIError.unsupportedResponse("Not supported in this test.")
+    }
+
+    func cancelRun(agentID: Agent.ID, runID: AgentRun.ID) async throws {}
+
+    func archiveAgent(agentID: Agent.ID) async throws {}
+
+    func unarchiveAgent(agentID: Agent.ID) async throws {}
+
+    func deleteAgent(agentID: Agent.ID) async throws {}
+
+    func listArtifacts(agentID: Agent.ID) async throws -> [Artifact] {
+        []
+    }
+
+    func downloadArtifact(agentID: Agent.ID, path: String) async throws -> ArtifactDownload {
+        throw CursorAPIError.unsupportedResponse("Not supported in this test.")
+    }
+}
+
+@MainActor
+private final class RunPreloadFailingAgentProvider: AgentProvider {
+    let capabilities = ProviderCapabilities()
+
+    private let repository = Repository(
+        owner: "acme",
+        name: "ios-app",
+        url: URL(string: "https://github.com/acme/ios-app")!,
+        defaultBranch: "main",
+        isFavorite: false,
+        lastUsedDescription: "Cursor"
+    )
+
+    func validateConnection() async throws -> ProviderAccount {
+        ProviderAccount(apiKeyName: "Runline Test Key", userEmail: "developer@example.com", createdAt: .now)
+    }
+
+    func listRepositories() async throws -> [Repository] {
+        [repository]
+    }
+
+    func listModels() async throws -> [AgentModel] {
+        [AgentModel(id: "default", displayName: "default", subtitle: "Cursor configured default", category: .default, qualityScore: 4, costTier: 2)]
+    }
+
+    func listAgents() async throws -> [Agent] {
+        [
+            Agent(
+                id: "bc-123",
+                name: "Test agent",
+                status: .active,
+                repository: repository,
+                branchName: "main",
+                modelID: "default",
+                latestRunID: "run-123",
+                updatedAtDescription: "now",
+                artifactCount: 0,
+                pullRequestURL: nil
+            )
+        ]
+    }
+
+    func getAgent(agentID: Agent.ID) async throws -> Agent {
+        (try await listAgents())[0]
+    }
+
+    func listRuns(agentID: Agent.ID) async throws -> [AgentRun] {
+        throw CursorAPIError.decodingFailed("Run preload failed")
+    }
+
+    func getRun(agentID: Agent.ID, runID: AgentRun.ID) async throws -> AgentRun {
+        throw CursorAPIError.requestFailed(statusCode: 404, message: "Run not found")
+    }
+
+    func streamEvents(agentID: Agent.ID, runID: AgentRun.ID) async throws -> [AgentStreamEvent] {
+        []
+    }
+
+    func createAgent(_ draft: AgentLaunchDraft) async throws -> AgentLaunchResult {
+        throw CursorAPIError.unsupportedResponse("Not supported in this test.")
+    }
+
+    func createRun(_ draft: AgentFollowUpDraft) async throws -> AgentRun {
+        throw CursorAPIError.unsupportedResponse("Not supported in this test.")
+    }
+
+    func cancelRun(agentID: Agent.ID, runID: AgentRun.ID) async throws {}
+
+    func archiveAgent(agentID: Agent.ID) async throws {}
+
+    func unarchiveAgent(agentID: Agent.ID) async throws {}
+
+    func deleteAgent(agentID: Agent.ID) async throws {}
+
+    func listArtifacts(agentID: Agent.ID) async throws -> [Artifact] {
+        []
+    }
+
+    func downloadArtifact(agentID: Agent.ID, path: String) async throws -> ArtifactDownload {
+        throw CursorAPIError.unsupportedResponse("Not supported in this test.")
+    }
+}
+
+@MainActor
+private final class StreamExpiredAgentProvider: AgentProvider {
+    let capabilities = ProviderCapabilities()
+    private let base = MockAgentProvider()
+
+    func validateConnection() async throws -> ProviderAccount {
+        try await base.validateConnection()
+    }
+
+    func listRepositories() async throws -> [Repository] {
+        try await base.listRepositories()
+    }
+
+    func listModels() async throws -> [AgentModel] {
+        try await base.listModels()
+    }
+
+    func listAgents() async throws -> [Agent] {
+        try await base.listAgents()
+    }
+
+    func getAgent(agentID: Agent.ID) async throws -> Agent {
+        try await base.getAgent(agentID: agentID)
+    }
+
+    func listRuns(agentID: Agent.ID) async throws -> [AgentRun] {
+        try await base.listRuns(agentID: agentID)
+    }
+
+    func getRun(agentID: Agent.ID, runID: AgentRun.ID) async throws -> AgentRun {
+        try await base.getRun(agentID: agentID, runID: runID)
+    }
+
+    func streamEvents(agentID: Agent.ID, runID: AgentRun.ID) async throws -> [AgentStreamEvent] {
+        throw CursorAPIError.requestFailed(statusCode: 410, message: "stream_expired")
+    }
+
+    func createAgent(_ draft: AgentLaunchDraft) async throws -> AgentLaunchResult {
+        try await base.createAgent(draft)
+    }
+
+    func createRun(_ draft: AgentFollowUpDraft) async throws -> AgentRun {
+        try await base.createRun(draft)
+    }
+
+    func cancelRun(agentID: Agent.ID, runID: AgentRun.ID) async throws {
+        try await base.cancelRun(agentID: agentID, runID: runID)
+    }
+
+    func archiveAgent(agentID: Agent.ID) async throws {
+        try await base.archiveAgent(agentID: agentID)
+    }
+
+    func unarchiveAgent(agentID: Agent.ID) async throws {
+        try await base.unarchiveAgent(agentID: agentID)
+    }
+
+    func deleteAgent(agentID: Agent.ID) async throws {
+        try await base.deleteAgent(agentID: agentID)
+    }
+
+    func listArtifacts(agentID: Agent.ID) async throws -> [Artifact] {
+        try await base.listArtifacts(agentID: agentID)
+    }
+
+    func downloadArtifact(agentID: Agent.ID, path: String) async throws -> ArtifactDownload {
+        try await base.downloadArtifact(agentID: agentID, path: path)
+    }
+}

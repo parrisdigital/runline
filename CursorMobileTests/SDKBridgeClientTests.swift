@@ -1,0 +1,241 @@
+import Foundation
+import XCTest
+@testable import CursorMobile
+
+final class SDKBridgeClientTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        MockBridgeURLProtocol.reset()
+    }
+
+    override func tearDown() {
+        MockBridgeURLProtocol.reset()
+        super.tearDown()
+    }
+
+    func testHealthUsesBridgeBaseURL() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "ok": true,
+                "service": "runline-orchestrator",
+                "sdk": "@cursor/sdk"
+            ])
+        }
+
+        let client = makeClient()
+        let health = try await client.health()
+
+        XCTAssertTrue(health.ok)
+        XCTAssertEqual(health.sdk, "@cursor/sdk")
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "GET")
+        XCTAssertEqual(request.url?.path, "/health")
+        XCTAssertEqual(request.header("Accept"), "application/json")
+    }
+
+    func testCreateCloudRunSendsBearerKeyAndLaunchBody() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "agentId": "agent_123",
+                "runId": "run_123",
+                "status": "running",
+                "eventsURL": "/agents/agent_123/runs/run_123/events",
+                "stateURL": "/agents/agent_123/runs/run_123/state"
+            ])
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key")
+        let response = try await client.createCloudRun(
+            SDKBridgeCloudRunRequest(
+                prompt: "Fix failing tests.",
+                repositoryUrl: "https://github.com/acme/app",
+                startingRef: "main",
+                prUrl: nil,
+                modelId: "composer-2",
+                autoCreatePR: true,
+                skipReviewerRequest: false
+            )
+        )
+
+        XCTAssertEqual(response.agentId, "agent_123")
+        XCTAssertEqual(response.runId, "run_123")
+
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "POST")
+        XCTAssertEqual(request.url?.path, "/runs/cloud")
+        XCTAssertEqual(request.header("Authorization"), "Bearer cursor-test-key")
+        XCTAssertEqual(request.header("Content-Type"), "application/json")
+
+        let body = try XCTUnwrap(request.jsonBody)
+        XCTAssertEqual(body["prompt"] as? String, "Fix failing tests.")
+        XCTAssertEqual(body["repositoryUrl"] as? String, "https://github.com/acme/app")
+        XCTAssertEqual(body["startingRef"] as? String, "main")
+        XCTAssertEqual(body["modelId"] as? String, "composer-2")
+        XCTAssertEqual(body["autoCreatePR"] as? Bool, true)
+        XCTAssertEqual(body["skipReviewerRequest"] as? Bool, false)
+    }
+
+    func testStreamEventsUsesRunEventRouteAndParsesSSE() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            let payload = """
+            id: evt-1
+            event: assistant
+            data: {"type":"assistant","text":"Working"}
+
+            id: evt-2
+            event: done
+            data: {}
+
+            """
+            return HTTPResponse(
+                response: HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "text/event-stream"]
+                )!,
+                data: Data(payload.utf8)
+            )
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key")
+        let events = try await client.streamEvents(agentID: "agent_123", runID: "run_123")
+
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events.first?.id, "evt-1")
+        XCTAssertEqual(events.first?.event, "assistant")
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "GET")
+        XCTAssertEqual(request.url?.path, "/agents/agent_123/runs/run_123/events")
+        XCTAssertEqual(request.header("Accept"), "text/event-stream")
+        XCTAssertEqual(request.header("Authorization"), "Bearer cursor-test-key")
+    }
+
+    private func makeClient(apiKey: String? = nil) -> SDKBridgeClient {
+        SDKBridgeClient(
+            baseURL: URL(string: "http://localhost:8787")!,
+            apiKey: apiKey,
+            session: makeSession()
+        )
+    }
+
+    private func makeSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockBridgeURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    private static func jsonResponse(
+        for request: URLRequest,
+        body: Any,
+        headers: [String: String] = ["Content-Type": "application/json"]
+    ) throws -> HTTPResponse {
+        HTTPResponse(
+            response: HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: headers
+            )!,
+            data: try JSONSerialization.data(withJSONObject: body)
+        )
+    }
+}
+
+private struct HTTPResponse {
+    let response: HTTPURLResponse
+    let data: Data
+}
+
+private struct CapturedHTTPRequest {
+    let url: URL?
+    let method: String?
+    let headers: [String: String]
+    let body: Data
+
+    var jsonBody: [String: Any]? {
+        guard !body.isEmpty else { return nil }
+        return try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+    }
+
+    func header(_ name: String) -> String? {
+        headers.first { key, _ in
+            key.caseInsensitiveCompare(name) == .orderedSame
+        }?.value
+    }
+}
+
+private final class MockBridgeURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> HTTPResponse)?
+    nonisolated(unsafe) static var capturedRequests: [CapturedHTTPRequest] = []
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        do {
+            let body = Self.bodyData(from: request)
+            Self.capturedRequests.append(
+                CapturedHTTPRequest(
+                    url: request.url,
+                    method: request.httpMethod,
+                    headers: request.allHTTPHeaderFields ?? [:],
+                    body: body
+                )
+            )
+
+            guard let handler = Self.handler else {
+                throw URLError(.badServerResponse)
+            }
+            let output = try handler(request)
+            client?.urlProtocol(self, didReceive: output.response, cacheStoragePolicy: .notAllowed)
+            if !output.data.isEmpty {
+                client?.urlProtocol(self, didLoad: output.data)
+            }
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+
+    static func reset() {
+        handler = nil
+        capturedRequests = []
+    }
+
+    private static func bodyData(from request: URLRequest) -> Data {
+        if let body = request.httpBody {
+            return body
+        }
+
+        guard let stream = request.httpBodyStream else {
+            return Data()
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 1024
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        while stream.hasBytesAvailable {
+            let count = stream.read(buffer, maxLength: bufferSize)
+            if count > 0 {
+                data.append(buffer, count: count)
+            } else {
+                break
+            }
+        }
+
+        return data
+    }
+}

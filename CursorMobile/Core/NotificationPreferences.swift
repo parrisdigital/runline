@@ -1,0 +1,31 @@
+import Foundation
+
+struct NotificationPreferences: Codable, Equatable, Hashable {
+    var runStarted = true
+    var runFinished = true
+    var runFailed = true
+    var artifactReady = true
+    var pullRequestCreated = true
+}
+
+enum CursorMobileDeepLink: Equatable, Hashable {
+    case agent(Agent.ID)
+    case run(agentID: Agent.ID, runID: AgentRun.ID)
+
+    init?(url: URL) {
+        guard url.scheme == "runline" else { return nil }
+        let parts = [url.host].compactMap { $0 } + url.path.split(separator: "/").map(String.init)
+
+        if parts.count >= 2, parts[0] == "agent" {
+            self = .agent(parts[1])
+            return
+        }
+
+        if parts.count >= 4, parts[0] == "agents", parts[2] == "runs" {
+            self = .run(agentID: parts[1], runID: parts[3])
+            return
+        }
+
+        return nil
+    }
+}
