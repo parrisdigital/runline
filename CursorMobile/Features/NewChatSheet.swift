@@ -4,6 +4,19 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct NewChatSheet: View {
+    var body: some View {
+        NavigationStack {
+            NewChatForm(presentation: .sheet)
+        }
+    }
+}
+
+enum NewChatPresentation: Equatable {
+    case sheet
+    case detail
+}
+
+struct NewChatForm: View {
     private enum SourceMode: String, CaseIterable, Identifiable {
         case installed = "Installed"
         case manual = "Manual URL"
@@ -14,6 +27,7 @@ struct NewChatSheet: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    var presentation: NewChatPresentation
     @State private var sourceMode: SourceMode = .installed
     @State private var manualRepositoryURL = ""
     @State private var pullRequestURL = ""
@@ -35,166 +49,166 @@ struct NewChatSheet: View {
     var body: some View {
         @Bindable var appState = appState
 
-        NavigationStack {
-            Form {
-                Section("Source") {
-                    Picker("Source", selection: $sourceMode) {
-                        ForEach(SourceMode.allCases) { mode in
-                            Text(mode.rawValue).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: sourceMode) { _, mode in
-                        updateSourceMode(mode)
-                    }
-
-                    sourceControls
-
-                    if sourceMode != .pullRequest {
-                        TextField("Base branch or ref", text: startingRefBinding)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focusedField, equals: .startingRef)
+        Form {
+            Section("Source") {
+                Picker("Source", selection: $sourceMode) {
+                    ForEach(SourceMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
                     }
                 }
-
-                Section("Model") {
-                    if appState.models.isEmpty {
-                        ContentUnavailableView("No Models", systemImage: "cpu")
-                    } else {
-                        Picker("Model", selection: modelSelectionBinding) {
-                            Text("Default").tag(Optional<String>.none)
-                            ForEach(appState.models) { model in
-                                Text(model.displayName).tag(Optional(model.id))
-                            }
-                        }
-                    }
+                .pickerStyle(.segmented)
+                .onChange(of: sourceMode) { _, mode in
+                    updateSourceMode(mode)
                 }
 
-                Section("Prompt") {
-                    TextEditor(text: $appState.launchDraft.prompt.text)
-                        .frame(minHeight: 150)
-                        .focused($focusedField, equals: .prompt)
-                        .accessibilityIdentifier("newchat.prompt")
+                sourceControls
 
-                    LabeledContent("Characters", value: "\(appState.launchDraft.prompt.text.count)")
-
-                    if appState.capabilities.supportsImagesInPrompt {
-                        PhotosPicker(
-                            selection: $selectedPhotoItems,
-                            maxSelectionCount: 5,
-                            matching: .images
-                        ) {
-                            Label("Attach Images", systemImage: "photo.badge.plus")
-                        }
-                        .onChange(of: selectedPhotoItems) { _, items in
-                            Task {
-                                await loadPromptImages(from: items)
-                            }
-                        }
-
-                        if isLoadingPromptImages {
-                            ProgressView("Loading images")
-                        }
-
-                        if !appState.launchDraft.prompt.images.isEmpty {
-                            ForEach(appState.launchDraft.prompt.images) { image in
-                                HStack {
-                                    Label("\(image.width) x \(image.height)", systemImage: "photo")
-                                    Spacer()
-                                    Button("Remove", role: .destructive) {
-                                        removePromptImage(image)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Button {
-                        isPromptFileImporterPresented = true
-                    } label: {
-                        Label("Attach Files", systemImage: "doc.badge.plus")
-                    }
-
-                    if isLoadingPromptFiles {
-                        ProgressView("Loading files")
-                    }
-
-                    if let promptFileImportMessage {
-                        Text(promptFileImportMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if !appState.launchDraft.prompt.files.isEmpty {
-                        ForEach(appState.launchDraft.prompt.files) { file in
-                            HStack {
-                                Label("\(file.filename) - \(file.sizeDescription)", systemImage: "doc.text")
-                                Spacer()
-                                Button("Remove", role: .destructive) {
-                                    removePromptFile(file)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Section {
-                    Toggle("Open pull request", isOn: autoCreatePRBinding)
-
-                    if appState.launchDraft.autoCreatePullRequest {
-                        Toggle("Request reviewers", isOn: requestReviewersBinding)
-                    }
-
-                    Toggle("Let Cursor name branch", isOn: autoNameBranchBinding)
-
-                    if !appState.launchDraft.autoGenerateBranch {
-                        TextField("Working branch name", text: branchNameBinding)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focusedField, equals: .branchName)
-                    }
-                } header: {
-                    Text("Output")
-                } footer: {
-                    Text("Cursor bills this run through your Cursor account. Runline does not include Cursor credits.")
+                if sourceMode != .pullRequest {
+                    TextField("Base branch or ref", text: startingRefBinding)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .startingRef)
                 }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("New Chat")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+
+            Section("Model") {
+                if appState.models.isEmpty {
+                    ContentUnavailableView("No Models", systemImage: "cpu")
+                } else {
+                    Picker("Model", selection: modelSelectionBinding) {
+                        Text("Default").tag(Optional<String>.none)
+                        ForEach(appState.models) { model in
+                            Text(model.displayName).tag(Optional(model.id))
+                        }
+                    }
+                }
+            }
+
+            Section("Prompt") {
+                TextEditor(text: $appState.launchDraft.prompt.text)
+                    .frame(minHeight: 150)
+                    .focused($focusedField, equals: .prompt)
+                    .accessibilityIdentifier("newchat.prompt")
+
+                LabeledContent("Characters", value: "\(appState.launchDraft.prompt.text.count)")
+
+                if appState.capabilities.supportsImagesInPrompt {
+                    PhotosPicker(
+                        selection: $selectedPhotoItems,
+                        maxSelectionCount: 5,
+                        matching: .images
+                    ) {
+                        Label("Attach Images", systemImage: "photo.badge.plus")
+                    }
+                    .onChange(of: selectedPhotoItems) { _, items in
+                        Task {
+                            await loadPromptImages(from: items)
+                        }
+                    }
+
+                    if isLoadingPromptImages {
+                        ProgressView("Loading images")
+                    }
+
+                    if !appState.launchDraft.prompt.images.isEmpty {
+                        ForEach(appState.launchDraft.prompt.images) { image in
+                            HStack {
+                                Label("\(image.width) x \(image.height)", systemImage: "photo")
+                                Spacer()
+                                Button("Remove", role: .destructive) {
+                                    removePromptImage(image)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Button {
+                    isPromptFileImporterPresented = true
+                } label: {
+                    Label("Attach Files", systemImage: "doc.badge.plus")
+                }
+
+                if isLoadingPromptFiles {
+                    ProgressView("Loading files")
+                }
+
+                if let promptFileImportMessage {
+                    Text(promptFileImportMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !appState.launchDraft.prompt.files.isEmpty {
+                    ForEach(appState.launchDraft.prompt.files) { file in
+                        HStack {
+                            Label("\(file.filename) - \(file.sizeDescription)", systemImage: "doc.text")
+                            Spacer()
+                            Button("Remove", role: .destructive) {
+                                removePromptFile(file)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Toggle("Open pull request", isOn: autoCreatePRBinding)
+
+                if appState.launchDraft.autoCreatePullRequest {
+                    Toggle("Request reviewers", isOn: requestReviewersBinding)
+                }
+
+                Toggle("Let Cursor name branch", isOn: autoNameBranchBinding)
+
+                if !appState.launchDraft.autoGenerateBranch {
+                    TextField("Working branch name", text: branchNameBinding)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .branchName)
+                }
+            } header: {
+                Text("Output")
+            } footer: {
+                Text("Cursor bills this run through your Cursor account. Runline does not include Cursor credits.")
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("New Chat")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if presentation == .sheet {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
                     }
                 }
+            }
 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        launch()
-                    } label: {
-                        if appState.isLaunching {
-                            ProgressView()
-                        } else {
-                            Text("Launch")
-                        }
+            ToolbarItem(placement: .confirmationAction) {
+                Button {
+                    launch()
+                } label: {
+                    if appState.isLaunching {
+                        ProgressView()
+                    } else {
+                        Text("Launch")
                     }
-                    .disabled(!appState.canLaunchAgent || appState.isLaunching)
-                    .accessibilityIdentifier("newchat.launch")
                 }
+                .disabled(!appState.canLaunchAgent || appState.isLaunching)
+                .accessibilityIdentifier("newchat.launch")
             }
-            .task {
-                seedSourceFields()
-            }
-            .fileImporter(
-                isPresented: $isPromptFileImporterPresented,
-                allowedContentTypes: PromptFileLoader.allowedContentTypes,
-                allowsMultipleSelection: true
-            ) { result in
-                Task {
-                    await loadPromptFiles(from: result)
-                }
+        }
+        .task {
+            seedSourceFields()
+        }
+        .fileImporter(
+            isPresented: $isPromptFileImporterPresented,
+            allowedContentTypes: PromptFileLoader.allowedContentTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            Task {
+                await loadPromptFiles(from: result)
             }
         }
     }
@@ -359,7 +373,7 @@ struct NewChatSheet: View {
         focusedField = nil
         Task {
             await appState.launchAgent()
-            if appState.errorMessage == nil {
+            if presentation == .sheet, appState.errorMessage == nil {
                 dismiss()
             }
         }

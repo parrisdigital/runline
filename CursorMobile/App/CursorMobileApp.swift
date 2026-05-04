@@ -27,7 +27,7 @@ final class CursorMobileAppDelegate: NSObject, UIApplicationDelegate {
 struct CursorMobileApp: App {
     @UIApplicationDelegateAdaptor(CursorMobileAppDelegate.self) private var appDelegate
     @AppStorage("appearance.mode") private var appearanceMode = AppAppearanceMode.system.rawValue
-    @State private var appState = AppState()
+    @State private var appState = Self.makeAppState()
 
     var body: some Scene {
         WindowGroup {
@@ -38,5 +38,18 @@ struct CursorMobileApp: App {
                     appDelegate.appState = appState
                 }
         }
+    }
+
+    private static func makeAppState() -> AppState {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--runline-mock-provider") {
+            return AppState(
+                apiKeyStore: InMemoryAPIKeyStore(apiKey: "runline-debug-key"),
+                providerFactory: { _ in MockAgentProvider() }
+            )
+        }
+        #endif
+
+        return AppState()
     }
 }

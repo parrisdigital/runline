@@ -34,6 +34,29 @@ final class CursorMobileTests: XCTestCase {
         XCTAssertEqual(AppTab.allCases.count, 3)
     }
 
+    func testLayoutModeUsesSplitViewForRegularWidth() {
+        XCTAssertEqual(AppLayoutMode.resolve(horizontalSizeClass: .compact), .compactTabs)
+        XCTAssertEqual(AppLayoutMode.resolve(horizontalSizeClass: .regular), .regularSplit)
+        XCTAssertEqual(AppLayoutMode.resolve(horizontalSizeClass: nil), .compactTabs)
+    }
+
+    @MainActor
+    func testDeepLinksFocusChatsTabForAdaptiveShells() {
+        let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
+        appState.selectedTab = .settings
+
+        appState.handleDeepLink(URL(string: "runline://agent/bc-0001")!)
+
+        XCTAssertEqual(appState.selectedTab, .chats)
+        XCTAssertEqual(appState.focusedAgentID, "bc-0001")
+
+        appState.selectedTab = .repositories
+        appState.handleDeepLink(URL(string: "runline://agents/bc-0002/runs/run-0002")!)
+
+        XCTAssertEqual(appState.selectedTab, .chats)
+        XCTAssertEqual(appState.focusedAgentID, "bc-0002")
+    }
+
     func testAppearanceModesMapToPreferredColorSchemes() {
         XCTAssertNil(AppAppearanceMode.system.colorScheme)
         XCTAssertEqual(AppAppearanceMode.light.colorScheme, .light)
