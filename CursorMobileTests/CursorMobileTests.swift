@@ -40,6 +40,19 @@ final class CursorMobileTests: XCTestCase {
         XCTAssertEqual(AppLayoutMode.resolve(horizontalSizeClass: nil), .compactTabs)
     }
 
+    func testNewChatModelPickerCollapsesDefaultModelSentinel() {
+        let models = [
+            AgentModel(id: "default", displayName: "default", subtitle: "Cursor default", category: .default, qualityScore: 4, costTier: 2),
+            AgentModel(id: "composer-2", displayName: "composer-2", subtitle: "Composer", category: .coding, qualityScore: 4, costTier: 2),
+        ]
+
+        XCTAssertEqual(NewChatModelPickerOptions.visibleModels(from: models).map(\.id), ["composer-2"])
+        XCTAssertNil(NewChatModelPickerOptions.selection(from: "default"))
+        XCTAssertNil(NewChatModelPickerOptions.modelID(from: "Default"))
+        XCTAssertEqual(NewChatModelPickerOptions.selection(from: "composer-2"), "composer-2")
+        XCTAssertEqual(NewChatModelPickerOptions.modelID(from: "composer-2"), "composer-2")
+    }
+
     @MainActor
     func testDeepLinksFocusChatsTabForAdaptiveShells() {
         let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())

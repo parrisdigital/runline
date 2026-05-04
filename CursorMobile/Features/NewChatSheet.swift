@@ -16,6 +16,22 @@ enum NewChatPresentation: Equatable {
     case detail
 }
 
+enum NewChatModelPickerOptions {
+    static func visibleModels(from models: [AgentModel]) -> [AgentModel] {
+        models.filter { !$0.isCursorDefaultModel }
+    }
+
+    static func selection(from modelID: String?) -> String? {
+        guard let modelID = modelID?.nilIfBlank else { return nil }
+        return modelID.isCursorDefaultModelIdentifier ? nil : modelID
+    }
+
+    static func modelID(from selection: String?) -> String? {
+        guard let selection = selection?.nilIfBlank else { return nil }
+        return selection.isCursorDefaultModelIdentifier ? nil : selection
+    }
+}
+
 struct NewChatForm: View {
     private enum SourceMode: String, CaseIterable, Identifiable {
         case installed = "Installed"
@@ -72,14 +88,10 @@ struct NewChatForm: View {
             }
 
             Section("Model") {
-                if appState.models.isEmpty {
-                    ContentUnavailableView("No Models", systemImage: "cpu")
-                } else {
-                    Picker("Model", selection: modelSelectionBinding) {
-                        Text("Default").tag(Optional<String>.none)
-                        ForEach(appState.models) { model in
-                            Text(model.displayName).tag(Optional(model.id))
-                        }
+                Picker("Model", selection: modelSelectionBinding) {
+                    Text("Default").tag(Optional<String>.none)
+                    ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models)) { model in
+                        Text(model.displayName).tag(Optional(model.id))
                     }
                 }
             }
@@ -262,9 +274,9 @@ struct NewChatForm: View {
 
     private var modelSelectionBinding: Binding<String?> {
         Binding {
-            appState.launchDraft.modelID
+            NewChatModelPickerOptions.selection(from: appState.launchDraft.modelID)
         } set: { modelID in
-            appState.launchDraft.modelID = modelID
+            appState.launchDraft.modelID = NewChatModelPickerOptions.modelID(from: modelID)
         }
     }
 

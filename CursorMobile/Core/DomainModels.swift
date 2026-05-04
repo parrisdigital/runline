@@ -35,6 +35,16 @@ struct AgentModel: Identifiable, Hashable, Codable {
     var category: Category
     var qualityScore: Int
     var costTier: Int
+
+    var isCursorDefaultModel: Bool {
+        id.isCursorDefaultModelIdentifier
+    }
+}
+
+extension String {
+    var isCursorDefaultModelIdentifier: Bool {
+        trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("default") == .orderedSame
+    }
 }
 
 enum AgentStatus: Hashable, Codable {

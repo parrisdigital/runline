@@ -228,7 +228,7 @@ final class CursorAgentProvider: AgentProvider, EnterpriseDataProvider {
             repo = CursorLaunchRepositoryRequest(url: nil, startingRef: nil, prUrl: url.absoluteString)
         }
         let modelID = draft.modelID?.nilIfBlank
-        let model = modelID == "default" ? nil : modelID.map { CursorModelObjectDTO(id: $0) }
+        let model = modelID?.isCursorDefaultModelIdentifier == true ? nil : modelID.map { CursorModelObjectDTO(id: $0) }
         return CursorCreateAgentRequest(
             prompt: makePromptRequest(from: draft.prompt),
             model: model,
