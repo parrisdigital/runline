@@ -16,6 +16,7 @@ final class AppState {
     private var observingRunIDs: Set<AgentRun.ID> = []
     private var streamExpiredRunIDs: Set<AgentRun.ID> = []
     private var sdkBridgeRunIDs: Set<AgentRun.ID> = []
+    private var sdkBridgeMCPProfileIDsByAgentID: [Agent.ID: SDKBridgeMCPProfile.ID] = [:]
     private var artifactDownloadsByKey: [String: ArtifactDownload] = [:]
 
     var selectedTab: AppTab = .chats
@@ -30,6 +31,7 @@ final class AppState {
     var endpointResults: [CursorAPIEndpoint.ID: CursorAPIEndpointResult] = [:]
     var loadingEndpointIDs: Set<CursorAPIEndpoint.ID> = []
     var endpointPageOverrides: [CursorAPIEndpoint.ID: Int] = [:]
+    var sdkBridgeProfiles: [SDKBridgeMCPProfile] = []
     var focusedAgentID: Agent.ID?
     var notificationPreferences = NotificationPreferences()
     var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
@@ -122,10 +124,10 @@ final class AppState {
     var sdkBridgeLaunchIssue: String? {
         guard launchDraft.runMode == .sdkBridge else { return nil }
         guard account != nil else {
-            return "Connect a Cursor API key before using SDK Mode."
+            return "Connect a Cursor API key before using SDK Agent."
         }
         guard SDKBridgePreferences.isEnabled() else {
-            return "Enable the SDK bridge in Settings before launching in SDK Mode."
+            return "Enable the SDK bridge in Settings before launching SDK Agent."
         }
         guard SDKBridgePreferences.configuredBaseURL() != nil else {
             return "Enter a valid SDK bridge URL in Settings."
@@ -205,6 +207,8 @@ final class AppState {
         eventsByRunID = [:]
         artifactsByAgentID = [:]
         sdkBridgeRunIDs = []
+        sdkBridgeMCPProfileIDsByAgentID = [:]
+        sdkBridgeProfiles = []
         endpointResults = [:]
         loadingEndpointIDs = []
         endpointPageOverrides = [:]
@@ -330,6 +334,40 @@ final class AppState {
 
     func isStreamExpired(runID: AgentRun.ID) -> Bool {
         streamExpiredRunIDs.contains(runID)
+    }
+
+    func isSDKBridgeRun(runID: AgentRun.ID) -> Bool {
+        sdkBridgeRunIDs.contains(runID)
+    }
+
+    func isSDKBridgeAgent(_ agent: Agent) -> Bool {
+        runsByAgentID[agent.id, default: []].contains { sdkBridgeRunIDs.contains($0.id) }
+    }
+
+    func sdkBridgeProfile(for agent: Agent) -> SDKBridgeMCPProfile? {
+        guard let profileID = sdkBridgeMCPProfileIDsByAgentID[agent.id] else { return nil }
+        return sdkBridgeProfiles.first { $0.id == profileID }
+    }
+
+    func reloadSDKBridgeProfiles() async {
+        guard SDKBridgePreferences.isEnabled(),
+              let baseURL = SDKBridgePreferences.configuredBaseURL() else {
+            sdkBridgeProfiles = []
+            return
+        }
+        do {
+            let apiKey = try apiKeyStore.loadAPIKey()?.nilIfBlank
+            sdkBridgeProfiles = try await sdkBridgeClientFactory(baseURL, apiKey).listMCPProfiles()
+            if let profileID = launchDraft.sdkMCPProfileID,
+               !sdkBridgeProfiles.contains(where: { $0.id == profileID }) {
+                launchDraft.sdkMCPProfileID = nil
+            }
+        } catch {
+            sdkBridgeProfiles = []
+            if shouldReport(error) {
+                handleNonBlockingError(error)
+            }
+        }
     }
 
     func refreshAgentDetail(agentID: Agent.ID) async {
@@ -469,7 +507,7 @@ final class AppState {
     private func loadSDKBridgeEvents(for agent: Agent, run: AgentRun) async {
         do {
             let client = try makeSDKBridgeClient()
-            let rawEvents = try await client.streamEvents(agentID: agent.id, runID: run.id)
+            let rawEvents = try await client.streamSessionEvents(sessionID: agent.id, runID: run.id)
             mergeEvents(SDKBridgeEventMapper.events(from: rawEvents, runID: run.id), runID: run.id)
             saveCachedState()
         } catch {
@@ -486,7 +524,7 @@ final class AppState {
         while !Task.isCancelled {
             do {
                 let client = try makeSDKBridgeClient()
-                let rawEvents = try await client.streamEvents(agentID: agent.id, runID: currentRun.id)
+                let rawEvents = try await client.streamSessionEvents(sessionID: agent.id, runID: currentRun.id)
                 let mappedEvents = SDKBridgeEventMapper.events(from: rawEvents, runID: currentRun.id)
                 if mappedEvents.isEmpty {
                     emptyRefreshCount += 1
@@ -495,11 +533,12 @@ final class AppState {
                     mergeEvents(mappedEvents, runID: currentRun.id)
                 }
 
-                let state = try await client.runState(agentID: agent.id, runID: currentRun.id)
+                let state = try await client.sessionState(sessionID: agent.id, runID: currentRun.id)
+                let latestRun = state.latestRun
                 currentRun = AgentRun(
-                    id: state.runId,
-                    agentID: state.agentId ?? agent.id,
-                    status: RunStatus(cursorValue: state.status),
+                    id: latestRun?.runId ?? currentRun.id,
+                    agentID: latestRun?.agentId ?? agent.id,
+                    status: latestRun.map { RunStatus(cursorValue: $0.status) } ?? currentRun.status,
                     createdAtDescription: currentRun.createdAtDescription,
                     updatedAtDescription: "now"
                 )
@@ -602,8 +641,8 @@ final class AppState {
                     id: "\(result.run.id)-sdk-started",
                     runID: result.run.id,
                     kind: .status,
-                    title: "SDK Mode",
-                    message: "Run started through the Cursor SDK bridge.",
+                    title: "SDK Agent",
+                    message: "Session started through the Cursor SDK bridge.",
                     timestamp: "now"
                 )
             ] : []
@@ -620,7 +659,16 @@ final class AppState {
         await createFollowUp(agent: agent, prompt: AgentPrompt(text: text))
     }
 
-    func createFollowUp(agent: Agent, prompt: AgentPrompt) async {
+    func createFollowUp(
+        agent: Agent,
+        prompt: AgentPrompt,
+        intent: SDKMessageIntent = .continueConversation
+    ) async {
+        if isSDKBridgeAgent(agent) {
+            await createSDKBridgeFollowUp(agent: agent, prompt: prompt, intent: intent)
+            return
+        }
+
         guard let provider else {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
@@ -637,6 +685,66 @@ final class AppState {
             let refreshedRuns = (try? await provider.listRuns(agentID: agent.id)) ?? [run] + runsByAgentID[agent.id, default: []]
             runsByAgentID[agent.id] = refreshedRuns
             eventsByRunID[run.id] = []
+            saveCachedState()
+        } catch {
+            handleError(error)
+        }
+    }
+
+    private func createSDKBridgeFollowUp(
+        agent: Agent,
+        prompt: AgentPrompt,
+        intent: SDKMessageIntent
+    ) async {
+        let promptText = prompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !promptText.isEmpty else {
+            errorMessage = "Add a follow-up instruction first."
+            return
+        }
+
+        do {
+            let client = try makeSDKBridgeClient()
+            let response = try await client.sendSessionMessage(
+                sessionID: agent.id,
+                body: SDKBridgeSessionMessageRequest(
+                    prompt: AgentPrompt(text: promptText, images: prompt.images, files: prompt.files).textWithFileContext,
+                    images: sdkPromptImages(from: prompt),
+                    intent: intent.bridgeValue,
+                    modelId: agent.modelID.isCursorDefaultModelIdentifier ? nil : agent.modelID,
+                    mcpProfileId: sdkBridgeMCPProfileIDsByAgentID[agent.id]
+                )
+            )
+            let run = AgentRun(
+                id: response.runId,
+                agentID: response.sessionId ?? response.agentId,
+                status: RunStatus(cursorValue: response.status),
+                createdAtDescription: "now",
+                updatedAtDescription: "now"
+            )
+            sdkBridgeRunIDs.insert(run.id)
+            updateRun(run, agentID: agent.id)
+            updateAgent(agent.id) { agent in
+                agent.latestRunID = run.id
+                agent.updatedAtDescription = "now"
+            }
+            eventsByRunID[run.id] = [
+                AgentStreamEvent(
+                    id: "\(run.id)-user-message",
+                    runID: run.id,
+                    kind: .user,
+                    title: "User",
+                    message: promptText,
+                    timestamp: "now"
+                ),
+                AgentStreamEvent(
+                    id: "\(run.id)-sdk-\(intent.rawValue)",
+                    runID: run.id,
+                    kind: .status,
+                    title: "SDK Agent",
+                    message: "\(intent.title) message sent through the Cursor SDK bridge.",
+                    timestamp: "now"
+                ),
+            ]
             saveCachedState()
         } catch {
             handleError(error)
@@ -819,31 +927,28 @@ final class AppState {
         let client = try makeSDKBridgeClient()
         let request = SDKBridgeCloudRunRequest(
             prompt: launchDraft.prompt.textWithFileContext,
-            images: launchDraft.prompt.images.isEmpty ? nil : launchDraft.prompt.images.prefix(5).map { image in
-                SDKBridgePromptImageRequest(
-                    data: image.data.base64EncodedString(),
-                    mimeType: "image/jpeg",
-                    dimension: SDKBridgePromptImageDimensionRequest(width: image.width, height: image.height)
-                )
-            },
+            images: sdkPromptImages(from: launchDraft.prompt),
+            intent: nil,
             repositoryUrl: sdkBridgeRepositoryURL(from: launchDraft.source)?.absoluteString,
             startingRef: sdkBridgeStartingRef(from: launchDraft.source),
             prUrl: sdkBridgePullRequestURL(from: launchDraft.source)?.absoluteString,
             modelId: sdkBridgeModelID,
+            mcpProfileId: launchDraft.sdkMCPProfileID,
             autoCreatePR: launchDraft.autoCreatePullRequest,
             skipReviewerRequest: launchDraft.skipReviewerRequest
         )
-        let response = try await client.createCloudRun(request)
+        let response = try await client.createSession(request)
         let repository = repository(from: launchDraft.source)
+        let agentID = response.sessionId ?? response.agentId
         let run = AgentRun(
             id: response.runId,
-            agentID: response.agentId,
+            agentID: agentID,
             status: RunStatus(cursorValue: response.status),
             createdAtDescription: "now",
             updatedAtDescription: "now"
         )
         let agent = Agent(
-            id: response.agentId,
+            id: agentID,
             name: agentName(from: launchDraft.prompt.text),
             status: .active,
             repository: repository,
@@ -854,6 +959,9 @@ final class AppState {
             artifactCount: 0,
             pullRequestURL: sdkBridgePullRequestURL(from: launchDraft.source)
         )
+        if let profileID = launchDraft.sdkMCPProfileID?.nilIfBlank {
+            sdkBridgeMCPProfileIDsByAgentID[agent.id] = profileID
+        }
         return AgentLaunchResult(agent: agent, run: run)
     }
 
@@ -909,6 +1017,17 @@ final class AppState {
     private var sdkBridgeModelID: String? {
         let modelID = launchDraft.modelID?.nilIfBlank
         return modelID?.isCursorDefaultModelIdentifier == true ? nil : modelID
+    }
+
+    private func sdkPromptImages(from prompt: AgentPrompt) -> [SDKBridgePromptImageRequest]? {
+        let images = prompt.images.prefix(5).map { image in
+            SDKBridgePromptImageRequest(
+                data: image.data.base64EncodedString(),
+                mimeType: "image/jpeg",
+                dimension: SDKBridgePromptImageDimensionRequest(width: image.width, height: image.height)
+            )
+        }
+        return images.isEmpty ? nil : images
     }
 
     private func sdkBridgeRepositoryURL(from source: AgentSource) -> URL? {
@@ -1097,6 +1216,7 @@ final class AppState {
         eventsByRunID = snapshot.eventsByRunID
         artifactsByAgentID = snapshot.artifactsByAgentID
         sdkBridgeRunIDs = snapshot.sdkBridgeRunIDs
+        sdkBridgeMCPProfileIDsByAgentID = snapshot.sdkBridgeMCPProfileIDsByAgentID
         launchDraft = snapshot.launchDraft
         notificationPreferences = snapshot.notificationPreferences
         deviceTokenRegistration = snapshot.deviceTokenRegistration
@@ -1130,6 +1250,7 @@ final class AppState {
             eventsByRunID: eventsByRunID,
             artifactsByAgentID: artifactsByAgentID,
             sdkBridgeRunIDs: sdkBridgeRunIDs,
+            sdkBridgeMCPProfileIDsByAgentID: sdkBridgeMCPProfileIDsByAgentID,
             launchDraft: launchDraft,
             notificationPreferences: notificationPreferences,
             deviceTokenRegistration: deviceTokenRegistration,
@@ -1147,11 +1268,11 @@ private enum SDKBridgeUnavailableError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .bridgeDisabled:
-            "Enable the SDK bridge in Settings before launching in SDK Mode."
+            "Enable the SDK bridge in Settings before using SDK Agent."
         case .invalidBridgeURL:
             "Enter a valid SDK bridge URL in Settings."
         case .missingAPIKey:
-            "Reconnect your Cursor API key before using SDK Mode."
+            "Reconnect your Cursor API key before using SDK Agent."
         }
     }
 }

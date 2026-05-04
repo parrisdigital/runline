@@ -22,6 +22,7 @@ struct ChatDetailView: View {
     @State private var isLoadingFollowUpFiles = false
     @State private var followUpFileImportMessage: String?
     @State private var isArtifactsPresented = false
+    @State private var sdkMessageIntent: SDKMessageIntent = .continueConversation
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
@@ -30,9 +31,13 @@ struct ChatDetailView: View {
 
         List {
             Section {
+                LabeledContent("Mode", value: appState.isSDKBridgeAgent(currentAgent) ? "SDK Agent" : "Cloud Agent")
                 LabeledContent("Repository", value: currentAgent.repository.displayName)
                 LabeledContent("Branch", value: currentAgent.branchName)
                 LabeledContent("Model", value: currentAgent.modelID)
+                if let profile = appState.sdkBridgeProfile(for: currentAgent) {
+                    LabeledContent("SDK Profile", value: profile.name)
+                }
                 if let latestRun {
                     LabeledContent("Run", value: latestRun.id)
                     LabeledContent("Updated", value: latestRun.updatedAtDescription)
@@ -200,6 +205,16 @@ struct ChatDetailView: View {
                     .padding(.horizontal, 12)
             }
 
+            if appState.isSDKBridgeAgent(agent) {
+                Picker("SDK Message Intent", selection: $sdkMessageIntent) {
+                    ForEach(SDKMessageIntent.allCases) { intent in
+                        Text(intent.title).tag(intent)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+            }
+
             HStack(alignment: .center, spacing: 8) {
                 Menu {
                     if appState.capabilities.supportsImagesInPrompt {
@@ -344,7 +359,8 @@ struct ChatDetailView: View {
         followUpFileImportMessage = nil
         isComposerFocused = false
         Task {
-            await appState.createFollowUp(agent: agent, prompt: prompt)
+            await appState.createFollowUp(agent: agent, prompt: prompt, intent: sdkMessageIntent)
+            sdkMessageIntent = .continueConversation
             if let latestRun = appState.runs(for: agent).first {
                 await appState.observeRun(agent: agent, run: latestRun)
             }

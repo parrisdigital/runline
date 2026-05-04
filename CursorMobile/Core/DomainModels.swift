@@ -197,7 +197,7 @@ enum AgentRunMode: String, CaseIterable, Identifiable, Hashable, Codable {
         case .cloudAgent:
             "Cloud Agent"
         case .sdkBridge:
-            "SDK Mode"
+            "SDK Agent"
         }
     }
 
@@ -206,8 +206,57 @@ enum AgentRunMode: String, CaseIterable, Identifiable, Hashable, Codable {
         case .cloudAgent:
             "Direct Cursor Cloud Agents API from iOS."
         case .sdkBridge:
-            "Routes launch and streaming through the optional Cursor SDK bridge."
+            "Multi-turn Cursor SDK session with Cloud Agent runtime."
         }
+    }
+}
+
+enum SDKMessageIntent: String, CaseIterable, Identifiable, Hashable, Codable {
+    case continueConversation
+    case plan
+    case execute
+
+    var id: String { rawValue }
+
+    var bridgeValue: String {
+        switch self {
+        case .continueConversation:
+            "continue"
+        case .plan:
+            "plan"
+        case .execute:
+            "execute"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .continueConversation:
+            "Continue"
+        case .plan:
+            "Plan"
+        case .execute:
+            "Execute"
+        }
+    }
+}
+
+struct SDKBridgeMCPProfile: Identifiable, Hashable, Codable {
+    var id: String
+    var name: String
+    var description: String?
+    var mcpServerCount: Int
+    var subagentCount: Int
+
+    var summary: String {
+        var parts: [String] = []
+        if mcpServerCount > 0 {
+            parts.append("\(mcpServerCount) MCP")
+        }
+        if subagentCount > 0 {
+            parts.append("\(subagentCount) subagent")
+        }
+        return parts.isEmpty ? "SDK profile" : parts.joined(separator: " / ")
     }
 }
 
@@ -216,6 +265,7 @@ struct AgentLaunchDraft: Hashable, Codable {
     var modelID: String?
     var source: AgentSource
     var runMode: AgentRunMode
+    var sdkMCPProfileID: String?
     var branchName: String?
     var autoGenerateBranch: Bool
     var autoCreatePullRequest: Bool
@@ -226,6 +276,7 @@ struct AgentLaunchDraft: Hashable, Codable {
         modelID: String?,
         source: AgentSource,
         runMode: AgentRunMode = .cloudAgent,
+        sdkMCPProfileID: String? = nil,
         branchName: String?,
         autoGenerateBranch: Bool,
         autoCreatePullRequest: Bool,
@@ -235,6 +286,7 @@ struct AgentLaunchDraft: Hashable, Codable {
         self.modelID = modelID
         self.source = source
         self.runMode = runMode
+        self.sdkMCPProfileID = sdkMCPProfileID
         self.branchName = branchName
         self.autoGenerateBranch = autoGenerateBranch
         self.autoCreatePullRequest = autoCreatePullRequest
@@ -247,6 +299,7 @@ struct AgentLaunchDraft: Hashable, Codable {
         modelID = try container.decodeIfPresent(String.self, forKey: .modelID)
         source = try container.decode(AgentSource.self, forKey: .source)
         runMode = try container.decodeIfPresent(AgentRunMode.self, forKey: .runMode) ?? .cloudAgent
+        sdkMCPProfileID = try container.decodeIfPresent(String.self, forKey: .sdkMCPProfileID)
         branchName = try container.decodeIfPresent(String.self, forKey: .branchName)
         autoGenerateBranch = try container.decode(Bool.self, forKey: .autoGenerateBranch)
         autoCreatePullRequest = try container.decode(Bool.self, forKey: .autoCreatePullRequest)

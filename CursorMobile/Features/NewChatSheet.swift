@@ -83,6 +83,30 @@ struct NewChatForm: View {
                 }
             }
 
+            if appState.launchDraft.runMode == .sdkBridge {
+                Section("SDK Tools") {
+                    Picker("MCP Profile", selection: sdkMCPProfileBinding) {
+                        Text("None").tag(Optional<String>.none)
+                        ForEach(appState.sdkBridgeProfiles) { profile in
+                            Text(profile.name).tag(Optional(profile.id))
+                        }
+                    }
+
+                    if let selectedProfile = selectedSDKProfile {
+                        LabeledContent("Profile", value: selectedProfile.summary)
+                        if let description = selectedProfile.description {
+                            Text(description)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if appState.sdkBridgeProfiles.isEmpty {
+                        Text("No bridge profiles are published. Add MCP/subagent profiles on the SDK bridge to make them available here.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Section("Source") {
                 Picker("Source", selection: $sourceMode) {
                     ForEach(SourceMode.allCases) { mode in
@@ -230,6 +254,15 @@ struct NewChatForm: View {
         }
         .task {
             seedSourceFields()
+            if appState.launchDraft.runMode == .sdkBridge {
+                await appState.reloadSDKBridgeProfiles()
+            }
+        }
+        .onChange(of: appState.launchDraft.runMode) { _, mode in
+            guard mode == .sdkBridge else { return }
+            Task {
+                await appState.reloadSDKBridgeProfiles()
+            }
         }
         .fileImporter(
             isPresented: $isPromptFileImporterPresented,
@@ -303,6 +336,19 @@ struct NewChatForm: View {
         } set: { modelID in
             appState.launchDraft.modelID = NewChatModelPickerOptions.modelID(from: modelID)
         }
+    }
+
+    private var sdkMCPProfileBinding: Binding<String?> {
+        Binding {
+            appState.launchDraft.sdkMCPProfileID
+        } set: { profileID in
+            appState.launchDraft.sdkMCPProfileID = profileID
+        }
+    }
+
+    private var selectedSDKProfile: SDKBridgeMCPProfile? {
+        guard let profileID = appState.launchDraft.sdkMCPProfileID else { return nil }
+        return appState.sdkBridgeProfiles.first { $0.id == profileID }
     }
 
     private var startingRefBinding: Binding<String> {

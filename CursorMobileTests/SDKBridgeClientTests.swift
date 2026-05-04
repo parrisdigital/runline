@@ -36,9 +36,11 @@ final class SDKBridgeClientTests: XCTestCase {
     func testCreateCloudRunSendsBearerKeyAndLaunchBody() async throws {
         MockBridgeURLProtocol.handler = { request in
             try Self.jsonResponse(for: request, body: [
+                "sessionId": "agent_123",
                 "agentId": "agent_123",
                 "runId": "run_123",
                 "status": "running",
+                "mode": "sdk-agent",
                 "eventsURL": "/agents/agent_123/runs/run_123/events",
                 "stateURL": "/agents/agent_123/runs/run_123/state"
             ])
@@ -75,6 +77,132 @@ final class SDKBridgeClientTests: XCTestCase {
         XCTAssertEqual(body["skipReviewerRequest"] as? Bool, false)
     }
 
+    func testCreateSessionUsesSDKSessionEndpointAndProfile() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "sessionId": "bc-session",
+                "agentId": "bc-session",
+                "runId": "run-session",
+                "status": "running",
+                "mode": "sdk-agent",
+                "mcpProfile": [
+                    "id": "github-tools",
+                    "name": "GitHub Tools",
+                    "description": "GitHub MCP and reviewer subagent.",
+                    "mcpServerCount": 1,
+                    "subagentCount": 1
+                ],
+                "sessionEventsURL": "/sdk/sessions/bc-session/runs/run-session/events",
+                "sessionStateURL": "/sdk/sessions/bc-session/state?runId=run-session"
+            ])
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key")
+        let response = try await client.createSession(
+            SDKBridgeCloudRunRequest(
+                prompt: "Plan the migration.",
+                intent: "plan",
+                repositoryUrl: "https://github.com/acme/app",
+                startingRef: "main",
+                prUrl: nil,
+                modelId: nil,
+                mcpProfileId: "github-tools",
+                autoCreatePR: false,
+                skipReviewerRequest: true
+            )
+        )
+
+        XCTAssertEqual(response.sessionId, "bc-session")
+        XCTAssertEqual(response.mcpProfile?.id, "github-tools")
+
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "POST")
+        XCTAssertEqual(request.url?.path, "/sdk/sessions")
+        let body = try XCTUnwrap(request.jsonBody)
+        XCTAssertEqual(body["intent"] as? String, "plan")
+        XCTAssertEqual(body["mcpProfileId"] as? String, "github-tools")
+    }
+
+    func testSendSessionMessageUsesSessionEndpoint() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "sessionId": "bc-session",
+                "agentId": "bc-session",
+                "runId": "run-follow-up",
+                "status": "running",
+                "mode": "sdk-agent"
+            ])
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key")
+        let response = try await client.sendSessionMessage(
+            sessionID: "bc-session",
+            body: SDKBridgeSessionMessageRequest(
+                prompt: "Execute the approved plan.",
+                intent: "execute",
+                modelId: "composer-2",
+                mcpProfileId: "github-tools"
+            )
+        )
+
+        XCTAssertEqual(response.runId, "run-follow-up")
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "POST")
+        XCTAssertEqual(request.url?.path, "/sdk/sessions/bc-session/messages")
+        let body = try XCTUnwrap(request.jsonBody)
+        XCTAssertEqual(body["prompt"] as? String, "Execute the approved plan.")
+        XCTAssertEqual(body["intent"] as? String, "execute")
+        XCTAssertEqual(body["modelId"] as? String, "composer-2")
+        XCTAssertEqual(body["mcpProfileId"] as? String, "github-tools")
+    }
+
+    func testListMCPProfilesMapsPublicProfileMetadata() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "profiles": [
+                    [
+                        "id": "github-tools",
+                        "name": "GitHub Tools",
+                        "description": "GitHub MCP and reviewer subagent.",
+                        "mcpServerCount": 1,
+                        "subagentCount": 1
+                    ]
+                ]
+            ])
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key")
+        let profiles = try await client.listMCPProfiles()
+
+        XCTAssertEqual(profiles.first?.id, "github-tools")
+        XCTAssertEqual(profiles.first?.summary, "1 MCP / 1 subagent")
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "GET")
+        XCTAssertEqual(request.url?.path, "/sdk/mcp-profiles")
+    }
+
+    func testSessionStateUsesSessionScopedRouteAndEscapesRunQuery() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "sessionId": "bc-session",
+                "latestRun": [
+                    "agentId": "bc-session",
+                    "runId": "run&value",
+                    "status": "finished"
+                ]
+            ])
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key")
+        let state = try await client.sessionState(sessionID: "bc-session", runID: "run&value")
+
+        XCTAssertEqual(state.latestRun?.status, "finished")
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "GET")
+        XCTAssertEqual(request.url?.path, "/sdk/sessions/bc-session/state")
+        XCTAssertEqual(request.url?.query, "runId=run%26value")
+    }
+
     func testStreamEventsUsesRunEventRouteAndParsesSSE() async throws {
         MockBridgeURLProtocol.handler = { request in
             let payload = """
@@ -109,6 +237,35 @@ final class SDKBridgeClientTests: XCTestCase {
         XCTAssertEqual(request.url?.path, "/agents/agent_123/runs/run_123/events")
         XCTAssertEqual(request.header("Accept"), "text/event-stream")
         XCTAssertEqual(request.header("Authorization"), "Bearer cursor-test-key")
+    }
+
+    func testStreamSessionEventsUsesSDKSessionRoute() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            let payload = """
+            id: evt-1
+            event: assistant
+            data: {"type":"assistant","text":"Working"}
+
+            """
+            return HTTPResponse(
+                response: HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "text/event-stream"]
+                )!,
+                data: Data(payload.utf8)
+            )
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key")
+        let events = try await client.streamSessionEvents(sessionID: "bc-session", runID: "run-session")
+
+        XCTAssertEqual(events.first?.event, "assistant")
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "GET")
+        XCTAssertEqual(request.url?.path, "/sdk/sessions/bc-session/runs/run-session/events")
+        XCTAssertEqual(request.header("Accept"), "text/event-stream")
     }
 
     private func makeClient(apiKey: String? = nil) -> SDKBridgeClient {

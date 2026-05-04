@@ -1,11 +1,12 @@
-# Runline Orchestrator Spike
+# Runline Orchestrator
 
-This is an optional TypeScript backend spike for Cursor SDK-only workflows. The iOS app does not depend on this service for the MVP path; Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
+This is an optional TypeScript backend for Cursor SDK-only workflows. The iOS app does not depend on this service for the core Cloud Agent path; Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
 
 Use this service only for work that benefits from `@cursor/sdk`:
 
-- SDK-normalized event streams and conversation turns.
-- Launch payloads that include inline MCP server profiles or subagents.
+- Resumable SDK Agent sessions with multi-turn follow-up messages.
+- SDK-normalized event streams and conversation state.
+- Launch payloads that include MCP server profiles or subagents.
 - Service-account workflows for teams.
 - Future automation or APNs backend jobs that should not run in the iOS app.
 
@@ -17,28 +18,75 @@ npm install
 CURSOR_API_KEY=your-cursor-key npm run dev
 ```
 
+The iOS app can also send a per-request `Authorization: Bearer <key>` header. Prefer that for user-owned keys; the bridge does not need to store keys server-side.
+
+## MCP Profiles
+
+Publish SDK tool profiles with `RUNLINE_SDK_MCP_PROFILES`. The value is a JSON array. Each profile is exposed to iOS as metadata only, while the private MCP/subagent config stays on the bridge.
+
+```bash
+export RUNLINE_SDK_MCP_PROFILES='[
+  {
+    "id": "github-tools",
+    "name": "GitHub Tools",
+    "description": "GitHub MCP plus reviewer subagent.",
+    "mcpServers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"]
+      }
+    },
+    "agents": {
+      "reviewer": {
+        "prompt": "Review implementation risk and missing tests."
+      }
+    }
+  }
+]'
+```
+
 ## Endpoints
 
 - `GET /health`
-- `POST /runs/cloud`
+- `GET /sdk/mcp-profiles`
+- `POST /sdk/sessions`
+- `POST /sdk/sessions/:sessionId/messages`
+- `GET /sdk/sessions/:sessionId/state?runId=:runId`
+- `GET /sdk/sessions/:sessionId/runs/:runId/events`
+- `POST /runs/cloud` compatibility alias for `POST /sdk/sessions`
 - `GET /agents/:agentId/runs/:runId/state`
 - `GET /agents/:agentId/runs/:runId/events`
 
 Requests may pass a Cursor API key with `Authorization: Bearer <key>`. If omitted, the service uses `CURSOR_API_KEY`. Do not put user keys in logs or long-lived storage.
 
-## Cloud Run Example
+## SDK Session Example
 
 ```bash
-curl http://localhost:8787/runs/cloud \
+curl http://localhost:8787/sdk/sessions \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer YOUR_CURSOR_API_KEY' \
   -d '{
-    "prompt": "Fix the failing tests and summarize the commands you ran.",
+    "prompt": "Create an implementation plan for the failing tests.",
+    "intent": "plan",
     "repositoryUrl": "https://github.com/your-org/your-repo",
     "startingRef": "main",
     "modelId": "composer-2",
+    "mcpProfileId": "github-tools",
     "autoCreatePR": true
   }'
 ```
 
-The response includes `agentId`, `runId`, and the local SSE URL for streaming SDK events through the orchestrator.
+The response includes `sessionId`, `agentId`, `runId`, `sessionEventsURL`, and `sessionStateURL`.
+
+## Follow-Up Example
+
+```bash
+curl http://localhost:8787/sdk/sessions/bc-example/messages \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_CURSOR_API_KEY' \
+  -d '{
+    "prompt": "Execute the approved plan.",
+    "intent": "execute",
+    "mcpProfileId": "github-tools"
+  }'
+```

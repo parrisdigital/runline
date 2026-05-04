@@ -68,6 +68,8 @@ struct SettingsFormContent: View {
                             .foregroundStyle(sdkBridgeHealth.tint)
                     }
 
+                    LabeledContent("Profiles", value: "\(appState.sdkBridgeProfiles.count)")
+
                     Button {
                         Task {
                             await checkSDKBridgeHealth()
@@ -82,9 +84,9 @@ struct SettingsFormContent: View {
                     .disabled(sdkBridgeHealth == .checking)
                 }
             } header: {
-                Text("Cursor SDK Bridge")
+                Text("Cursor SDK Agent Bridge")
             } footer: {
-                Text("Core Cloud Agent actions still use Cursor's v1 API directly from iOS. Enable the bridge only for SDK-only workflows such as MCP profiles or subagents.")
+                Text("Cloud Agent stays direct from iOS. SDK Agent uses this bridge for resumable SDK sessions, MCP profiles, and subagents.")
             }
 
             Section("Enterprise API") {
@@ -152,6 +154,11 @@ struct SettingsFormContent: View {
         }
         .onChange(of: isSDKBridgeEnabled) { _, _ in
             sdkBridgeHealth = .idle
+            if isSDKBridgeEnabled {
+                Task {
+                    await appState.reloadSDKBridgeProfiles()
+                }
+            }
         }
     }
 
@@ -194,6 +201,9 @@ struct SettingsFormContent: View {
             sdkBridgeHealth = health.ok
                 ? .healthy("\(health.service) - \(health.sdk)")
                 : .failed("Bridge responded unhealthy")
+            if health.ok {
+                await appState.reloadSDKBridgeProfiles()
+            }
         } catch {
             sdkBridgeHealth = .failed(error.localizedDescription)
         }

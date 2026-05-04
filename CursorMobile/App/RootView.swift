@@ -268,7 +268,7 @@ private struct SettingsColumnSummary: View {
                 Label("Account", systemImage: "person.crop.circle")
                 Label("Appearance", systemImage: "circle.lefthalf.filled")
                 Label("Notifications", systemImage: "bell")
-                Label("SDK Bridge", systemImage: "point.3.connected.trianglepath.dotted")
+                Label("SDK Agent Bridge", systemImage: "point.3.connected.trianglepath.dotted")
             }
 
             Section {

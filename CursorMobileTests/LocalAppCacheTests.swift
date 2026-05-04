@@ -21,6 +21,7 @@ final class LocalAppCacheTests: XCTestCase {
         XCTAssertEqual(loaded.eventsByRunID, snapshot.eventsByRunID)
         XCTAssertEqual(loaded.artifactsByAgentID, snapshot.artifactsByAgentID)
         XCTAssertEqual(loaded.sdkBridgeRunIDs, snapshot.sdkBridgeRunIDs)
+        XCTAssertEqual(loaded.sdkBridgeMCPProfileIDsByAgentID, snapshot.sdkBridgeMCPProfileIDsByAgentID)
         XCTAssertEqual(loaded.launchDraft, snapshot.launchDraft)
         XCTAssertEqual(loaded.notificationPreferences, snapshot.notificationPreferences)
 
@@ -81,6 +82,7 @@ final class LocalAppCacheTests: XCTestCase {
                 ]
             ],
             sdkBridgeRunIDs: [run.id],
+            sdkBridgeMCPProfileIDsByAgentID: [agent.id: "github-tools"],
             launchDraft: AgentLaunchDraft(
                 prompt: AgentPrompt(text: "Cache this"),
                 modelID: model.id,

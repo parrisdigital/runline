@@ -64,20 +64,39 @@ struct SDKBridgePromptImageRequest: Encodable, Equatable {
 struct SDKBridgeCloudRunRequest: Encodable, Equatable {
     var prompt: String
     var images: [SDKBridgePromptImageRequest]? = nil
+    var intent: String? = nil
     var repositoryUrl: String?
     var startingRef: String?
     var prUrl: String?
     var modelId: String?
+    var mcpProfileId: String? = nil
     var autoCreatePR: Bool
     var skipReviewerRequest: Bool?
 }
 
+struct SDKBridgeSessionMessageRequest: Encodable, Equatable {
+    var prompt: String
+    var images: [SDKBridgePromptImageRequest]? = nil
+    var intent: String?
+    var modelId: String?
+    var mcpProfileId: String?
+}
+
+struct SDKBridgeMCPProfilesResponse: Decodable, Equatable {
+    var profiles: [SDKBridgeMCPProfile]
+}
+
 struct SDKBridgeRunStartResponse: Decodable, Equatable {
+    var sessionId: String?
     var agentId: String
     var runId: String
     var status: String
+    var mode: String?
+    var mcpProfile: SDKBridgeMCPProfile?
     var eventsURL: String?
+    var sessionEventsURL: String?
     var stateURL: String?
+    var sessionStateURL: String?
 }
 
 struct SDKBridgeRunStateResponse: Decodable, Equatable {
@@ -87,6 +106,11 @@ struct SDKBridgeRunStateResponse: Decodable, Equatable {
     var result: JSONValue?
     var durationMs: Double?
     var git: JSONValue?
+}
+
+struct SDKBridgeSessionStateResponse: Decodable, Equatable {
+    var sessionId: String
+    var latestRun: SDKBridgeRunStateResponse?
 }
 
 final class SDKBridgeClient: @unchecked Sendable {
@@ -115,13 +139,53 @@ final class SDKBridgeClient: @unchecked Sendable {
         try await request("/runs/cloud", method: .post, body: body)
     }
 
+    func createSession(_ body: SDKBridgeCloudRunRequest) async throws -> SDKBridgeRunStartResponse {
+        try await request("/sdk/sessions", method: .post, body: body)
+    }
+
+    func sendSessionMessage(
+        sessionID: String,
+        body: SDKBridgeSessionMessageRequest
+    ) async throws -> SDKBridgeRunStartResponse {
+        try await request("/sdk/sessions/\(sessionID.urlPathComponentEncoded)/messages", method: .post, body: body)
+    }
+
+    func listMCPProfiles() async throws -> [SDKBridgeMCPProfile] {
+        let response: SDKBridgeMCPProfilesResponse = try await request("/sdk/mcp-profiles")
+        return response.profiles
+    }
+
+    func sessionState(sessionID: String, runID: String? = nil) async throws -> SDKBridgeSessionStateResponse {
+        var path = "/sdk/sessions/\(sessionID.urlPathComponentEncoded)/state"
+        if let runID {
+            path += "?runId=\(runID.urlQueryValueEncoded)"
+        }
+        return try await request(path)
+    }
+
     func runState(agentID: String, runID: String) async throws -> SDKBridgeRunStateResponse {
-        try await request("/agents/\(agentID)/runs/\(runID)/state")
+        try await request("/agents/\(agentID.urlPathComponentEncoded)/runs/\(runID.urlPathComponentEncoded)/state")
     }
 
     func streamEvents(agentID: String, runID: String, maxEvents: Int = 80, timeoutSeconds: UInt64 = 4) async throws -> [ServerSentEvent] {
+        try await streamEventStream(
+            path: "/agents/\(agentID.urlPathComponentEncoded)/runs/\(runID.urlPathComponentEncoded)/events",
+            maxEvents: maxEvents,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    func streamSessionEvents(sessionID: String, runID: String, maxEvents: Int = 80, timeoutSeconds: UInt64 = 4) async throws -> [ServerSentEvent] {
+        try await streamEventStream(
+            path: "/sdk/sessions/\(sessionID.urlPathComponentEncoded)/runs/\(runID.urlPathComponentEncoded)/events",
+            maxEvents: maxEvents,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    private func streamEventStream(path: String, maxEvents: Int, timeoutSeconds: UInt64) async throws -> [ServerSentEvent] {
         let request = try makeRequest(
-            "/agents/\(agentID)/runs/\(runID)/events",
+            path,
             method: .get,
             accept: "text/event-stream"
         )
@@ -260,4 +324,22 @@ private extension String {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    var urlPathComponentEncoded: String {
+        addingPercentEncoding(withAllowedCharacters: .urlPathComponentAllowed) ?? self
+    }
+
+    var urlQueryValueEncoded: String {
+        addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? self
+    }
+}
+
+private extension CharacterSet {
+    static let urlPathComponentAllowed = CharacterSet.urlPathAllowed.subtracting(
+        CharacterSet(charactersIn: "/?#[]@!$&'()*+,;=")
+    )
+
+    static let urlQueryValueAllowed = CharacterSet.urlQueryAllowed.subtracting(
+        CharacterSet(charactersIn: "&+=")
+    )
 }

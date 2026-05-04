@@ -10,6 +10,7 @@ struct AppCacheSnapshot: Codable, Equatable {
     var eventsByRunID: [String: [AgentStreamEvent]]
     var artifactsByAgentID: [String: [Artifact]]
     var sdkBridgeRunIDs: Set<AgentRun.ID>
+    var sdkBridgeMCPProfileIDsByAgentID: [Agent.ID: SDKBridgeMCPProfile.ID]
     var launchDraft: AgentLaunchDraft
     var notificationPreferences: NotificationPreferences
     var deviceTokenRegistration: DeviceTokenRegistration?
@@ -25,6 +26,7 @@ struct AppCacheSnapshot: Codable, Equatable {
         eventsByRunID: [String: [AgentStreamEvent]],
         artifactsByAgentID: [String: [Artifact]],
         sdkBridgeRunIDs: Set<AgentRun.ID> = [],
+        sdkBridgeMCPProfileIDsByAgentID: [Agent.ID: SDKBridgeMCPProfile.ID] = [:],
         launchDraft: AgentLaunchDraft,
         notificationPreferences: NotificationPreferences,
         deviceTokenRegistration: DeviceTokenRegistration? = nil,
@@ -39,6 +41,7 @@ struct AppCacheSnapshot: Codable, Equatable {
         self.eventsByRunID = eventsByRunID
         self.artifactsByAgentID = artifactsByAgentID
         self.sdkBridgeRunIDs = sdkBridgeRunIDs
+        self.sdkBridgeMCPProfileIDsByAgentID = sdkBridgeMCPProfileIDsByAgentID
         self.launchDraft = launchDraft
         self.notificationPreferences = notificationPreferences
         self.deviceTokenRegistration = deviceTokenRegistration
@@ -56,6 +59,7 @@ struct AppCacheSnapshot: Codable, Equatable {
         eventsByRunID = try container.decodeIfPresent([String: [AgentStreamEvent]].self, forKey: .eventsByRunID) ?? [:]
         artifactsByAgentID = try container.decodeIfPresent([String: [Artifact]].self, forKey: .artifactsByAgentID) ?? [:]
         sdkBridgeRunIDs = try container.decodeIfPresent(Set<AgentRun.ID>.self, forKey: .sdkBridgeRunIDs) ?? []
+        sdkBridgeMCPProfileIDsByAgentID = try container.decodeIfPresent([Agent.ID: SDKBridgeMCPProfile.ID].self, forKey: .sdkBridgeMCPProfileIDsByAgentID) ?? [:]
         launchDraft = try container.decode(AgentLaunchDraft.self, forKey: .launchDraft)
         notificationPreferences = try container.decodeIfPresent(NotificationPreferences.self, forKey: .notificationPreferences) ?? NotificationPreferences()
         deviceTokenRegistration = try container.decodeIfPresent(DeviceTokenRegistration.self, forKey: .deviceTokenRegistration)
