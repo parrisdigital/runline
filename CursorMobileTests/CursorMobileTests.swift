@@ -53,6 +53,19 @@ final class CursorMobileTests: XCTestCase {
         XCTAssertEqual(NewChatModelPickerOptions.modelID(from: "composer-2"), "composer-2")
     }
 
+    func testWorkflowPreferencesResolveDefaultRunMode() {
+        XCTAssertEqual(RunlineWorkflowPreferences.runMode(from: nil), .cloudAgent)
+        XCTAssertEqual(RunlineWorkflowPreferences.runMode(from: AgentRunMode.sdkBridge.rawValue), .sdkBridge)
+        XCTAssertEqual(RunlineWorkflowPreferences.runMode(from: "unknown"), .cloudAgent)
+    }
+
+    func testSDKMessageIntentsExposeBridgeValuesAndSymbols() {
+        XCTAssertEqual(SDKMessageIntent.continueConversation.bridgeValue, "continue")
+        XCTAssertEqual(SDKMessageIntent.plan.bridgeValue, "plan")
+        XCTAssertEqual(SDKMessageIntent.execute.bridgeValue, "execute")
+        XCTAssertFalse(SDKMessageIntent.plan.symbolName.isEmpty)
+    }
+
     func testLaunchDraftDecodesLegacyCacheAsCloudAgentRunMode() throws {
         let draft = AgentLaunchDraft(
             prompt: AgentPrompt(text: "Build settings"),

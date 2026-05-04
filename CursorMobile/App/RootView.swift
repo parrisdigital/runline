@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
+    @AppStorage(RunlineWorkflowPreferences.didChooseDefaultRunModeKey) private var didChooseDefaultRunMode = false
+    @AppStorage(RunlineWorkflowPreferences.defaultRunModeKey) private var defaultRunModeRawValue = RunlineWorkflowPreferences.defaultRunMode.rawValue
 
     var body: some View {
         Group {
@@ -13,9 +15,19 @@ struct RootView: View {
         }
         .task {
             await appState.restoreConnectionIfAvailable()
+            if appState.isConnected, didChooseDefaultRunMode {
+                appState.applyDefaultRunMode(defaultRunMode)
+            }
         }
         .onOpenURL { url in
             appState.handleDeepLink(url)
+        }
+        .sheet(isPresented: workflowChooserBinding) {
+            WorkflowModeChooserSheet(
+                selectedMode: defaultRunMode,
+                choose: chooseDefaultRunMode
+            )
+            .interactiveDismissDisabled()
         }
         .alert("Runline", isPresented: isShowingError) {
             Button("OK") {
@@ -37,6 +49,20 @@ struct RootView: View {
         .animation(.snappy(duration: 0.2), value: appState.statusMessage)
     }
 
+    private var defaultRunMode: AgentRunMode {
+        RunlineWorkflowPreferences.runMode(from: defaultRunModeRawValue)
+    }
+
+    private var workflowChooserBinding: Binding<Bool> {
+        Binding {
+            appState.isConnected && !didChooseDefaultRunMode
+        } set: { isPresented in
+            if !isPresented, appState.isConnected, !didChooseDefaultRunMode {
+                chooseDefaultRunMode(.cloudAgent)
+            }
+        }
+    }
+
     private var isShowingError: Binding<Bool> {
         Binding {
             appState.errorMessage != nil
@@ -45,6 +71,92 @@ struct RootView: View {
                 appState.errorMessage = nil
             }
         }
+    }
+
+    private func chooseDefaultRunMode(_ mode: AgentRunMode) {
+        defaultRunModeRawValue = mode.rawValue
+        didChooseDefaultRunMode = true
+        appState.applyDefaultRunMode(mode)
+    }
+}
+
+private struct WorkflowModeChooserSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let selectedMode: AgentRunMode
+    let choose: (AgentRunMode) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    WorkflowModeButton(
+                        mode: .cloudAgent,
+                        isSelected: selectedMode == .cloudAgent,
+                        symbolName: "icloud",
+                        detail: "Start a cloud run, monitor progress, preview artifacts, and follow up after completion.",
+                        choose: select
+                    )
+
+                    WorkflowModeButton(
+                        mode: .sdkBridge,
+                        isSelected: selectedMode == .sdkBridge,
+                        symbolName: "point.3.connected.trianglepath.dotted",
+                        detail: "Use the SDK bridge for a richer conversation with models, MCP profiles, files, images, planning, and execution.",
+                        choose: select
+                    )
+                } footer: {
+                    Text("You can change this later in Settings or switch modes in New Chat.")
+                }
+            }
+            .navigationTitle("Choose Workflow")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func select(_ mode: AgentRunMode) {
+        choose(mode)
+        dismiss()
+    }
+}
+
+private struct WorkflowModeButton: View {
+    let mode: AgentRunMode
+    let isSelected: Bool
+    let symbolName: String
+    let detail: String
+    let choose: (AgentRunMode) -> Void
+
+    var body: some View {
+        Button {
+            choose(mode)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: symbolName)
+                    .font(.title3)
+                    .frame(width: 28)
+                    .foregroundStyle(.tint)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(mode.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.tint)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
     }
 }
 

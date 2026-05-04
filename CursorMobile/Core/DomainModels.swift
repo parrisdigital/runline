@@ -239,6 +239,17 @@ enum SDKMessageIntent: String, CaseIterable, Identifiable, Hashable, Codable {
             "Execute"
         }
     }
+
+    var symbolName: String {
+        switch self {
+        case .continueConversation:
+            "bubble.left.and.bubble.right"
+        case .plan:
+            "checklist"
+        case .execute:
+            "play.circle"
+        }
+    }
 }
 
 struct SDKBridgeMCPProfile: Identifiable, Hashable, Codable {

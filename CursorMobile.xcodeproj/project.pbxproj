@@ -47,6 +47,7 @@
 		D22C5771CAAC992C69542C88 /* SDKBridgeEventMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FBBA148A6A030529C584EB9 /* SDKBridgeEventMapper.swift */; };
 		D42DB9396C9BAA67A304C010 /* CursorDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60EB332D8C7DBC10EC462167 /* CursorDTOs.swift */; };
 		D6E400CC78D7C5282736C661 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 89584CAA3955C6926FC5649E /* PrivacyInfo.xcprivacy */; };
+		EAA4C231406DE985649E32A5 /* RunlineWorkflowPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92BE612C48B83B9354207301 /* RunlineWorkflowPreferences.swift */; };
 		EFECB3F1EBAC7D11BC5EDCA6 /* EnterpriseDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5347BE7564966F24BCE78A10 /* EnterpriseDTOs.swift */; };
 		F87A7747659E1BCE587C81EF /* AppLayoutMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 723F2616EA883AE45586F0FF /* AppLayoutMode.swift */; };
 		FAFBCB6D3E903DD5CB210433 /* NotificationBackendModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A778BC226ED0ED9581ACFB /* NotificationBackendModels.swift */; };
@@ -99,6 +100,7 @@
 		8CB07807A2501C51340A858F /* LocalAppCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAppCache.swift; sourceTree = "<group>"; };
 		8F67359EDFE1E8E08AFC560C /* ChatDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDetailView.swift; sourceTree = "<group>"; };
 		92509652131C531645059919 /* CursorSSEParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorSSEParserTests.swift; sourceTree = "<group>"; };
+		92BE612C48B83B9354207301 /* RunlineWorkflowPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunlineWorkflowPreferences.swift; sourceTree = "<group>"; };
 		99D805CFD2482A99BF736C3E /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		9D14A706BD313397D6EB4392 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AB12195DF730BC851FDC0C77 /* CursorSSEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorSSEParser.swift; sourceTree = "<group>"; };
@@ -195,6 +197,7 @@
 				1ED862484103E40E496ADCA7 /* AppTab.swift */,
 				43BB60A17971111EFF2DDECE /* CursorMobileApp.swift */,
 				75CF870967665D8CEFAE43D3 /* RootView.swift */,
+				92BE612C48B83B9354207301 /* RunlineWorkflowPreferences.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -393,6 +396,7 @@
 				07600F336B35A174A81A121C /* PromptFileLoader.swift in Sources */,
 				715DF45EF253E13904AA4E95 /* RepositoriesView.swift in Sources */,
 				1D91076982500B305A8B146C /* RootView.swift in Sources */,
+				EAA4C231406DE985649E32A5 /* RunlineWorkflowPreferences.swift in Sources */,
 				6E4E7B9A7C99ABC658BED480 /* SDKBridgeClient.swift in Sources */,
 				D22C5771CAAC992C69542C88 /* SDKBridgeEventMapper.swift in Sources */,
 				C416EDA2575B25D5190A8D06 /* SettingsView.swift in Sources */,
@@ -485,7 +489,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -551,7 +555,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

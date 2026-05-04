@@ -23,6 +23,8 @@ struct ChatDetailView: View {
     @State private var followUpFileImportMessage: String?
     @State private var isArtifactsPresented = false
     @State private var sdkMessageIntent: SDKMessageIntent = .continueConversation
+    @State private var selectedSDKModelID: String?
+    @State private var selectedSDKMCPProfileID: String?
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
@@ -159,6 +161,13 @@ struct ChatDetailView: View {
         }
         .task {
             await appState.refreshAgentDetail(agentID: currentAgent.id)
+            seedSDKComposerDefaults(for: currentAgent)
+            if appState.isSDKBridgeAgent(currentAgent) {
+                await appState.reloadSDKBridgeProfiles()
+            }
+        }
+        .onChange(of: currentAgent.id) { _, _ in
+            seedSDKComposerDefaults(for: currentAgent)
         }
         .task(id: latestRun?.id) {
             guard let latestRun else { return }
@@ -206,13 +215,7 @@ struct ChatDetailView: View {
             }
 
             if appState.isSDKBridgeAgent(agent) {
-                Picker("SDK Message Intent", selection: $sdkMessageIntent) {
-                    ForEach(SDKMessageIntent.allCases) { intent in
-                        Text(intent.title).tag(intent)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 12)
+                sdkComposerControls(agent: agent)
             }
 
             HStack(alignment: .center, spacing: 8) {
@@ -280,6 +283,91 @@ struct ChatDetailView: View {
             .padding(.vertical, 8)
         }
         .background(.bar)
+    }
+
+    private func sdkComposerControls(agent: Agent) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Menu {
+                    Picker("Intent", selection: $sdkMessageIntent) {
+                        ForEach(SDKMessageIntent.allCases) { intent in
+                            Label(intent.title, systemImage: intent.symbolName)
+                                .tag(intent)
+                        }
+                    }
+                } label: {
+                    Label(sdkMessageIntent.title, systemImage: sdkMessageIntent.symbolName)
+                }
+                .buttonStyle(.bordered)
+
+                Menu {
+                    Picker("Model", selection: sdkModelSelectionBinding) {
+                        Text("Default").tag(Optional<String>.none)
+                        ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models)) { model in
+                            Text(model.displayName).tag(Optional(model.id))
+                        }
+                    }
+                } label: {
+                    Label(selectedSDKModelTitle, systemImage: "cpu")
+                }
+                .buttonStyle(.bordered)
+
+                Menu {
+                    Picker("MCP Profile", selection: sdkMCPProfileSelectionBinding) {
+                        Text("No Profile").tag(Optional<String>.none)
+                        ForEach(appState.sdkBridgeProfiles) { profile in
+                            Text(profile.name).tag(Optional(profile.id))
+                        }
+                    }
+                } label: {
+                    Label(selectedSDKProfileTitle, systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                .buttonStyle(.bordered)
+
+                if !followUpImages.isEmpty {
+                    Label("\(followUpImages.count) image\(followUpImages.count == 1 ? "" : "s")", systemImage: "photo")
+                        .font(.subheadline)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(Color(uiColor: .secondarySystemBackground)))
+                }
+
+                if !followUpFiles.isEmpty {
+                    Label("\(followUpFiles.count) file\(followUpFiles.count == 1 ? "" : "s")", systemImage: "doc.text")
+                        .font(.subheadline)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(Color(uiColor: .secondarySystemBackground)))
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private var sdkModelSelectionBinding: Binding<String?> {
+        Binding {
+            selectedSDKModelID
+        } set: { modelID in
+            selectedSDKModelID = NewChatModelPickerOptions.modelID(from: modelID)
+        }
+    }
+
+    private var sdkMCPProfileSelectionBinding: Binding<String?> {
+        Binding {
+            selectedSDKMCPProfileID
+        } set: { profileID in
+            selectedSDKMCPProfileID = profileID
+        }
+    }
+
+    private var selectedSDKModelTitle: String {
+        guard let selectedSDKModelID else { return "Default" }
+        return appState.models.first(where: { $0.id == selectedSDKModelID })?.displayName ?? selectedSDKModelID
+    }
+
+    private var selectedSDKProfileTitle: String {
+        guard let selectedSDKMCPProfileID else { return "No Profile" }
+        return appState.sdkBridgeProfiles.first(where: { $0.id == selectedSDKMCPProfileID })?.name ?? selectedSDKMCPProfileID
     }
 
     private var shouldShowFollowUpAttachments: Bool {
@@ -359,12 +447,24 @@ struct ChatDetailView: View {
         followUpFileImportMessage = nil
         isComposerFocused = false
         Task {
-            await appState.createFollowUp(agent: agent, prompt: prompt, intent: sdkMessageIntent)
+            await appState.createFollowUp(
+                agent: agent,
+                prompt: prompt,
+                intent: sdkMessageIntent,
+                sdkModelID: selectedSDKModelID,
+                sdkMCPProfileID: selectedSDKMCPProfileID
+            )
             sdkMessageIntent = .continueConversation
             if let latestRun = appState.runs(for: agent).first {
                 await appState.observeRun(agent: agent, run: latestRun)
             }
         }
+    }
+
+    private func seedSDKComposerDefaults(for agent: Agent) {
+        guard appState.isSDKBridgeAgent(agent) else { return }
+        selectedSDKModelID = NewChatModelPickerOptions.selection(from: agent.modelID)
+        selectedSDKMCPProfileID = appState.sdkBridgeProfileID(for: agent)
     }
 
     private func loadFollowUpImages(from items: [PhotosPickerItem]) async {

@@ -13,6 +13,8 @@ struct SettingsView: View {
 struct SettingsFormContent: View {
     @Environment(AppState.self) private var appState
     @AppStorage("appearance.mode") private var appearanceMode = AppAppearanceMode.system.rawValue
+    @AppStorage(RunlineWorkflowPreferences.didChooseDefaultRunModeKey) private var didChooseDefaultRunMode = false
+    @AppStorage(RunlineWorkflowPreferences.defaultRunModeKey) private var defaultRunModeRawValue = RunlineWorkflowPreferences.defaultRunMode.rawValue
     @AppStorage(SDKBridgePreferences.isEnabledKey) private var isSDKBridgeEnabled = SDKBridgePreferences.defaultIsEnabled
     @AppStorage(SDKBridgePreferences.baseURLKey) private var sdkBridgeBaseURL = SDKBridgePreferences.defaultBaseURLString
     @State private var enterpriseAPIKey = ""
@@ -50,6 +52,21 @@ struct SettingsFormContent: View {
                     }
                 }
                 .pickerStyle(.segmented)
+            }
+
+            Section {
+                Picker("Default", selection: defaultRunModeBinding) {
+                    ForEach(AgentRunMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                LabeledContent("Current default", value: RunlineWorkflowPreferences.runMode(from: defaultRunModeRawValue).detail)
+            } header: {
+                Text("Default Workflow")
+            } footer: {
+                Text("New chats start in this mode. You can still switch between Cloud Agent and SDK Agent per chat.")
             }
 
             Section {
@@ -159,6 +176,16 @@ struct SettingsFormContent: View {
                     await appState.reloadSDKBridgeProfiles()
                 }
             }
+        }
+    }
+
+    private var defaultRunModeBinding: Binding<String> {
+        Binding {
+            defaultRunModeRawValue
+        } set: { rawValue in
+            defaultRunModeRawValue = rawValue
+            didChooseDefaultRunMode = true
+            appState.applyDefaultRunMode(RunlineWorkflowPreferences.runMode(from: rawValue))
         }
     }
 

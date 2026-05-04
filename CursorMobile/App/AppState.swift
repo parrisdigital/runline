@@ -336,6 +336,11 @@ final class AppState {
         streamExpiredRunIDs.contains(runID)
     }
 
+    func applyDefaultRunMode(_ mode: AgentRunMode) {
+        launchDraft.runMode = mode
+        saveCachedState()
+    }
+
     func isSDKBridgeRun(runID: AgentRun.ID) -> Bool {
         sdkBridgeRunIDs.contains(runID)
     }
@@ -347,6 +352,10 @@ final class AppState {
     func sdkBridgeProfile(for agent: Agent) -> SDKBridgeMCPProfile? {
         guard let profileID = sdkBridgeMCPProfileIDsByAgentID[agent.id] else { return nil }
         return sdkBridgeProfiles.first { $0.id == profileID }
+    }
+
+    func sdkBridgeProfileID(for agent: Agent) -> SDKBridgeMCPProfile.ID? {
+        sdkBridgeMCPProfileIDsByAgentID[agent.id]
     }
 
     func reloadSDKBridgeProfiles() async {
@@ -662,10 +671,18 @@ final class AppState {
     func createFollowUp(
         agent: Agent,
         prompt: AgentPrompt,
-        intent: SDKMessageIntent = .continueConversation
+        intent: SDKMessageIntent = .continueConversation,
+        sdkModelID: String? = nil,
+        sdkMCPProfileID: String? = nil
     ) async {
         if isSDKBridgeAgent(agent) {
-            await createSDKBridgeFollowUp(agent: agent, prompt: prompt, intent: intent)
+            await createSDKBridgeFollowUp(
+                agent: agent,
+                prompt: prompt,
+                intent: intent,
+                modelID: sdkModelID,
+                mcpProfileID: sdkMCPProfileID
+            )
             return
         }
 
@@ -694,7 +711,9 @@ final class AppState {
     private func createSDKBridgeFollowUp(
         agent: Agent,
         prompt: AgentPrompt,
-        intent: SDKMessageIntent
+        intent: SDKMessageIntent,
+        modelID: String?,
+        mcpProfileID: String?
     ) async {
         let promptText = prompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !promptText.isEmpty else {
@@ -704,14 +723,16 @@ final class AppState {
 
         do {
             let client = try makeSDKBridgeClient()
+            let selectedModelID = modelID?.nilIfBlank
+            let selectedProfileID = mcpProfileID?.nilIfBlank
             let response = try await client.sendSessionMessage(
                 sessionID: agent.id,
                 body: SDKBridgeSessionMessageRequest(
                     prompt: AgentPrompt(text: promptText, images: prompt.images, files: prompt.files).textWithFileContext,
                     images: sdkPromptImages(from: prompt),
                     intent: intent.bridgeValue,
-                    modelId: agent.modelID.isCursorDefaultModelIdentifier ? nil : agent.modelID,
-                    mcpProfileId: sdkBridgeMCPProfileIDsByAgentID[agent.id]
+                    modelId: selectedModelID?.isCursorDefaultModelIdentifier == true ? nil : selectedModelID,
+                    mcpProfileId: selectedProfileID
                 )
             )
             let run = AgentRun(
@@ -726,6 +747,12 @@ final class AppState {
             updateAgent(agent.id) { agent in
                 agent.latestRunID = run.id
                 agent.updatedAtDescription = "now"
+                agent.modelID = selectedModelID ?? "default"
+            }
+            if let selectedProfileID {
+                sdkBridgeMCPProfileIDsByAgentID[agent.id] = selectedProfileID
+            } else {
+                sdkBridgeMCPProfileIDsByAgentID.removeValue(forKey: agent.id)
             }
             eventsByRunID[run.id] = [
                 AgentStreamEvent(
