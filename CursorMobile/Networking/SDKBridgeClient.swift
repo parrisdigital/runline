@@ -20,6 +20,21 @@ struct SDKBridgeHealthResponse: Decodable, Equatable {
     var sdk: String
 }
 
+enum SDKBridgeConnectionState: Equatable {
+    case disabled
+    case unchecked
+    case checking
+    case connected(String)
+    case failed(String)
+
+    var isConnected: Bool {
+        if case .connected = self {
+            return true
+        }
+        return false
+    }
+}
+
 enum SDKBridgePreferences {
     static let isEnabledKey = "sdkBridge.isEnabled"
     static let baseURLKey = "sdkBridge.baseURL"
@@ -47,6 +62,16 @@ enum SDKBridgePreferences {
             return nil
         }
         return url
+    }
+
+    static func isLoopback(_ url: URL?) -> Bool {
+        guard let host = url?.host?.lowercased() else { return false }
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
+    }
+
+    static func deviceLoopbackHelp(for url: URL?) -> String? {
+        guard isLoopback(url) else { return nil }
+        return "On a physical iPhone, localhost points to the phone. For device testing, run the bridge on your Mac and use your Mac LAN URL, for example http://192.168.1.10:8787."
     }
 }
 

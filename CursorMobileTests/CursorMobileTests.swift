@@ -125,6 +125,47 @@ final class CursorMobileTests: XCTestCase {
     }
 
     @MainActor
+    func testSDKLaunchRequiresConnectedBridge() {
+        withSDKBridgeDefaults(enabled: true, baseURL: "http://localhost:8787") {
+            let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"))
+            appState.account = ProviderAccount(
+                apiKeyName: "Runline Test Key",
+                userEmail: "test@example.com",
+                createdAt: .now
+            )
+            appState.launchDraft.prompt.text = "Plan the settings cleanup"
+            appState.launchDraft.runMode = .sdkBridge
+            appState.sdkBridgeConnectionState = .unchecked
+
+            XCTAssertFalse(appState.canLaunchAgent)
+            XCTAssertEqual(appState.sdkBridgeLaunchIssue, "Check the SDK bridge connection in Settings before using SDK Agent.")
+
+            appState.sdkBridgeConnectionState = .connected("runline-orchestrator - @cursor/sdk")
+
+            XCTAssertTrue(appState.canLaunchAgent)
+            XCTAssertNil(appState.sdkBridgeLaunchIssue)
+        }
+    }
+
+    @MainActor
+    func testUnavailableSDKModeFallsBackToCloudAgent() {
+        withSDKBridgeDefaults(enabled: true, baseURL: "http://localhost:8787") {
+            let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"))
+            appState.account = ProviderAccount(
+                apiKeyName: "Runline Test Key",
+                userEmail: "test@example.com",
+                createdAt: .now
+            )
+            appState.launchDraft.runMode = .sdkBridge
+            appState.sdkBridgeConnectionState = .failed("Runline cannot reach the bridge.")
+
+            appState.ensureLaunchRunModeIsAvailable()
+
+            XCTAssertEqual(appState.launchDraft.runMode, .cloudAgent)
+        }
+    }
+
+    @MainActor
     func testWorkspaceRefreshCancellationDoesNotShowGlobalAlert() async {
         let appState = AppState(provider: CancellingAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
 
@@ -184,6 +225,31 @@ final class CursorMobileTests: XCTestCase {
         try await provider.deleteAgent(agentID: agent.id)
         let remaining = try await provider.listAgents()
         XCTAssertFalse(remaining.contains { $0.id == agent.id })
+    }
+
+    @MainActor
+    private func withSDKBridgeDefaults(enabled: Bool, baseURL: String, run test: () -> Void) {
+        let defaults = UserDefaults.standard
+        let previousEnabled = defaults.object(forKey: SDKBridgePreferences.isEnabledKey)
+        let previousBaseURL = defaults.object(forKey: SDKBridgePreferences.baseURLKey)
+
+        defaults.set(enabled, forKey: SDKBridgePreferences.isEnabledKey)
+        defaults.set(baseURL, forKey: SDKBridgePreferences.baseURLKey)
+        defer {
+            if let previousEnabled {
+                defaults.set(previousEnabled, forKey: SDKBridgePreferences.isEnabledKey)
+            } else {
+                defaults.removeObject(forKey: SDKBridgePreferences.isEnabledKey)
+            }
+
+            if let previousBaseURL {
+                defaults.set(previousBaseURL, forKey: SDKBridgePreferences.baseURLKey)
+            } else {
+                defaults.removeObject(forKey: SDKBridgePreferences.baseURLKey)
+            }
+        }
+
+        test()
     }
 }
 

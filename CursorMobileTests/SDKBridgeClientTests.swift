@@ -33,6 +33,16 @@ final class SDKBridgeClientTests: XCTestCase {
         XCTAssertEqual(request.header("Accept"), "application/json")
     }
 
+    func testLoopbackBridgeURLShowsDeviceGuidance() throws {
+        let localhost = try XCTUnwrap(URL(string: "http://localhost:8787"))
+        let lanURL = try XCTUnwrap(URL(string: "http://192.168.1.10:8787"))
+
+        XCTAssertTrue(SDKBridgePreferences.isLoopback(localhost))
+        XCTAssertNotNil(SDKBridgePreferences.deviceLoopbackHelp(for: localhost))
+        XCTAssertFalse(SDKBridgePreferences.isLoopback(lanURL))
+        XCTAssertNil(SDKBridgePreferences.deviceLoopbackHelp(for: lanURL))
+    }
+
     func testCreateCloudRunSendsBearerKeyAndLaunchBody() async throws {
         MockBridgeURLProtocol.handler = { request in
             try Self.jsonResponse(for: request, body: [
