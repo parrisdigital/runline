@@ -68,7 +68,7 @@ struct NewChatForm: View {
         Form {
             Section("Run Mode") {
                 Picker("Run Mode", selection: runModeBinding) {
-                    ForEach(AgentRunMode.allCases) { mode in
+                    ForEach(availableRunModes) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
@@ -76,8 +76,8 @@ struct NewChatForm: View {
 
                 LabeledContent("Mode", value: appState.launchDraft.runMode.detail)
 
-                if let issue = appState.sdkBridgeLaunchIssue {
-                    Text(issue)
+                if let issue = appState.sdkBridgeReadinessIssue {
+                    Label(issue, systemImage: "point.3.connected.trianglepath.dotted")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -253,10 +253,15 @@ struct NewChatForm: View {
             }
         }
         .task {
+            appState.syncSDKBridgeConfiguration()
+            appState.ensureLaunchRunModeIsAvailable()
             seedSourceFields()
             if appState.launchDraft.runMode == .sdkBridge {
                 await appState.reloadSDKBridgeProfiles()
             }
+        }
+        .onChange(of: appState.sdkBridgeConnectionState) { _, _ in
+            appState.ensureLaunchRunModeIsAvailable()
         }
         .onChange(of: appState.launchDraft.runMode) { _, mode in
             guard mode == .sdkBridge else { return }
@@ -326,8 +331,17 @@ struct NewChatForm: View {
         Binding {
             appState.launchDraft.runMode
         } set: { mode in
+            if mode == .sdkBridge, !appState.isSDKBridgeReadyForLaunch {
+                appState.errorMessage = appState.sdkBridgeReadinessIssue
+                appState.launchDraft.runMode = .cloudAgent
+                return
+            }
             appState.launchDraft.runMode = mode
         }
+    }
+
+    private var availableRunModes: [AgentRunMode] {
+        appState.isSDKBridgeReadyForLaunch ? AgentRunMode.allCases : [.cloudAgent]
     }
 
     private var modelSelectionBinding: Binding<String?> {

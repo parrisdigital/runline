@@ -32,6 +32,7 @@ final class AppState {
     var loadingEndpointIDs: Set<CursorAPIEndpoint.ID> = []
     var endpointPageOverrides: [CursorAPIEndpoint.ID: Int] = [:]
     var sdkBridgeProfiles: [SDKBridgeMCPProfile] = []
+    var sdkBridgeConnectionState: SDKBridgeConnectionState = SDKBridgePreferences.isEnabled() ? .unchecked : .disabled
     var focusedAgentID: Agent.ID?
     var notificationPreferences = NotificationPreferences()
     var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
@@ -121,18 +122,37 @@ final class AppState {
         return true
     }
 
-    var sdkBridgeLaunchIssue: String? {
-        guard launchDraft.runMode == .sdkBridge else { return nil }
+    var isSDKBridgeReadyForLaunch: Bool {
+        sdkBridgeReadinessIssue == nil
+    }
+
+    var sdkBridgeReadinessIssue: String? {
         guard account != nil else {
             return "Connect a Cursor API key before using SDK Agent."
         }
         guard SDKBridgePreferences.isEnabled() else {
-            return "Enable the SDK bridge in Settings before launching SDK Agent."
+            return "Enable the SDK bridge in Settings before using SDK Agent."
         }
         guard SDKBridgePreferences.configuredBaseURL() != nil else {
             return "Enter a valid SDK bridge URL in Settings."
         }
-        return nil
+        switch sdkBridgeConnectionState {
+        case .connected:
+            return nil
+        case .disabled:
+            return "Enable the SDK bridge in Settings before using SDK Agent."
+        case .unchecked:
+            return "Check the SDK bridge connection in Settings before using SDK Agent."
+        case .checking:
+            return "Runline is checking the SDK bridge connection."
+        case .failed(let message):
+            return "SDK bridge is unavailable. \(message)"
+        }
+    }
+
+    var sdkBridgeLaunchIssue: String? {
+        guard launchDraft.runMode == .sdkBridge else { return nil }
+        return sdkBridgeReadinessIssue
     }
 
     func restoreConnectionIfAvailable() async {
@@ -171,6 +191,7 @@ final class AppState {
             provider = cursorProvider
             enterpriseProvider = cursorProvider as? EnterpriseDataProvider
             account = validatedAccount
+            syncSDKBridgeConfiguration()
         } catch {
             provider = nil
             enterpriseProvider = nil
@@ -209,6 +230,7 @@ final class AppState {
         sdkBridgeRunIDs = []
         sdkBridgeMCPProfileIDsByAgentID = [:]
         sdkBridgeProfiles = []
+        sdkBridgeConnectionState = SDKBridgePreferences.isEnabled() ? .unchecked : .disabled
         endpointResults = [:]
         loadingEndpointIDs = []
         endpointPageOverrides = [:]
@@ -337,8 +359,20 @@ final class AppState {
     }
 
     func applyDefaultRunMode(_ mode: AgentRunMode) {
+        if mode == .sdkBridge, !isSDKBridgeReadyForLaunch {
+            launchDraft.runMode = .cloudAgent
+            saveCachedState()
+            return
+        }
         launchDraft.runMode = mode
         saveCachedState()
+    }
+
+    func ensureLaunchRunModeIsAvailable() {
+        if launchDraft.runMode == .sdkBridge, !isSDKBridgeReadyForLaunch {
+            launchDraft.runMode = .cloudAgent
+            saveCachedState()
+        }
     }
 
     func isSDKBridgeRun(runID: AgentRun.ID) -> Bool {
@@ -356,6 +390,58 @@ final class AppState {
 
     func sdkBridgeProfileID(for agent: Agent) -> SDKBridgeMCPProfile.ID? {
         sdkBridgeMCPProfileIDsByAgentID[agent.id]
+    }
+
+    func syncSDKBridgeConfiguration(resetConnection: Bool = false) {
+        guard SDKBridgePreferences.isEnabled() else {
+            sdkBridgeConnectionState = .disabled
+            sdkBridgeProfiles = []
+            ensureLaunchRunModeIsAvailable()
+            return
+        }
+        guard SDKBridgePreferences.configuredBaseURL() != nil else {
+            sdkBridgeConnectionState = .failed("The bridge URL is invalid.")
+            sdkBridgeProfiles = []
+            ensureLaunchRunModeIsAvailable()
+            return
+        }
+        if resetConnection || !sdkBridgeConnectionState.isConnected {
+            sdkBridgeConnectionState = .unchecked
+            sdkBridgeProfiles = []
+            ensureLaunchRunModeIsAvailable()
+        }
+    }
+
+    func checkSDKBridgeConnection() async {
+        guard SDKBridgePreferences.isEnabled() else {
+            sdkBridgeConnectionState = .disabled
+            sdkBridgeProfiles = []
+            ensureLaunchRunModeIsAvailable()
+            return
+        }
+        guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
+            sdkBridgeConnectionState = .failed("The bridge URL is invalid.")
+            sdkBridgeProfiles = []
+            ensureLaunchRunModeIsAvailable()
+            return
+        }
+
+        sdkBridgeConnectionState = .checking
+        do {
+            let health = try await sdkBridgeClientFactory(baseURL, nil).health()
+            if health.ok {
+                sdkBridgeConnectionState = .connected("\(health.service) - \(health.sdk)")
+                await reloadSDKBridgeProfiles()
+            } else {
+                sdkBridgeConnectionState = .failed("The bridge responded but reported an unhealthy status.")
+                sdkBridgeProfiles = []
+                ensureLaunchRunModeIsAvailable()
+            }
+        } catch {
+            sdkBridgeConnectionState = .failed(sdkBridgeConnectionFailureMessage(for: error, baseURL: baseURL))
+            sdkBridgeProfiles = []
+            ensureLaunchRunModeIsAvailable()
+        }
     }
 
     func reloadSDKBridgeProfiles() async {
@@ -1143,9 +1229,27 @@ final class AppState {
         return String(firstLine.prefix(45)) + "..."
     }
 
+    private func sdkBridgeConnectionFailureMessage(for error: Error, baseURL: URL) -> String {
+        if SDKBridgePreferences.isLoopback(baseURL) {
+            return "Runline cannot reach \(baseURL.absoluteString). On a physical iPhone, localhost points to the phone. Use your Mac LAN URL or a hosted HTTPS bridge."
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .timedOut:
+                return "Runline cannot reach \(baseURL.absoluteString). Start the bridge server or update the URL."
+            default:
+                break
+            }
+        }
+        return error.localizedDescription
+    }
+
     private func userMessage(from error: Error) -> String {
         if let apiError = error as? CursorAPIError {
             return apiError.userMessage
+        }
+        if let bridgeError = error as? SDKBridgeUnavailableError {
+            return bridgeError.errorDescription ?? error.localizedDescription
         }
         return error.localizedDescription
     }

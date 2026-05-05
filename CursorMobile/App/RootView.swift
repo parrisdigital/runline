@@ -82,6 +82,7 @@ struct RootView: View {
 
 private struct WorkflowModeChooserSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
     let selectedMode: AgentRunMode
     let choose: (AgentRunMode) -> Void
 
@@ -91,7 +92,7 @@ private struct WorkflowModeChooserSheet: View {
                 Section {
                     WorkflowModeButton(
                         mode: .cloudAgent,
-                        isSelected: selectedMode == .cloudAgent,
+                        isSelected: effectiveSelectedMode == .cloudAgent,
                         symbolName: "icloud",
                         detail: "Start a cloud run, monitor progress, preview artifacts, and follow up after completion.",
                         choose: select
@@ -99,9 +100,10 @@ private struct WorkflowModeChooserSheet: View {
 
                     WorkflowModeButton(
                         mode: .sdkBridge,
-                        isSelected: selectedMode == .sdkBridge,
+                        isSelected: effectiveSelectedMode == .sdkBridge,
+                        isEnabled: appState.isSDKBridgeReadyForLaunch,
                         symbolName: "point.3.connected.trianglepath.dotted",
-                        detail: "Use the SDK bridge for a richer conversation with models, MCP profiles, files, images, planning, and execution.",
+                        detail: sdkAgentDetail,
                         choose: select
                     )
                 } footer: {
@@ -113,7 +115,21 @@ private struct WorkflowModeChooserSheet: View {
         }
     }
 
+    private var sdkAgentDetail: String {
+        appState.isSDKBridgeReadyForLaunch
+            ? "Use the SDK bridge for a richer conversation with models, MCP profiles, files, images, planning, and execution."
+            : "Requires a connected SDK bridge. Choose Cloud Agent now, then enable and check the bridge in Settings."
+    }
+
+    private var effectiveSelectedMode: AgentRunMode {
+        selectedMode == .sdkBridge && !appState.isSDKBridgeReadyForLaunch ? .cloudAgent : selectedMode
+    }
+
     private func select(_ mode: AgentRunMode) {
+        if mode == .sdkBridge, !appState.isSDKBridgeReadyForLaunch {
+            appState.errorMessage = appState.sdkBridgeReadinessIssue
+            return
+        }
         choose(mode)
         dismiss()
     }
@@ -122,6 +138,7 @@ private struct WorkflowModeChooserSheet: View {
 private struct WorkflowModeButton: View {
     let mode: AgentRunMode
     let isSelected: Bool
+    var isEnabled = true
     let symbolName: String
     let detail: String
     let choose: (AgentRunMode) -> Void
@@ -155,8 +172,10 @@ private struct WorkflowModeButton: View {
                 }
             }
             .padding(.vertical, 4)
+            .opacity(isEnabled ? 1 : 0.55)
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
     }
 }
 

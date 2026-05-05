@@ -18,7 +18,6 @@ struct SettingsFormContent: View {
     @AppStorage(SDKBridgePreferences.isEnabledKey) private var isSDKBridgeEnabled = SDKBridgePreferences.defaultIsEnabled
     @AppStorage(SDKBridgePreferences.baseURLKey) private var sdkBridgeBaseURL = SDKBridgePreferences.defaultBaseURLString
     @State private var enterpriseAPIKey = ""
-    @State private var sdkBridgeHealth: SDKBridgeHealthCheckState = .idle
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -80,30 +79,46 @@ struct SettingsFormContent: View {
                     .disabled(!isSDKBridgeEnabled)
 
                 if isSDKBridgeEnabled {
-                    LabeledContent("Status") {
-                        Label(sdkBridgeHealth.title, systemImage: sdkBridgeHealth.systemImage)
-                            .foregroundStyle(sdkBridgeHealth.tint)
+                    HStack(spacing: 12) {
+                        Text("Status")
+                        Spacer()
+                        Label(sdkBridgeConnectionTitle, systemImage: appState.sdkBridgeConnectionState.systemImage)
+                            .foregroundStyle(appState.sdkBridgeConnectionState.tint)
+                            .labelStyle(.titleAndIcon)
+                            .multilineTextAlignment(.trailing)
                     }
 
                     LabeledContent("Profiles", value: "\(appState.sdkBridgeProfiles.count)")
+
+                    if let detail = sdkBridgeConnectionDetail {
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let loopbackHelp = SDKBridgePreferences.deviceLoopbackHelp(for: SDKBridgePreferences.baseURL(from: sdkBridgeBaseURL)) {
+                        Text(loopbackHelp)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
                     Button {
                         Task {
                             await checkSDKBridgeHealth()
                         }
                     } label: {
-                        if sdkBridgeHealth == .checking {
+                        if appState.sdkBridgeConnectionState == .checking {
                             ProgressView()
                         } else {
-                            Text("Check Connection")
+                            Text(appState.sdkBridgeConnectionState.isConnected ? "Recheck Connection" : "Check Connection")
                         }
                     }
-                    .disabled(sdkBridgeHealth == .checking)
+                    .disabled(appState.sdkBridgeConnectionState == .checking)
                 }
             } header: {
                 Text("Cursor SDK Agent Bridge")
             } footer: {
-                Text("Cloud Agent stays direct from iOS. SDK Agent uses this bridge for resumable SDK sessions, MCP profiles, and subagents.")
+                Text("Cloud Agent stays direct from iOS. SDK Agent is available only after this bridge connects.")
             }
 
             Section("Enterprise API") {
@@ -165,17 +180,19 @@ struct SettingsFormContent: View {
         .scrollDismissesKeyboard(.interactively)
         .task {
             await appState.refreshNotificationStatus()
+            appState.syncSDKBridgeConfiguration()
+            ensureDefaultWorkflowSelectionIsAvailable()
         }
         .onChange(of: sdkBridgeBaseURL) { _, _ in
-            sdkBridgeHealth = .idle
+            appState.syncSDKBridgeConfiguration(resetConnection: true)
+            ensureDefaultWorkflowSelectionIsAvailable()
         }
         .onChange(of: isSDKBridgeEnabled) { _, _ in
-            sdkBridgeHealth = .idle
-            if isSDKBridgeEnabled {
-                Task {
-                    await appState.reloadSDKBridgeProfiles()
-                }
-            }
+            appState.syncSDKBridgeConfiguration(resetConnection: true)
+            ensureDefaultWorkflowSelectionIsAvailable()
+        }
+        .onChange(of: appState.sdkBridgeConnectionState) { _, _ in
+            ensureDefaultWorkflowSelectionIsAvailable()
         }
     }
 
@@ -183,9 +200,17 @@ struct SettingsFormContent: View {
         Binding {
             defaultRunModeRawValue
         } set: { rawValue in
+            let mode = RunlineWorkflowPreferences.runMode(from: rawValue)
+            if mode == .sdkBridge, !appState.isSDKBridgeReadyForLaunch {
+                appState.errorMessage = appState.sdkBridgeReadinessIssue
+                defaultRunModeRawValue = AgentRunMode.cloudAgent.rawValue
+                didChooseDefaultRunMode = true
+                appState.applyDefaultRunMode(.cloudAgent)
+                return
+            }
             defaultRunModeRawValue = rawValue
             didChooseDefaultRunMode = true
-            appState.applyDefaultRunMode(RunlineWorkflowPreferences.runMode(from: rawValue))
+            appState.applyDefaultRunMode(mode)
         }
     }
 
@@ -206,6 +231,41 @@ struct SettingsFormContent: View {
         }
     }
 
+    private var sdkBridgeConnectionTitle: String {
+        switch appState.sdkBridgeConnectionState {
+        case .disabled:
+            "Disabled"
+        case .unchecked:
+            "Not Checked"
+        case .checking:
+            "Checking"
+        case .connected:
+            "Connected"
+        case .failed:
+            "Unavailable"
+        }
+    }
+
+    private var sdkBridgeConnectionDetail: String? {
+        switch appState.sdkBridgeConnectionState {
+        case .connected(let message), .failed(let message):
+            message
+        case .unchecked:
+            "Check the bridge before selecting SDK Agent. The bridge must be reachable from this device."
+        case .disabled, .checking:
+            nil
+        }
+    }
+
+    private func ensureDefaultWorkflowSelectionIsAvailable() {
+        guard RunlineWorkflowPreferences.runMode(from: defaultRunModeRawValue) == .sdkBridge,
+              !appState.isSDKBridgeReadyForLaunch else {
+            return
+        }
+        defaultRunModeRawValue = AgentRunMode.cloudAgent.rawValue
+        appState.applyDefaultRunMode(.cloudAgent)
+    }
+
     private func saveEnterpriseKey() {
         let key = enterpriseAPIKey
         enterpriseAPIKey = ""
@@ -217,23 +277,7 @@ struct SettingsFormContent: View {
 
     private func checkSDKBridgeHealth() async {
         focusedField = nil
-        guard let baseURL = SDKBridgePreferences.baseURL(from: sdkBridgeBaseURL) else {
-            sdkBridgeHealth = .failed("Invalid URL")
-            return
-        }
-
-        sdkBridgeHealth = .checking
-        do {
-            let health = try await SDKBridgeClient(baseURL: baseURL).health()
-            sdkBridgeHealth = health.ok
-                ? .healthy("\(health.service) - \(health.sdk)")
-                : .failed("Bridge responded unhealthy")
-            if health.ok {
-                await appState.reloadSDKBridgeProfiles()
-            }
-        } catch {
-            sdkBridgeHealth = .failed(error.localizedDescription)
-        }
+        await appState.checkSDKBridgeConnection()
     }
 
     private func notificationBinding(_ keyPath: WritableKeyPath<NotificationPreferences, Bool>) -> Binding<Bool> {
@@ -247,30 +291,14 @@ struct SettingsFormContent: View {
     }
 }
 
-private enum SDKBridgeHealthCheckState: Equatable {
-    case idle
-    case checking
-    case healthy(String)
-    case failed(String)
-
-    var title: String {
-        switch self {
-        case .idle:
-            "Not Checked"
-        case .checking:
-            "Checking"
-        case .healthy(let message), .failed(let message):
-            message
-        }
-    }
-
+private extension SDKBridgeConnectionState {
     var systemImage: String {
         switch self {
-        case .idle:
+        case .disabled, .unchecked:
             "circle"
         case .checking:
             "clock"
-        case .healthy:
+        case .connected:
             "checkmark.circle"
         case .failed:
             "exclamationmark.circle"
@@ -279,11 +307,11 @@ private enum SDKBridgeHealthCheckState: Equatable {
 
     var tint: Color {
         switch self {
-        case .healthy:
+        case .connected:
             .green
         case .failed:
             .red
-        case .checking, .idle:
+        case .checking, .disabled, .unchecked:
             .secondary
         }
     }
