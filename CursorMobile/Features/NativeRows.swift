@@ -176,10 +176,12 @@ struct StreamEventListRow: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                Text(item.message)
-                    .font(isTechnical ? .caption.monospaced() : .callout)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                TimelineMessageText(
+                    message: item.message,
+                    isTechnical: isTechnical,
+                    rendersMarkdown: rendersMarkdown,
+                    foregroundColor: messageColor
+                )
             }
         }
         .accessibilityElement(children: .combine)
@@ -187,6 +189,24 @@ struct StreamEventListRow: View {
 
     private var isTechnical: Bool {
         item.kind == .toolCall || item.kind == .result || item.kind == .error
+    }
+
+    private var rendersMarkdown: Bool {
+        switch item.kind {
+        case .assistant, .thinking, .task, .request:
+            true
+        default:
+            false
+        }
+    }
+
+    private var messageColor: Color {
+        switch item.kind {
+        case .assistant, .user:
+            .primary
+        default:
+            .secondary
+        }
     }
 
     private var symbolName: String {
@@ -233,6 +253,218 @@ struct StreamEventListRow: View {
         default:
             .secondary
         }
+    }
+}
+
+private struct TimelineMessageText: View {
+    var message: String
+    var isTechnical: Bool
+    var rendersMarkdown: Bool
+    var foregroundColor: Color
+
+    var body: some View {
+        Group {
+            if isTechnical || !rendersMarkdown {
+                Text(message)
+                    .font(isTechnical ? .caption.monospaced() : .callout)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(TimelineMarkdownParser.blocks(from: message).enumerated()), id: \.offset) { _, block in
+                        blockView(block)
+                    }
+                }
+            }
+        }
+        .foregroundStyle(foregroundColor)
+        .textSelection(.enabled)
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: TimelineMarkdownBlock) -> some View {
+        switch block {
+        case .heading(let level, let text):
+            InlineMarkdownText(text: text, font: headingFont(level))
+                .foregroundStyle(.primary)
+                .padding(.top, level == 1 ? 4 : 2)
+        case .paragraph(let text):
+            InlineMarkdownText(text: text, font: .callout)
+        case .bullet(let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("•")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                InlineMarkdownText(text: text, font: .callout)
+            }
+        case .numbered(let marker, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(marker)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                InlineMarkdownText(text: text, font: .callout)
+            }
+        case .code(let text):
+            Text(text)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 2)
+        }
+    }
+
+    private func headingFont(_ level: Int) -> Font {
+        switch level {
+        case 1:
+            .headline
+        case 2:
+            .subheadline.weight(.semibold)
+        default:
+            .callout.weight(.semibold)
+        }
+    }
+}
+
+private struct InlineMarkdownText: View {
+    var text: String
+    var font: Font
+
+    var body: some View {
+        if let attributedText {
+            Text(attributedText)
+                .font(font)
+        } else {
+            Text(text)
+                .font(font)
+        }
+    }
+
+    private var attributedText: AttributedString? {
+        try? AttributedString(
+            markdown: text,
+            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )
+    }
+}
+
+private enum TimelineMarkdownBlock: Hashable {
+    case heading(level: Int, text: String)
+    case paragraph(String)
+    case bullet(String)
+    case numbered(marker: String, text: String)
+    case code(String)
+}
+
+private enum TimelineMarkdownParser {
+    static func blocks(from message: String) -> [TimelineMarkdownBlock] {
+        var blocks: [TimelineMarkdownBlock] = []
+        var paragraphLines: [String] = []
+        var codeLines: [String] = []
+        var isInCodeBlock = false
+
+        func flushParagraph() {
+            let paragraph = paragraphLines
+                .joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !paragraph.isEmpty {
+                blocks.append(.paragraph(paragraph))
+            }
+            paragraphLines.removeAll()
+        }
+
+        for line in normalizedLines(from: message) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.hasPrefix("```") {
+                if isInCodeBlock {
+                    blocks.append(.code(codeLines.joined(separator: "\n")))
+                    codeLines.removeAll()
+                    isInCodeBlock = false
+                } else {
+                    flushParagraph()
+                    isInCodeBlock = true
+                }
+                continue
+            }
+
+            if isInCodeBlock {
+                codeLines.append(line)
+                continue
+            }
+
+            guard !trimmed.isEmpty else {
+                flushParagraph()
+                continue
+            }
+
+            if let heading = heading(from: trimmed) {
+                flushParagraph()
+                blocks.append(heading)
+                continue
+            }
+
+            if let bullet = bullet(from: trimmed) {
+                flushParagraph()
+                blocks.append(.bullet(bullet))
+                continue
+            }
+
+            if let numbered = numberedItem(from: trimmed) {
+                flushParagraph()
+                blocks.append(numbered)
+                continue
+            }
+
+            paragraphLines.append(trimmed)
+        }
+
+        if isInCodeBlock, !codeLines.isEmpty {
+            blocks.append(.code(codeLines.joined(separator: "\n")))
+        }
+        flushParagraph()
+
+        return blocks.isEmpty ? [.paragraph(message)] : blocks
+    }
+
+    private static func normalizedLines(from message: String) -> [String] {
+        message
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
+    }
+
+    private static func heading(from line: String) -> TimelineMarkdownBlock? {
+        let marker = line.prefix { $0 == "#" }
+        guard !marker.isEmpty, marker.count <= 6 else { return nil }
+
+        let textStart = line.index(line.startIndex, offsetBy: marker.count)
+        guard textStart < line.endIndex, line[textStart] == " " else { return nil }
+
+        let text = String(line[line.index(after: textStart)...])
+            .trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return nil }
+        return .heading(level: marker.count, text: text)
+    }
+
+    private static func bullet(from line: String) -> String? {
+        for marker in ["- ", "* "] where line.hasPrefix(marker) {
+            let text = String(line.dropFirst(marker.count))
+                .trimmingCharacters(in: .whitespaces)
+            return text.isEmpty ? nil : text
+        }
+        return nil
+    }
+
+    private static func numberedItem(from line: String) -> TimelineMarkdownBlock? {
+        guard let dotIndex = line.firstIndex(of: ".") else { return nil }
+
+        let number = line[..<dotIndex]
+        guard !number.isEmpty, number.allSatisfy(\.isNumber) else { return nil }
+
+        let textStart = line.index(after: dotIndex)
+        guard textStart < line.endIndex, line[textStart] == " " else { return nil }
+
+        let text = String(line[line.index(after: textStart)...])
+            .trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return nil }
+        return .numbered(marker: "\(number).", text: text)
     }
 }
 
