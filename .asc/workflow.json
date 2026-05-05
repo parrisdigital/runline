@@ -1,0 +1,144 @@
+{
+  "env": {
+    "ASC_PROFILE": "Runline",
+    "APP_ID": "6766299514",
+    "BUNDLE_ID": "com.matthewparris.runline",
+    "VERSION": "1.0",
+    "PROJECT": "CursorMobile.xcodeproj",
+    "SCHEME": "CursorMobile",
+    "SIM_DESTINATION": "platform=iOS Simulator,name=iPhone 17,OS=26.4.1",
+    "TESTFLIGHT_GROUP_ID": "9ddf92fa-5b17-48ca-9833-5d83c3e31d3d",
+    "INTERNAL_TESTFLIGHT_GROUP_ID": "a252108c-c4bc-4b6b-94cd-519b7be04c68",
+    "LOCALE": "en-US",
+    "TEST_NOTES": "Verify Cloud Agent and SDK Agent workflows, iPhone and iPad layouts, chat composer, attachments, model and MCP controls, Settings, light mode, and dark mode."
+  },
+  "before_all": "asc --profile $ASC_PROFILE auth status --validate --output json >/dev/null",
+  "after_all": "echo workflow_done >&2",
+  "error": "echo workflow_failed >&2",
+  "workflows": {
+    "asc-health": {
+      "description": "Verify ASC auth, app resolution, TestFlight groups, and the latest visible builds.",
+      "steps": [
+        {
+          "name": "auth_status",
+          "run": "asc --profile $ASC_PROFILE auth status --validate --verbose"
+        },
+        {
+          "name": "app",
+          "run": "asc --profile $ASC_PROFILE apps view --id $APP_ID --output json"
+        },
+        {
+          "name": "groups",
+          "run": "asc --profile $ASC_PROFILE testflight groups list --app $APP_ID --output json"
+        },
+        {
+          "name": "builds",
+          "run": "asc --profile $ASC_PROFILE builds list --app $APP_ID --version $VERSION --platform IOS --limit 10 --sort -uploadedDate --output json"
+        }
+      ]
+    },
+    "preflight": {
+      "description": "Run local checks before archiving a TestFlight build.",
+      "steps": [
+        {
+          "name": "repo_clean",
+          "run": "test -z \"$(git status --short)\" || { git status --short >&2; echo 'Working tree must be clean before release.' >&2; exit 1; }"
+        },
+        {
+          "name": "diff_check",
+          "run": "git diff --check"
+        },
+        {
+          "name": "orchestrator_typecheck",
+          "run": "npm --prefix orchestrator run typecheck"
+        },
+        {
+          "name": "ios_tests",
+          "run": "xcodebuild test -project $PROJECT -scheme $SCHEME -destination \"$SIM_DESTINATION\""
+        }
+      ]
+    },
+    "testflight": {
+      "description": "Set an explicit build number, run checks, archive, upload, add What to Test notes, and distribute to TestFlight.",
+      "env": {
+        "BUILD_NUMBER": ""
+      },
+      "steps": [
+        {
+          "name": "require_build_number",
+          "run": "test -n \"$BUILD_NUMBER\" || { echo 'Pass BUILD_NUMBER, for example: asc workflow run testflight BUILD_NUMBER:9' >&2; exit 2; }"
+        },
+        {
+          "workflow": "preflight"
+        },
+        {
+          "name": "set_build_number",
+          "run": "ruby Tools/set_build_number.rb \"$BUILD_NUMBER\""
+        },
+        {
+          "name": "generate_project",
+          "run": "xcodegen generate"
+        },
+        {
+          "name": "archive",
+          "run": "asc --profile $ASC_PROFILE xcode archive --project $PROJECT --scheme $SCHEME --configuration Release --clean --overwrite --archive-path \".asc/artifacts/Runline-${VERSION}-${BUILD_NUMBER}.xcarchive\" --xcodebuild-flag=-destination --xcodebuild-flag=generic/platform=iOS --xcodebuild-flag=-allowProvisioningUpdates --output json"
+        },
+        {
+          "name": "upload",
+          "run": "asc --profile $ASC_PROFILE xcode export --archive-path \".asc/artifacts/Runline-${VERSION}-${BUILD_NUMBER}.xcarchive\" --export-options ExportOptions-TestFlightUpload.plist --ipa-path \".asc/artifacts/Runline-${VERSION}-${BUILD_NUMBER}.ipa\" --overwrite --wait --xcodebuild-flag=-allowProvisioningUpdates --output json"
+        },
+        {
+          "name": "resolve_uploaded_build",
+          "run": "asc --profile $ASC_PROFILE builds info --app $APP_ID --build-number \"$BUILD_NUMBER\" --version \"$VERSION\" --platform IOS --output json",
+          "outputs": {
+            "BUILD_ID": "$.data.id"
+          }
+        },
+        {
+          "name": "test_notes",
+          "run": "if [ -n \"$TEST_NOTES\" ]; then asc --profile $ASC_PROFILE builds test-notes create --build-id \"${steps.resolve_uploaded_build.BUILD_ID}\" --locale \"$LOCALE\" --whats-new \"$TEST_NOTES\" || asc --profile $ASC_PROFILE builds test-notes update --build-id \"${steps.resolve_uploaded_build.BUILD_ID}\" --locale \"$LOCALE\" --whats-new \"$TEST_NOTES\"; else echo 'Skipping TestFlight notes because TEST_NOTES is empty.' >&2; fi"
+        },
+        {
+          "name": "distribute",
+          "run": "if [ -n \"$TESTFLIGHT_GROUP_ID\" ]; then asc --profile $ASC_PROFILE builds add-groups --build-id \"${steps.resolve_uploaded_build.BUILD_ID}\" --group \"$TESTFLIGHT_GROUP_ID\"; else echo 'Skipping TestFlight group distribution because TESTFLIGHT_GROUP_ID is empty.' >&2; fi"
+        },
+        {
+          "name": "summary",
+          "run": "asc --profile $ASC_PROFILE builds info --build-id \"${steps.resolve_uploaded_build.BUILD_ID}\" --output json"
+        }
+      ]
+    },
+    "distribute-existing": {
+      "description": "Attach notes and distribute an already uploaded build by BUILD_ID or BUILD_NUMBER.",
+      "env": {
+        "BUILD_ID": "",
+        "BUILD_NUMBER": ""
+      },
+      "steps": [
+        {
+          "name": "require_build",
+          "run": "test -n \"$BUILD_ID\" -o -n \"$BUILD_NUMBER\" || { echo 'Pass BUILD_ID or BUILD_NUMBER, for example: asc workflow run distribute-existing BUILD_NUMBER:8' >&2; exit 2; }"
+        },
+        {
+          "name": "resolve_existing_build",
+          "run": "if [ -n \"$BUILD_ID\" ]; then asc --profile $ASC_PROFILE builds info --build-id \"$BUILD_ID\" --output json; else asc --profile $ASC_PROFILE builds info --app $APP_ID --build-number \"$BUILD_NUMBER\" --version \"$VERSION\" --platform IOS --output json; fi",
+          "outputs": {
+            "BUILD_ID": "$.data.id"
+          }
+        },
+        {
+          "name": "test_notes",
+          "run": "if [ -n \"$TEST_NOTES\" ]; then asc --profile $ASC_PROFILE builds test-notes create --build-id \"${steps.resolve_existing_build.BUILD_ID}\" --locale \"$LOCALE\" --whats-new \"$TEST_NOTES\" || asc --profile $ASC_PROFILE builds test-notes update --build-id \"${steps.resolve_existing_build.BUILD_ID}\" --locale \"$LOCALE\" --whats-new \"$TEST_NOTES\"; else echo 'Skipping TestFlight notes because TEST_NOTES is empty.' >&2; fi"
+        },
+        {
+          "name": "distribute",
+          "run": "if [ -n \"$TESTFLIGHT_GROUP_ID\" ]; then asc --profile $ASC_PROFILE builds add-groups --build-id \"${steps.resolve_existing_build.BUILD_ID}\" --group \"$TESTFLIGHT_GROUP_ID\"; else echo 'Skipping TestFlight group distribution because TESTFLIGHT_GROUP_ID is empty.' >&2; fi"
+        },
+        {
+          "name": "summary",
+          "run": "asc --profile $ASC_PROFILE builds info --build-id \"${steps.resolve_existing_build.BUILD_ID}\" --output json"
+        }
+      ]
+    }
+  }
+}

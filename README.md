@@ -17,3 +17,28 @@ Runline is independent and is not affiliated with, endorsed by, or connected to 
 - Keychain-backed Cursor API key storage
 - Local cache for account, repositories, models, agents, runs, stream events, artifacts, notification preferences, and launch draft
 - Unit tests for Cursor v1 request contracts, SSE parsing, cache persistence, app routing, push payloads, chat event cleanup, file attachment loading, and SDK bridge request mapping
+
+## Release Workflow
+
+ASC is configured through the local `Runline` keychain profile. Release automation lives in `.asc/workflow.json`.
+
+Validate the workflow:
+
+```bash
+asc workflow validate
+asc workflow list
+```
+
+Run local release checks:
+
+```bash
+asc workflow run preflight
+```
+
+Upload the next TestFlight build with an explicit build number:
+
+```bash
+asc workflow run testflight BUILD_NUMBER:9
+```
+
+Use explicit build numbers so release numbering stays aligned with the active Runline sequence. The current TestFlight build is `1.0 (8)`, so the next upload should use build `9`.

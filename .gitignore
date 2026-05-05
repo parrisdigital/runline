@@ -20,6 +20,8 @@ node_modules/
 **/node_modules/
 
 # Local secrets and generated config
+.asc/artifacts/
+.asc/runs/
 .env
 .env.*
 *.local.xcconfig
