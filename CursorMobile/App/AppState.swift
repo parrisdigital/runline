@@ -128,25 +128,25 @@ final class AppState {
 
     var sdkBridgeReadinessIssue: String? {
         guard account != nil else {
-            return "Connect a Cursor API key before using SDK Agent."
+            return "Connect a Cursor API key before using Cursor SDK."
         }
         guard SDKBridgePreferences.isEnabled() else {
-            return "Enable the SDK bridge in Settings before using SDK Agent."
+            return "Enable Runline Bridge in Settings before using Cursor SDK."
         }
         guard SDKBridgePreferences.configuredBaseURL() != nil else {
-            return "Enter a valid SDK bridge URL in Settings."
+            return "Enter a valid Runline Bridge URL in Settings."
         }
         switch sdkBridgeConnectionState {
         case .connected:
             return nil
         case .disabled:
-            return "Enable the SDK bridge in Settings before using SDK Agent."
+            return "Enable Runline Bridge in Settings before using Cursor SDK."
         case .unchecked:
-            return "Check the SDK bridge connection in Settings before using SDK Agent."
+            return "Check the Runline Bridge connection in Settings before using Cursor SDK."
         case .checking:
-            return "Runline is checking the SDK bridge connection."
+            return "Runline is checking the bridge connection."
         case .failed(let message):
-            return "SDK bridge is unavailable. \(message)"
+            return "Runline Bridge is unavailable. \(message)"
         }
     }
 
@@ -736,8 +736,8 @@ final class AppState {
                     id: "\(result.run.id)-sdk-started",
                     runID: result.run.id,
                     kind: .status,
-                    title: "SDK Agent",
-                    message: "Session started through the Cursor SDK bridge.",
+                    title: "Cursor SDK",
+                    message: "Session started through Runline Bridge.",
                     timestamp: "now"
                 )
             ] : []
@@ -853,8 +853,8 @@ final class AppState {
                     id: "\(run.id)-sdk-\(intent.rawValue)",
                     runID: run.id,
                     kind: .status,
-                    title: "SDK Agent",
-                    message: "\(intent.title) message sent through the Cursor SDK bridge.",
+                    title: "Cursor SDK",
+                    message: "\(intent.title) message sent through Runline Bridge.",
                     timestamp: "now"
                 ),
             ]
@@ -1236,7 +1236,7 @@ final class AppState {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .timedOut:
-                return "Runline cannot reach \(baseURL.absoluteString). Start the bridge server or update the URL."
+                return "Runline cannot reach \(baseURL.absoluteString). Start Runline Bridge or update the URL."
             default:
                 break
             }
@@ -1399,11 +1399,11 @@ private enum SDKBridgeUnavailableError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .bridgeDisabled:
-            "Enable the SDK bridge in Settings before using SDK Agent."
+            "Enable Runline Bridge in Settings before using Cursor SDK."
         case .invalidBridgeURL:
-            "Enter a valid SDK bridge URL in Settings."
+            "Enter a valid Runline Bridge URL in Settings."
         case .missingAPIKey:
-            "Reconnect your Cursor API key before using SDK Agent."
+            "Reconnect your Cursor API key before using Cursor SDK."
         }
     }
 }

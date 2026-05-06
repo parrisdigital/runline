@@ -33,7 +33,7 @@ struct ChatDetailView: View {
 
         List {
             Section {
-                LabeledContent("Mode", value: appState.isSDKBridgeAgent(currentAgent) ? "SDK Agent" : "Cloud Agent")
+                LabeledContent("Mode", value: appState.isSDKBridgeAgent(currentAgent) ? "Cursor SDK" : "Cloud Agent")
                 LabeledContent("Repository", value: currentAgent.repository.displayName)
                 LabeledContent("Branch", value: currentAgent.branchName)
                 LabeledContent("Model", value: currentAgent.modelID)

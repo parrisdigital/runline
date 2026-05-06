@@ -197,7 +197,7 @@ enum AgentRunMode: String, CaseIterable, Identifiable, Hashable, Codable {
         case .cloudAgent:
             "Cloud Agent"
         case .sdkBridge:
-            "SDK Agent"
+            "Cursor SDK"
         }
     }
 
@@ -206,7 +206,7 @@ enum AgentRunMode: String, CaseIterable, Identifiable, Hashable, Codable {
         case .cloudAgent:
             "Direct Cursor Cloud Agents API from iOS."
         case .sdkBridge:
-            "Multi-turn Cursor SDK session with Cloud Agent runtime."
+            "Cursor SDK session through Runline Bridge."
         }
     }
 }

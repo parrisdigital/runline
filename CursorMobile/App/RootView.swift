@@ -85,6 +85,7 @@ private struct WorkflowModeChooserSheet: View {
     @Environment(AppState.self) private var appState
     let selectedMode: AgentRunMode
     let choose: (AgentRunMode) -> Void
+    @State private var cursorSDKOnboardingSheet: CursorSDKOnboardingSheet?
 
     var body: some View {
         NavigationStack {
@@ -101,24 +102,36 @@ private struct WorkflowModeChooserSheet: View {
                     WorkflowModeButton(
                         mode: .sdkBridge,
                         isSelected: effectiveSelectedMode == .sdkBridge,
-                        isEnabled: appState.isSDKBridgeReadyForLaunch,
                         symbolName: "point.3.connected.trianglepath.dotted",
                         detail: sdkAgentDetail,
                         choose: select
                     )
                 } footer: {
-                    Text("You can change this later in Settings or switch modes in New Chat.")
+                    Text("Cloud Agent is ready now. Cursor SDK needs Runline Bridge on your Mac, and you can set it up later from Settings.")
                 }
             }
-            .navigationTitle("Choose Workflow")
+            .navigationTitle("Choose Runtime")
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .sheet(item: $cursorSDKOnboardingSheet) { _ in
+            CursorSDKOnboardingView(
+                onUseCloud: {
+                    choose(.cloudAgent)
+                    dismiss()
+                },
+                onOpenSettings: {
+                    choose(.cloudAgent)
+                    appState.selectedTab = .settings
+                    dismiss()
+                }
+            )
         }
     }
 
     private var sdkAgentDetail: String {
         appState.isSDKBridgeReadyForLaunch
-            ? "Use the SDK bridge for a richer conversation with models, MCP profiles, files, images, planning, and execution."
-            : "Requires a connected SDK bridge. Choose Cloud Agent now, then enable and check the bridge in Settings."
+            ? "Use Runline Bridge for Cursor SDK chat, MCP profiles, files, images, planning, and execution."
+            : "Pair a Mac with Runline Bridge to unlock Cursor SDK sessions, MCP profiles, and git-aware remote work."
     }
 
     private var effectiveSelectedMode: AgentRunMode {
@@ -127,7 +140,7 @@ private struct WorkflowModeChooserSheet: View {
 
     private func select(_ mode: AgentRunMode) {
         if mode == .sdkBridge, !appState.isSDKBridgeReadyForLaunch {
-            appState.errorMessage = appState.sdkBridgeReadinessIssue
+            cursorSDKOnboardingSheet = .setup
             return
         }
         choose(mode)
@@ -399,7 +412,7 @@ private struct SettingsColumnSummary: View {
                 Label("Account", systemImage: "person.crop.circle")
                 Label("Appearance", systemImage: "circle.lefthalf.filled")
                 Label("Notifications", systemImage: "bell")
-                Label("SDK Agent Bridge", systemImage: "point.3.connected.trianglepath.dotted")
+                Label("Cursor SDK", systemImage: "point.3.connected.trianglepath.dotted")
             }
 
             Section {

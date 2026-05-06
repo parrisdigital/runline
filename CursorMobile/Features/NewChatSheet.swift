@@ -52,6 +52,7 @@ struct NewChatForm: View {
     @State private var isPromptFileImporterPresented = false
     @State private var isLoadingPromptFiles = false
     @State private var promptFileImportMessage: String?
+    @State private var cursorSDKOnboardingSheet: CursorSDKOnboardingSheet?
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -66,25 +67,31 @@ struct NewChatForm: View {
         @Bindable var appState = appState
 
         Form {
-            Section("Run Mode") {
-                Picker("Run Mode", selection: runModeBinding) {
+            Section("Runtime") {
+                Picker("Runtime", selection: runModeBinding) {
                     ForEach(availableRunModes) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
 
-                LabeledContent("Mode", value: appState.launchDraft.runMode.detail)
+                LabeledContent("Selected", value: appState.launchDraft.runMode.detail)
 
                 if let issue = appState.sdkBridgeReadinessIssue {
                     Label(issue, systemImage: "point.3.connected.trianglepath.dotted")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+
+                    Button {
+                        cursorSDKOnboardingSheet = .setup
+                    } label: {
+                        Label("Set Up Cursor SDK", systemImage: "point.3.connected.trianglepath.dotted")
+                    }
                 }
             }
 
             if appState.launchDraft.runMode == .sdkBridge {
-                Section("SDK Tools") {
+                Section("Cursor SDK Tools") {
                     Picker("MCP Profile", selection: sdkMCPProfileBinding) {
                         Text("None").tag(Optional<String>.none)
                         ForEach(appState.sdkBridgeProfiles) { profile in
@@ -100,7 +107,7 @@ struct NewChatForm: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else if appState.sdkBridgeProfiles.isEmpty {
-                        Text("No bridge profiles are published. Add MCP/subagent profiles on the SDK bridge to make them available here.")
+                        Text("No bridge profiles are published. Add MCP or subagent profiles on Runline Bridge to make them available here.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -278,6 +285,18 @@ struct NewChatForm: View {
                 await loadPromptFiles(from: result)
             }
         }
+        .sheet(item: $cursorSDKOnboardingSheet) { _ in
+            CursorSDKOnboardingView(
+                onUseCloud: {
+                    appState.launchDraft.runMode = .cloudAgent
+                },
+                onOpenSettings: {
+                    appState.launchDraft.runMode = .cloudAgent
+                    appState.selectedTab = .settings
+                    dismiss()
+                }
+            )
+        }
     }
 
     @ViewBuilder
@@ -332,7 +351,7 @@ struct NewChatForm: View {
             appState.launchDraft.runMode
         } set: { mode in
             if mode == .sdkBridge, !appState.isSDKBridgeReadyForLaunch {
-                appState.errorMessage = appState.sdkBridgeReadinessIssue
+                cursorSDKOnboardingSheet = .setup
                 appState.launchDraft.runMode = .cloudAgent
                 return
             }
@@ -341,7 +360,7 @@ struct NewChatForm: View {
     }
 
     private var availableRunModes: [AgentRunMode] {
-        appState.isSDKBridgeReadyForLaunch ? AgentRunMode.allCases : [.cloudAgent]
+        AgentRunMode.allCases
     }
 
     private var modelSelectionBinding: Binding<String?> {

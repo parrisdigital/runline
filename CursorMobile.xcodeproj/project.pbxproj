@@ -21,6 +21,7 @@
 		31CFAA632F08E7E74221BC7D /* GitProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7F5C698839855157D73D4F /* GitProvider.swift */; };
 		347AD57ABCA4D15CF3C2FCFE /* AgentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADEB0AB871CBC28B9BF2D3A0 /* AgentProvider.swift */; };
 		36EA754A5E9A03C86836B932 /* AppAppearanceMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9E967D0B11FCF0E6A17FAC /* AppAppearanceMode.swift */; };
+		3CC886B6A4F9CC05223F1C84 /* CursorSDKOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15284E1FD2559981B42965C6 /* CursorSDKOnboardingView.swift */; };
 		407A501808983E7BD28EFE97 /* ChatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55065E328E23820ECB0F8000 /* ChatsView.swift */; };
 		5536A71994566F3564313B92 /* CursorMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43BB60A17971111EFF2DDECE /* CursorMobileApp.swift */; };
 		56965BD0AAEB4B9A7DE5CC15 /* MockAgentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5ABA55E3CC9F99D9F6E7A3 /* MockAgentProvider.swift */; };
@@ -70,6 +71,7 @@
 		0E028E12BF4EB0F89573EF17 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		0E76DFB71C686BF12AA61EF2 /* NativeRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRows.swift; sourceTree = "<group>"; };
 		119E1E9B68CE534FEDE4DBB9 /* SDKBridgeClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SDKBridgeClientTests.swift; sourceTree = "<group>"; };
+		15284E1FD2559981B42965C6 /* CursorSDKOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorSDKOnboardingView.swift; sourceTree = "<group>"; };
 		1C3B54D881A589AF2BBA2E3E /* PromptFileLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptFileLoader.swift; sourceTree = "<group>"; };
 		1D2351C5637FA72A1A5A2E04 /* CursorMobile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CursorMobile.entitlements; sourceTree = "<group>"; };
 		1ED862484103E40E496ADCA7 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
@@ -178,6 +180,7 @@
 				8F67359EDFE1E8E08AFC560C /* ChatDetailView.swift */,
 				55065E328E23820ECB0F8000 /* ChatsView.swift */,
 				F412BDC57CF3ADDCC67E69BE /* ChatTimelineBuilder.swift */,
+				15284E1FD2559981B42965C6 /* CursorSDKOnboardingView.swift */,
 				0E76DFB71C686BF12AA61EF2 /* NativeRows.swift */,
 				CF697C1FF562FFB0BCDAEE8C /* NewChatSheet.swift */,
 				1C3B54D881A589AF2BBA2E3E /* PromptFileLoader.swift */,
@@ -381,6 +384,7 @@
 				75B29E76152396217BC0F7C8 /* CursorAgentProvider.swift in Sources */,
 				D42DB9396C9BAA67A304C010 /* CursorDTOs.swift in Sources */,
 				5536A71994566F3564313B92 /* CursorMobileApp.swift in Sources */,
+				3CC886B6A4F9CC05223F1C84 /* CursorSDKOnboardingView.swift in Sources */,
 				58C224CABDAC81AD077EAD8A /* CursorSSEParser.swift in Sources */,
 				223994AFA50ECB6343B85BD4 /* DomainModels.swift in Sources */,
 				EFECB3F1EBAC7D11BC5EDCA6 /* EnterpriseDTOs.swift in Sources */,

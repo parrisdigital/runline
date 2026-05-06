@@ -59,6 +59,20 @@ final class CursorMobileTests: XCTestCase {
         XCTAssertEqual(RunlineWorkflowPreferences.runMode(from: "unknown"), .cloudAgent)
     }
 
+    func testRunModesExposeCloudDefaultAndCursorSDKCopy() {
+        XCTAssertEqual(AgentRunMode.cloudAgent.title, "Cloud Agent")
+        XCTAssertEqual(AgentRunMode.sdkBridge.title, "Cursor SDK")
+        XCTAssertTrue(AgentRunMode.sdkBridge.detail.contains("Runline Bridge"))
+    }
+
+    func testCursorSDKOnboardingStepsExposeCurrentBridgeCommands() {
+        XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.first, .overview)
+        XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.last, .connect)
+        XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "cd cursor_mobile/orchestrator && npm install")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "CURSOR_API_KEY=your-cursor-key npm run dev")
+        XCTAssertNil(RunlineBridgeOnboardingStep.connect.command)
+    }
+
     func testSDKMessageIntentsExposeBridgeValuesAndSymbols() {
         XCTAssertEqual(SDKMessageIntent.continueConversation.bridgeValue, "continue")
         XCTAssertEqual(SDKMessageIntent.plan.bridgeValue, "plan")
@@ -138,7 +152,7 @@ final class CursorMobileTests: XCTestCase {
             appState.sdkBridgeConnectionState = .unchecked
 
             XCTAssertFalse(appState.canLaunchAgent)
-            XCTAssertEqual(appState.sdkBridgeLaunchIssue, "Check the SDK bridge connection in Settings before using SDK Agent.")
+            XCTAssertEqual(appState.sdkBridgeLaunchIssue, "Check the Runline Bridge connection in Settings before using Cursor SDK.")
 
             appState.sdkBridgeConnectionState = .connected("runline-orchestrator - @cursor/sdk")
 

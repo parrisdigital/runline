@@ -7,9 +7,9 @@ enum SDKBridgeError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            "The SDK bridge URL could not be created."
+            "The Runline Bridge URL could not be created."
         case .requestFailed(let statusCode, let message):
-            "SDK bridge returned \(statusCode): \(message)"
+            "Runline Bridge returned \(statusCode): \(message)"
         }
     }
 }
@@ -71,7 +71,7 @@ enum SDKBridgePreferences {
 
     static func deviceLoopbackHelp(for url: URL?) -> String? {
         guard isLoopback(url) else { return nil }
-        return "On a physical iPhone, localhost points to the phone. For device testing, run the bridge on your Mac and use your Mac LAN URL, for example http://192.168.1.10:8787."
+        return "On a physical iPhone, localhost points to the phone. For device testing, run Runline Bridge on your Mac and use your Mac LAN URL, for example http://192.168.1.10:8787."
     }
 }
 
