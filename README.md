@@ -12,6 +12,7 @@ Runline is independent and is not affiliated with, endorsed by, or connected to 
 - Chat-first Cloud Agents navigation
 - Cursor Cloud Agents v1 provider for account, repositories, models, agents, runs, streams, artifacts, archive, unarchive, and delete
 - Optional `@cursor/sdk` bridge client for Cursor SDK sessions, MCP profiles, subagents, and multi-turn follow-ups
+- Runline Bridge pairing with one-time terminal codes and Keychain-backed bridge tokens
 - First-run and Settings runtime selection between Cloud Agent and Cursor SDK defaults
 - Native Cursor SDK composer controls for intent, model, MCP profile, image context, and file context
 - Keychain-backed Cursor API key storage

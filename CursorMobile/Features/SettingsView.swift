@@ -19,10 +19,12 @@ struct SettingsFormContent: View {
     @AppStorage(SDKBridgePreferences.baseURLKey) private var sdkBridgeBaseURL = SDKBridgePreferences.defaultBaseURLString
     @State private var enterpriseAPIKey = ""
     @State private var cursorSDKOnboardingSheet: CursorSDKOnboardingSheet?
+    @State private var pairingCode = ""
     @FocusState private var focusedField: Field?
 
     private enum Field {
         case bridgeURL
+        case pairingCode
         case enterpriseKey
     }
 
@@ -96,6 +98,7 @@ struct SettingsFormContent: View {
                     }
 
                     LabeledContent("Profiles", value: "\(appState.sdkBridgeProfiles.count)")
+                    LabeledContent("Pairing", value: appState.isSDKBridgePaired ? "Paired" : "Not Paired")
 
                     if let detail = sdkBridgeConnectionDetail {
                         Text(detail)
@@ -121,6 +124,51 @@ struct SettingsFormContent: View {
                         }
                     }
                     .disabled(appState.sdkBridgeConnectionState == .checking)
+
+                    if appState.isSDKBridgePaired {
+                        Button("Forget Pairing", role: .destructive) {
+                            appState.forgetSDKBridgePairing()
+                        }
+                    } else {
+                        Button {
+                            Task {
+                                await startBridgePairing()
+                            }
+                        } label: {
+                            if appState.sdkBridgePairingState == .starting {
+                                ProgressView()
+                            } else {
+                                Label("Start Pairing", systemImage: "link.badge.plus")
+                            }
+                        }
+                        .disabled(appState.sdkBridgePairingState == .starting || appState.sdkBridgePairingState == .completing)
+
+                        if case .waiting = appState.sdkBridgePairingState {
+                            TextField("Pairing Code", text: $pairingCode)
+                                .keyboardType(.numberPad)
+                                .textContentType(.oneTimeCode)
+                                .focused($focusedField, equals: .pairingCode)
+
+                            Button {
+                                Task {
+                                    await completeBridgePairing()
+                                }
+                            } label: {
+                                if appState.sdkBridgePairingState == .completing {
+                                    ProgressView()
+                                } else {
+                                    Text("Complete Pairing")
+                                }
+                            }
+                            .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || appState.sdkBridgePairingState == .completing)
+                        }
+
+                        if let pairingDetail {
+                            Text(pairingDetail)
+                                .font(.footnote)
+                                .foregroundStyle(pairingDetailIsError ? .red : .secondary)
+                        }
+                    }
                 }
             } header: {
                 Text("Cursor SDK")
@@ -198,6 +246,12 @@ struct SettingsFormContent: View {
             appState.syncSDKBridgeConfiguration(resetConnection: true)
             ensureDefaultWorkflowSelectionIsAvailable()
         }
+        .onChange(of: appState.sdkBridgePairingState) { _, state in
+            if case .paired = state {
+                pairingCode = ""
+                focusedField = nil
+            }
+        }
         .onChange(of: appState.sdkBridgeConnectionState) { _, _ in
             ensureDefaultWorkflowSelectionIsAvailable()
         }
@@ -274,6 +328,32 @@ struct SettingsFormContent: View {
         }
     }
 
+    private var pairingDetail: String? {
+        switch appState.sdkBridgePairingState {
+        case .idle:
+            "Start pairing, then enter the six-digit code printed in the Runline Bridge terminal."
+        case .starting:
+            "Starting a pairing session..."
+        case .waiting(_, let expiresAt, let message):
+            [message, expiresAt.map { "Expires at \($0)." }]
+                .compactMap { $0 }
+                .joined(separator: " ")
+        case .completing:
+            "Completing pairing..."
+        case .paired(let name):
+            "Paired with \(name)."
+        case .failed(let message):
+            message
+        }
+    }
+
+    private var pairingDetailIsError: Bool {
+        if case .failed = appState.sdkBridgePairingState {
+            return true
+        }
+        return false
+    }
+
     private func ensureDefaultWorkflowSelectionIsAvailable() {
         guard RunlineWorkflowPreferences.runMode(from: defaultRunModeRawValue) == .sdkBridge,
               !appState.isSDKBridgeReadyForLaunch else {
@@ -295,6 +375,17 @@ struct SettingsFormContent: View {
     private func checkSDKBridgeHealth() async {
         focusedField = nil
         await appState.checkSDKBridgeConnection()
+    }
+
+    private func startBridgePairing() async {
+        focusedField = nil
+        pairingCode = ""
+        await appState.startSDKBridgePairing()
+    }
+
+    private func completeBridgePairing() async {
+        focusedField = nil
+        await appState.completeSDKBridgePairing(code: pairingCode)
     }
 
     private func notificationBinding(_ keyPath: WritableKeyPath<NotificationPreferences, Bool>) -> Binding<Bool> {

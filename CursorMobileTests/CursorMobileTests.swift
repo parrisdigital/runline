@@ -69,7 +69,7 @@ final class CursorMobileTests: XCTestCase {
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.first, .overview)
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.last, .connect)
         XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "cd cursor_mobile/orchestrator && npm install")
-        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "CURSOR_API_KEY=your-cursor-key npm run dev")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "CURSOR_API_KEY=your-cursor-key npm run bridge")
         XCTAssertNil(RunlineBridgeOnboardingStep.connect.command)
     }
 
@@ -139,9 +139,26 @@ final class CursorMobileTests: XCTestCase {
     }
 
     @MainActor
-    func testSDKLaunchRequiresConnectedBridge() {
+    func testSDKLaunchRequiresPairingAndConnectedBridge() {
         withSDKBridgeDefaults(enabled: true, baseURL: "http://localhost:8787") {
-            let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"))
+            let unpairedAppState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"))
+            unpairedAppState.account = ProviderAccount(
+                apiKeyName: "Runline Test Key",
+                userEmail: "test@example.com",
+                createdAt: .now
+            )
+            unpairedAppState.launchDraft.prompt.text = "Plan the settings cleanup"
+            unpairedAppState.launchDraft.runMode = .sdkBridge
+            unpairedAppState.sdkBridgeConnectionState = .connected("runline-bridge - @cursor/sdk")
+
+            XCTAssertFalse(unpairedAppState.canLaunchAgent)
+            XCTAssertEqual(unpairedAppState.sdkBridgeLaunchIssue, "Pair Runline Bridge in Settings before using Cursor SDK.")
+
+            let appState = AppState(
+                provider: MockAgentProvider(),
+                apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"),
+                sdkBridgeTokenStore: InMemoryAPIKeyStore(apiKey: "bridge-token")
+            )
             appState.account = ProviderAccount(
                 apiKeyName: "Runline Test Key",
                 userEmail: "test@example.com",

@@ -18,6 +18,8 @@ npm install
 CURSOR_API_KEY=your-cursor-key npm run dev
 ```
 
+`npm run bridge` is an alias for the same local bridge process and is the command shown in the iOS Cursor SDK setup flow.
+
 For Simulator testing, `http://localhost:8787` is usually enough. For a physical iPhone or TestFlight build on the same Wi-Fi network, use your Mac's LAN address instead:
 
 ```bash
@@ -27,6 +29,16 @@ ipconfig getifaddr en0
 Then set the app's bridge URL to `http://<mac-lan-ip>:8787`. For broader TestFlight use, deploy the bridge behind HTTPS and use that hosted URL.
 
 The iOS app can also send a per-request `Authorization: Bearer <key>` header. Prefer that for user-owned keys; the bridge does not need to store keys server-side.
+
+## Pairing
+
+Runline Bridge requires a local pairing token by default. In the iOS app, open Settings, enable Runline Bridge, enter the bridge URL, and tap **Start Pairing**. The bridge prints a six-digit code in the terminal. Enter that code in the app to store a bridge token in the iOS Keychain.
+
+For local development only, you can disable pairing:
+
+```bash
+RUNLINE_BRIDGE_DISABLE_PAIRING=true CURSOR_API_KEY=your-cursor-key npm run bridge
+```
 
 ## MCP Profiles
 
@@ -56,6 +68,8 @@ export RUNLINE_SDK_MCP_PROFILES='[
 ## Endpoints
 
 - `GET /health`
+- `POST /pair/start`
+- `POST /pair/complete`
 - `GET /sdk/mcp-profiles`
 - `POST /sdk/sessions`
 - `POST /sdk/sessions/:sessionId/messages`
