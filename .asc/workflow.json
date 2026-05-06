@@ -10,7 +10,7 @@
     "TESTFLIGHT_GROUP_ID": "9ddf92fa-5b17-48ca-9833-5d83c3e31d3d",
     "INTERNAL_TESTFLIGHT_GROUP_ID": "a252108c-c4bc-4b6b-94cd-519b7be04c68",
     "LOCALE": "en-US",
-    "TEST_NOTES": "Verify Cloud Agent and SDK Agent workflows, iPhone and iPad layouts, chat composer, attachments, model and MCP controls, Settings, light mode, and dark mode."
+    "TEST_NOTES": "Verify Cloud Agent and Cursor SDK workflows, iPhone and iPad layouts, chat composer, attachments, model and MCP controls, Settings, light mode, and dark mode."
   },
   "before_all": "asc --profile $ASC_PROFILE auth status --validate --output json >/dev/null",
   "after_all": "echo workflow_done >&2",
