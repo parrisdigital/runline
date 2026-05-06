@@ -18,6 +18,7 @@ struct SettingsFormContent: View {
     @AppStorage(SDKBridgePreferences.isEnabledKey) private var isSDKBridgeEnabled = SDKBridgePreferences.defaultIsEnabled
     @AppStorage(SDKBridgePreferences.baseURLKey) private var sdkBridgeBaseURL = SDKBridgePreferences.defaultBaseURLString
     @State private var enterpriseAPIKey = ""
+    @State private var cursorSDKOnboardingSheet: CursorSDKOnboardingSheet?
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -63,13 +64,19 @@ struct SettingsFormContent: View {
 
                 LabeledContent("Current default", value: RunlineWorkflowPreferences.runMode(from: defaultRunModeRawValue).detail)
             } header: {
-                Text("Default Workflow")
+                Text("Default Runtime")
             } footer: {
-                Text("New chats start in this mode. You can still switch between Cloud Agent and SDK Agent per chat.")
+                Text("Cloud Agent is the default runtime. Cursor SDK can be selected per chat once Runline Bridge is connected.")
             }
 
             Section {
-                Toggle("Enable SDK bridge", isOn: $isSDKBridgeEnabled)
+                Button {
+                    cursorSDKOnboardingSheet = .setup
+                } label: {
+                    Label("Cursor SDK Setup", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+
+                Toggle("Enable Runline Bridge", isOn: $isSDKBridgeEnabled)
 
                 TextField("Bridge URL", text: $sdkBridgeBaseURL)
                     .keyboardType(.URL)
@@ -116,9 +123,9 @@ struct SettingsFormContent: View {
                     .disabled(appState.sdkBridgeConnectionState == .checking)
                 }
             } header: {
-                Text("Cursor SDK Agent Bridge")
+                Text("Cursor SDK")
             } footer: {
-                Text("Cloud Agent stays direct from iOS. SDK Agent is available only after this bridge connects.")
+                Text("Cloud Agent stays direct from iOS. Cursor SDK is available only after Runline Bridge connects.")
             }
 
             Section("Enterprise API") {
@@ -194,6 +201,16 @@ struct SettingsFormContent: View {
         .onChange(of: appState.sdkBridgeConnectionState) { _, _ in
             ensureDefaultWorkflowSelectionIsAvailable()
         }
+        .sheet(item: $cursorSDKOnboardingSheet) { _ in
+            CursorSDKOnboardingView(
+                onUseCloud: {
+                    defaultRunModeRawValue = AgentRunMode.cloudAgent.rawValue
+                    didChooseDefaultRunMode = true
+                    appState.applyDefaultRunMode(.cloudAgent)
+                },
+                onOpenSettings: {}
+            )
+        }
     }
 
     private var defaultRunModeBinding: Binding<String> {
@@ -202,7 +219,7 @@ struct SettingsFormContent: View {
         } set: { rawValue in
             let mode = RunlineWorkflowPreferences.runMode(from: rawValue)
             if mode == .sdkBridge, !appState.isSDKBridgeReadyForLaunch {
-                appState.errorMessage = appState.sdkBridgeReadinessIssue
+                cursorSDKOnboardingSheet = .setup
                 defaultRunModeRawValue = AgentRunMode.cloudAgent.rawValue
                 didChooseDefaultRunMode = true
                 appState.applyDefaultRunMode(.cloudAgent)
@@ -251,7 +268,7 @@ struct SettingsFormContent: View {
         case .connected(let message), .failed(let message):
             message
         case .unchecked:
-            "Check the bridge before selecting SDK Agent. The bridge must be reachable from this device."
+            "Check the bridge before selecting Cursor SDK. The bridge must be reachable from this device."
         case .disabled, .checking:
             nil
         }

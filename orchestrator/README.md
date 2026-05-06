@@ -4,7 +4,7 @@ This is an optional TypeScript backend for Cursor SDK-only workflows. The iOS ap
 
 Use this service only for work that benefits from `@cursor/sdk`:
 
-- Resumable SDK Agent sessions with multi-turn follow-up messages.
+- Resumable Cursor SDK sessions with multi-turn follow-up messages.
 - SDK-normalized event streams and conversation state.
 - Launch payloads that include MCP server profiles or subagents.
 - Service-account workflows for teams.
