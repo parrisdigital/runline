@@ -38,7 +38,7 @@ asc workflow run preflight
 Upload the next TestFlight build with an explicit build number:
 
 ```bash
-asc workflow run testflight BUILD_NUMBER:10
+asc workflow run testflight BUILD_NUMBER:11
 ```
 
-Use explicit build numbers so release numbering stays aligned with the active Runline sequence. The current release target is `1.0 (10)`.
+Use explicit build numbers so release numbering stays aligned with the active Runline sequence. The current release target is `1.0 (11)`.
