@@ -10,6 +10,7 @@ final class AppState {
     private var enterpriseProvider: EnterpriseDataProvider?
     private let apiKeyStore: APIKeyStore
     private let enterpriseAPIKeyStore: APIKeyStore
+    private let sdkBridgeTokenStore: APIKeyStore
     private let appCache: LocalAppCache
     private let providerFactory: @MainActor (String) throws -> AgentProvider
     private var hasRestoredConnection = false
@@ -17,6 +18,7 @@ final class AppState {
     private var streamExpiredRunIDs: Set<AgentRun.ID> = []
     private var sdkBridgeRunIDs: Set<AgentRun.ID> = []
     private var sdkBridgeMCPProfileIDsByAgentID: [Agent.ID: SDKBridgeMCPProfile.ID] = [:]
+    private var sdkBridgeToken: String?
     private var artifactDownloadsByKey: [String: ArtifactDownload] = [:]
 
     var selectedTab: AppTab = .chats
@@ -33,6 +35,7 @@ final class AppState {
     var endpointPageOverrides: [CursorAPIEndpoint.ID: Int] = [:]
     var sdkBridgeProfiles: [SDKBridgeMCPProfile] = []
     var sdkBridgeConnectionState: SDKBridgeConnectionState = SDKBridgePreferences.isEnabled() ? .unchecked : .disabled
+    var sdkBridgePairingState: SDKBridgePairingState = .idle
     var focusedAgentID: Agent.ID?
     var notificationPreferences = NotificationPreferences()
     var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
@@ -45,25 +48,29 @@ final class AppState {
     var statusMessage: String?
     var launchDraft: AgentLaunchDraft
 
-    private let sdkBridgeClientFactory: @MainActor (URL, String?) -> SDKBridgeClient
+    private let sdkBridgeClientFactory: @MainActor (URL, String?, String?) -> SDKBridgeClient
 
     init(
         provider: AgentProvider? = nil,
         apiKeyStore: APIKeyStore = KeychainAPIKeyStore(),
         enterpriseAPIKeyStore: APIKeyStore = KeychainAPIKeyStore(account: .cursorEnterpriseAdmin),
+        sdkBridgeTokenStore: APIKeyStore = KeychainAPIKeyStore(account: .runlineBridgeToken),
         appCache: LocalAppCache = LocalAppCache(),
         providerFactory: @escaping @MainActor (String) throws -> AgentProvider = { try CursorAgentProvider(apiKey: $0) },
-        sdkBridgeClientFactory: @escaping @MainActor (URL, String?) -> SDKBridgeClient = { baseURL, apiKey in
-            SDKBridgeClient(baseURL: baseURL, apiKey: apiKey)
+        sdkBridgeClientFactory: @escaping @MainActor (URL, String?, String?) -> SDKBridgeClient = { baseURL, apiKey, bridgeToken in
+            SDKBridgeClient(baseURL: baseURL, apiKey: apiKey, bridgeToken: bridgeToken)
         }
     ) {
         self.provider = provider
         enterpriseProvider = provider as? EnterpriseDataProvider
         self.apiKeyStore = apiKeyStore
         self.enterpriseAPIKeyStore = enterpriseAPIKeyStore
+        self.sdkBridgeTokenStore = sdkBridgeTokenStore
         self.appCache = appCache
         self.providerFactory = providerFactory
         self.sdkBridgeClientFactory = sdkBridgeClientFactory
+        let storedBridgeToken = try? sdkBridgeTokenStore.loadAPIKey()?.nilIfBlank
+        sdkBridgeToken = storedBridgeToken
         launchDraft = AgentLaunchDraft(
             prompt: AgentPrompt(text: ""),
             modelID: nil,
@@ -73,6 +80,9 @@ final class AppState {
             autoCreatePullRequest: true,
             skipReviewerRequest: false
         )
+        if storedBridgeToken != nil {
+            sdkBridgePairingState = .paired("Runline Bridge")
+        }
     }
 
     var capabilities: ProviderCapabilities {
@@ -126,6 +136,10 @@ final class AppState {
         sdkBridgeReadinessIssue == nil
     }
 
+    var isSDKBridgePaired: Bool {
+        sdkBridgeToken?.nilIfBlank != nil
+    }
+
     var sdkBridgeReadinessIssue: String? {
         guard account != nil else {
             return "Connect a Cursor API key before using Cursor SDK."
@@ -135,6 +149,9 @@ final class AppState {
         }
         guard SDKBridgePreferences.configuredBaseURL() != nil else {
             return "Enter a valid Runline Bridge URL in Settings."
+        }
+        guard isSDKBridgePaired else {
+            return "Pair Runline Bridge in Settings before using Cursor SDK."
         }
         switch sdkBridgeConnectionState {
         case .connected:
@@ -213,6 +230,7 @@ final class AppState {
         do {
             try apiKeyStore.deleteAPIKey()
             try enterpriseAPIKeyStore.deleteAPIKey()
+            try sdkBridgeTokenStore.deleteAPIKey()
         } catch {
             errorMessage = "Could not remove the local Cursor API key."
         }
@@ -229,7 +247,9 @@ final class AppState {
         artifactsByAgentID = [:]
         sdkBridgeRunIDs = []
         sdkBridgeMCPProfileIDsByAgentID = [:]
+        sdkBridgeToken = nil
         sdkBridgeProfiles = []
+        sdkBridgePairingState = .idle
         sdkBridgeConnectionState = SDKBridgePreferences.isEnabled() ? .unchecked : .disabled
         endpointResults = [:]
         loadingEndpointIDs = []
@@ -412,6 +432,87 @@ final class AppState {
         }
     }
 
+    func startSDKBridgePairing() async {
+        guard SDKBridgePreferences.isEnabled() else {
+            sdkBridgePairingState = .failed("Enable Runline Bridge before pairing.")
+            return
+        }
+        guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
+            sdkBridgePairingState = .failed("Enter a valid Runline Bridge URL before pairing.")
+            return
+        }
+
+        sdkBridgePairingState = .starting
+        do {
+            let response = try await sdkBridgeClientFactory(baseURL, nil, nil).startPairing(deviceName: UIDevice.current.name)
+            if response.pairingRequired == false {
+                sdkBridgePairingState = .paired("Runline Bridge")
+                sdkBridgeConnectionState = .unchecked
+                return
+            }
+            guard let pairingID = response.pairingId?.nilIfBlank else {
+                sdkBridgePairingState = .failed("Runline Bridge did not return a pairing session.")
+                return
+            }
+            sdkBridgePairingState = .waiting(
+                pairingID: pairingID,
+                expiresAt: response.expiresAt,
+                message: response.message
+            )
+        } catch {
+            sdkBridgePairingState = .failed(sdkBridgeConnectionFailureMessage(for: error, baseURL: baseURL))
+        }
+    }
+
+    func completeSDKBridgePairing(code: String) async {
+        guard case .waiting(let pairingID, _, _) = sdkBridgePairingState else {
+            sdkBridgePairingState = .failed("Start pairing before entering a code.")
+            return
+        }
+        guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
+            sdkBridgePairingState = .failed("Enter a valid Runline Bridge URL before pairing.")
+            return
+        }
+        let pairingCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pairingCode.isEmpty else {
+            sdkBridgePairingState = .failed("Enter the pairing code shown in the bridge terminal.")
+            return
+        }
+
+        sdkBridgePairingState = .completing
+        do {
+            let response = try await sdkBridgeClientFactory(baseURL, nil, nil).completePairing(
+                pairingID: pairingID,
+                code: pairingCode,
+                deviceName: UIDevice.current.name
+            )
+            guard let token = response.bridgeToken?.nilIfBlank else {
+                sdkBridgePairingState = .failed("Runline Bridge did not return a bridge token.")
+                return
+            }
+            try sdkBridgeTokenStore.saveAPIKey(token)
+            sdkBridgeToken = token
+            sdkBridgePairingState = .paired(response.bridgeName?.nilIfBlank ?? response.service?.nilIfBlank ?? "Runline Bridge")
+            sdkBridgeConnectionState = .unchecked
+            await checkSDKBridgeConnection()
+        } catch {
+            sdkBridgePairingState = .failed(sdkBridgeConnectionFailureMessage(for: error, baseURL: baseURL))
+        }
+    }
+
+    func forgetSDKBridgePairing() {
+        do {
+            try sdkBridgeTokenStore.deleteAPIKey()
+        } catch {
+            errorMessage = "Could not remove the Runline Bridge pairing token."
+        }
+        sdkBridgeToken = nil
+        sdkBridgeProfiles = []
+        sdkBridgePairingState = .idle
+        sdkBridgeConnectionState = SDKBridgePreferences.isEnabled() ? .unchecked : .disabled
+        ensureLaunchRunModeIsAvailable()
+    }
+
     func checkSDKBridgeConnection() async {
         guard SDKBridgePreferences.isEnabled() else {
             sdkBridgeConnectionState = .disabled
@@ -425,15 +526,21 @@ final class AppState {
             ensureLaunchRunModeIsAvailable()
             return
         }
+        guard isSDKBridgePaired else {
+            sdkBridgeConnectionState = .failed("Pair Runline Bridge before checking Cursor SDK.")
+            sdkBridgeProfiles = []
+            ensureLaunchRunModeIsAvailable()
+            return
+        }
 
         sdkBridgeConnectionState = .checking
         do {
-            let health = try await sdkBridgeClientFactory(baseURL, nil).health()
-            if health.ok {
+            let health = try await sdkBridgeClientFactory(baseURL, nil, sdkBridgeToken).health()
+            if health.ok, health.paired != false {
                 sdkBridgeConnectionState = .connected("\(health.service) - \(health.sdk)")
                 await reloadSDKBridgeProfiles()
             } else {
-                sdkBridgeConnectionState = .failed("The bridge responded but reported an unhealthy status.")
+                sdkBridgeConnectionState = .failed("The bridge responded but did not accept this pairing token.")
                 sdkBridgeProfiles = []
                 ensureLaunchRunModeIsAvailable()
             }
@@ -450,9 +557,13 @@ final class AppState {
             sdkBridgeProfiles = []
             return
         }
+        guard isSDKBridgePaired else {
+            sdkBridgeProfiles = []
+            return
+        }
         do {
             let apiKey = try apiKeyStore.loadAPIKey()?.nilIfBlank
-            sdkBridgeProfiles = try await sdkBridgeClientFactory(baseURL, apiKey).listMCPProfiles()
+            sdkBridgeProfiles = try await sdkBridgeClientFactory(baseURL, apiKey, sdkBridgeToken).listMCPProfiles()
             if let profileID = launchDraft.sdkMCPProfileID,
                !sdkBridgeProfiles.contains(where: { $0.id == profileID }) {
                 launchDraft.sdkMCPProfileID = nil
@@ -1085,10 +1196,13 @@ final class AppState {
         guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
             throw SDKBridgeUnavailableError.invalidBridgeURL
         }
+        guard let bridgeToken = sdkBridgeToken?.nilIfBlank else {
+            throw SDKBridgeUnavailableError.bridgeNotPaired
+        }
         guard let apiKey = try apiKeyStore.loadAPIKey()?.nilIfBlank else {
             throw SDKBridgeUnavailableError.missingAPIKey
         }
-        return sdkBridgeClientFactory(baseURL, apiKey)
+        return sdkBridgeClientFactory(baseURL, apiKey, bridgeToken)
     }
 
     private func updateAgent(_ agentID: Agent.ID, mutate: (inout Agent) -> Void) {
@@ -1394,6 +1508,7 @@ final class AppState {
 private enum SDKBridgeUnavailableError: LocalizedError {
     case bridgeDisabled
     case invalidBridgeURL
+    case bridgeNotPaired
     case missingAPIKey
 
     var errorDescription: String? {
@@ -1402,6 +1517,8 @@ private enum SDKBridgeUnavailableError: LocalizedError {
             "Enable Runline Bridge in Settings before using Cursor SDK."
         case .invalidBridgeURL:
             "Enter a valid Runline Bridge URL in Settings."
+        case .bridgeNotPaired:
+            "Pair Runline Bridge in Settings before using Cursor SDK."
         case .missingAPIKey:
             "Reconnect your Cursor API key before using Cursor SDK."
         }

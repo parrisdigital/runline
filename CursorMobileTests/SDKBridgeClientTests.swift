@@ -17,8 +17,10 @@ final class SDKBridgeClientTests: XCTestCase {
         MockBridgeURLProtocol.handler = { request in
             try Self.jsonResponse(for: request, body: [
                 "ok": true,
-                "service": "runline-orchestrator",
-                "sdk": "@cursor/sdk"
+                "service": "runline-bridge",
+                "sdk": "@cursor/sdk",
+                "pairingRequired": true,
+                "paired": true
             ])
         }
 
@@ -27,6 +29,8 @@ final class SDKBridgeClientTests: XCTestCase {
 
         XCTAssertTrue(health.ok)
         XCTAssertEqual(health.sdk, "@cursor/sdk")
+        XCTAssertEqual(health.pairingRequired, true)
+        XCTAssertEqual(health.paired, true)
         let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
         XCTAssertEqual(request.method, "GET")
         XCTAssertEqual(request.url?.path, "/health")
@@ -85,6 +89,62 @@ final class SDKBridgeClientTests: XCTestCase {
         XCTAssertEqual(body["modelId"] as? String, "composer-2")
         XCTAssertEqual(body["autoCreatePR"] as? Bool, true)
         XCTAssertEqual(body["skipReviewerRequest"] as? Bool, false)
+    }
+
+    func testBridgeTokenHeaderIsSentOnProtectedRequests() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "profiles": []
+            ])
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key", bridgeToken: "bridge-token")
+        _ = try await client.listMCPProfiles()
+
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.header("Authorization"), "Bearer cursor-test-key")
+        XCTAssertEqual(request.header("X-Runline-Bridge-Token"), "bridge-token")
+    }
+
+    func testPairingStartAndCompleteUsePairingEndpoints() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            switch request.url?.path {
+            case "/pair/start":
+                return try Self.jsonResponse(for: request, body: [
+                    "pairingId": "pair-123",
+                    "expiresAt": "2026-05-06T20:00:00Z",
+                    "message": "Check the terminal running Runline Bridge for the pairing code."
+                ])
+            case "/pair/complete":
+                return try Self.jsonResponse(for: request, body: [
+                    "bridgeToken": "bridge-token",
+                    "bridgeName": "Runline Bridge",
+                    "service": "runline-bridge",
+                    "sdk": "@cursor/sdk"
+                ])
+            default:
+                throw URLError(.badURL)
+            }
+        }
+
+        let client = makeClient()
+        let start = try await client.startPairing(deviceName: "Matthew's iPhone")
+        let complete = try await client.completePairing(
+            pairingID: "pair-123",
+            code: "123456",
+            deviceName: "Matthew's iPhone"
+        )
+
+        XCTAssertEqual(start.pairingId, "pair-123")
+        XCTAssertEqual(complete.bridgeToken, "bridge-token")
+        XCTAssertEqual(MockBridgeURLProtocol.capturedRequests.map { $0.url?.path }, ["/pair/start", "/pair/complete"])
+
+        let startBody = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first?.jsonBody)
+        XCTAssertEqual(startBody["deviceName"] as? String, "Matthew's iPhone")
+
+        let completeBody = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.last?.jsonBody)
+        XCTAssertEqual(completeBody["pairingId"] as? String, "pair-123")
+        XCTAssertEqual(completeBody["code"] as? String, "123456")
     }
 
     func testCreateSessionUsesSDKSessionEndpointAndProfile() async throws {
@@ -278,10 +338,11 @@ final class SDKBridgeClientTests: XCTestCase {
         XCTAssertEqual(request.header("Accept"), "text/event-stream")
     }
 
-    private func makeClient(apiKey: String? = nil) -> SDKBridgeClient {
+    private func makeClient(apiKey: String? = nil, bridgeToken: String? = nil) -> SDKBridgeClient {
         SDKBridgeClient(
             baseURL: URL(string: "http://localhost:8787")!,
             apiKey: apiKey,
+            bridgeToken: bridgeToken,
             session: makeSession()
         )
     }

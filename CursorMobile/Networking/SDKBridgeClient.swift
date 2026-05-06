@@ -18,6 +18,8 @@ struct SDKBridgeHealthResponse: Decodable, Equatable {
     var ok: Bool
     var service: String
     var sdk: String
+    var pairingRequired: Bool?
+    var paired: Bool?
 }
 
 enum SDKBridgeConnectionState: Equatable {
@@ -33,6 +35,15 @@ enum SDKBridgeConnectionState: Equatable {
         }
         return false
     }
+}
+
+enum SDKBridgePairingState: Equatable {
+    case idle
+    case starting
+    case waiting(pairingID: String, expiresAt: String?, message: String?)
+    case completing
+    case paired(String)
+    case failed(String)
 }
 
 enum SDKBridgePreferences {
@@ -111,6 +122,30 @@ struct SDKBridgeMCPProfilesResponse: Decodable, Equatable {
     var profiles: [SDKBridgeMCPProfile]
 }
 
+struct SDKBridgePairingStartRequest: Encodable, Equatable {
+    var deviceName: String
+}
+
+struct SDKBridgePairingStartResponse: Decodable, Equatable {
+    var pairingId: String?
+    var expiresAt: String?
+    var message: String?
+    var pairingRequired: Bool?
+}
+
+struct SDKBridgePairingCompleteRequest: Encodable, Equatable {
+    var pairingId: String
+    var code: String
+    var deviceName: String
+}
+
+struct SDKBridgePairingCompleteResponse: Decodable, Equatable {
+    var bridgeToken: String?
+    var bridgeName: String?
+    var service: String?
+    var sdk: String?
+}
+
 struct SDKBridgeRunStartResponse: Decodable, Equatable {
     var sessionId: String?
     var agentId: String
@@ -146,13 +181,15 @@ final class SDKBridgeClient: @unchecked Sendable {
 
     private let baseURL: URL
     private let apiKey: String?
+    private let bridgeToken: String?
     private let session: URLSession
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init(baseURL: URL, apiKey: String? = nil, session: URLSession = .shared) {
+    init(baseURL: URL, apiKey: String? = nil, bridgeToken: String? = nil, session: URLSession = .shared) {
         self.baseURL = baseURL
         self.apiKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        self.bridgeToken = bridgeToken?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
         self.session = session
     }
 
@@ -166,6 +203,26 @@ final class SDKBridgeClient: @unchecked Sendable {
 
     func createSession(_ body: SDKBridgeCloudRunRequest) async throws -> SDKBridgeRunStartResponse {
         try await request("/sdk/sessions", method: .post, body: body)
+    }
+
+    func startPairing(deviceName: String) async throws -> SDKBridgePairingStartResponse {
+        try await request(
+            "/pair/start",
+            method: .post,
+            body: SDKBridgePairingStartRequest(deviceName: deviceName)
+        )
+    }
+
+    func completePairing(pairingID: String, code: String, deviceName: String) async throws -> SDKBridgePairingCompleteResponse {
+        try await request(
+            "/pair/complete",
+            method: .post,
+            body: SDKBridgePairingCompleteRequest(
+                pairingId: pairingID,
+                code: code,
+                deviceName: deviceName
+            )
+        )
     }
 
     func sendSessionMessage(
@@ -306,6 +363,9 @@ final class SDKBridgeClient: @unchecked Sendable {
         request.setValue(accept, forHTTPHeaderField: "Accept")
         if let apiKey {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        if let bridgeToken {
+            request.setValue(bridgeToken, forHTTPHeaderField: "X-Runline-Bridge-Token")
         }
         if let body {
             request.httpBody = try encoder.encode(AnyEncodable(body))
