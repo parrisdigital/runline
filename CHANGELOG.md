@@ -22,6 +22,7 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 
 - Uploaded the native SDK Tools workspace build to TestFlight.
 - Added the valid processed build to the configured beta group.
+- Submitted and received approval for external TestFlight beta testing.
 - Includes native SDK profile inspection for MCP servers, tools, skills, hooks, and subagents across Settings, New Chat, and SDK chats.
 
 ## Runline Public Beta
