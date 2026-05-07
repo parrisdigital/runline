@@ -101,6 +101,14 @@ Commit the package version, shrinkwrap, and documentation updates after a succes
 
 The ASC workflow is maintainer-only. It expects a local App Store Connect profile named `Runline` and private credentials stored outside git.
 
+Create the local workflow from the sanitized example:
+
+```bash
+cp .asc/workflow.example.json .asc/workflow.json
+```
+
+Fill in the local App Store Connect app ID, bundle ID, and TestFlight group IDs. The live `.asc/workflow.json` file is ignored by git and must not be committed.
+
 Preflight:
 
 ```bash
@@ -136,6 +144,7 @@ Runline <version> (<build>)
 ## Security Checklist
 
 - No `.env`, `.npmrc`, `.p8`, `.p12`, `.mobileprovision`, `.ipa`, `.xcarchive`, private key, certificate, or ASC artifact is tracked.
+- No live `.asc/workflow.json` maintainer config is tracked.
 - `gitleaks detect --source . --redact --verbose` passes.
 - `gitleaks detect --source . --no-git --redact --verbose` passes.
 - npm package contents are checked with `npm pack --dry-run`.

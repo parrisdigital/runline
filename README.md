@@ -157,7 +157,15 @@ See [docs/RELEASES.md](docs/RELEASES.md) for the maintainer release checklist, [
 
 TestFlight and App Store releases are maintainer-only and are not required for contributors.
 
-Local ASC automation expects a private `Runline` App Store Connect profile in the maintainer's keychain. Keep Apple API keys, signing files, archives, IPAs, and ASC run artifacts out of git.
+Local ASC automation expects a private `Runline` App Store Connect profile in the maintainer's keychain. Keep Apple API keys, signing files, live ASC workflow config, archives, IPAs, and ASC run artifacts out of git.
+
+Use the sanitized example as the starting point for local release work:
+
+```bash
+cp .asc/workflow.example.json .asc/workflow.json
+```
+
+Then fill in the local App Store Connect app and TestFlight group IDs. The live `.asc/workflow.json` file is ignored by git.
 
 Run local preflight checks:
 

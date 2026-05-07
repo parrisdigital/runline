@@ -20,9 +20,12 @@ node_modules/
 **/node_modules/
 orchestrator/dist/
 
+# Local ASC release config and generated artifacts
+.asc/*
+!.asc/
+!.asc/workflow.example.json
+
 # Local secrets and generated config
-.asc/artifacts/
-.asc/runs/
 .env
 .env.*
 .npmrc
