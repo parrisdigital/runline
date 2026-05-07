@@ -15,6 +15,8 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 
 ## runline-bridge 0.1.3
 
+- Published `runline-bridge@0.1.3` to npm.
+- Set both `latest` and `beta` npm dist-tags to `0.1.3`.
 - Prepared richer SDK profile metadata for MCP servers, tool hints, skills, hooks, and subagents.
 - Kept bridge-side MCP credentials, command environments, hook scripts, and full subagent prompts out of iOS metadata responses.
 
