@@ -156,7 +156,7 @@ gitleaks detect --source . --no-git --redact --verbose
 | --- | --- | --- |
 | GitHub | Public repository at `parrisdigital/runline` | Source, docs, issues, releases |
 | npm | `runline-bridge@0.1.2` on `latest` and `beta`; `0.1.3` prepared in source | Optional bridge for Cursor SDK mode |
-| TestFlight | Maintainer-managed Runline 1.0 builds | Requires App Store Connect access |
+| TestFlight | Runline `1.0 (13)` uploaded and valid | Requires App Store Connect access |
 
 See [docs/RELEASES.md](docs/RELEASES.md) for the maintainer release checklist, [CHANGELOG.md](CHANGELOG.md) for public release notes, and [docs/ROADMAP.md](docs/ROADMAP.md) for the beta roadmap.
 
