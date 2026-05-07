@@ -102,7 +102,7 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .overview, .connect:
             nil
         case .bridge:
-            "npm install -g runline-bridge@beta"
+            "npm install -g runline-bridge"
         case .start:
             "CURSOR_API_KEY=your-cursor-key runline-bridge up"
         }

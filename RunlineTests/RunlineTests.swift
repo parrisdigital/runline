@@ -68,9 +68,21 @@ final class RunlineTests: XCTestCase {
     func testCursorSDKOnboardingStepsExposeCurrentBridgeCommands() {
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.first, .overview)
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.last, .connect)
-        XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "npm install -g runline-bridge@beta")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "npm install -g runline-bridge")
         XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "CURSOR_API_KEY=your-cursor-key runline-bridge up")
         XCTAssertNil(RunlineBridgeOnboardingStep.connect.command)
+    }
+
+    func testSDKBridgePreferencesCanEnableBridgeForSetupFlow() {
+        let suiteName = "RunlineTests.SDKBridgePreferences.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(SDKBridgePreferences.isEnabled(defaults: defaults))
+
+        SDKBridgePreferences.setEnabled(true, defaults: defaults)
+
+        XCTAssertTrue(SDKBridgePreferences.isEnabled(defaults: defaults))
     }
 
     func testSDKMessageIntentsExposeBridgeValuesAndSymbols() {

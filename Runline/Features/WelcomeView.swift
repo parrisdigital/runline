@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WelcomeView: View {
     @Environment(AppState.self) private var appState
+    var onConnected: (() -> Void)?
     @State private var apiKey = ""
     @FocusState private var isAPIKeyFocused: Bool
 
@@ -90,6 +91,9 @@ struct WelcomeView: View {
         isAPIKeyFocused = false
         Task {
             await appState.connect(apiKey: apiKey)
+            if appState.isConnected {
+                onConnected?()
+            }
         }
     }
 }

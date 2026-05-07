@@ -262,7 +262,10 @@ struct SettingsFormContent: View {
                     didChooseDefaultRunMode = true
                     appState.applyDefaultRunMode(.cloudAgent)
                 },
-                onOpenSettings: {}
+                onOpenSettings: {
+                    isSDKBridgeEnabled = true
+                    appState.syncSDKBridgeConfiguration(resetConnection: true)
+                }
             )
         }
     }

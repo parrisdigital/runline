@@ -10,7 +10,9 @@ struct RootView: View {
             if appState.isConnected {
                 AppShellView()
             } else {
-                WelcomeView()
+                WelcomeView {
+                    didChooseDefaultRunMode = false
+                }
             }
         }
         .task {
@@ -107,7 +109,7 @@ private struct WorkflowModeChooserSheet: View {
                         choose: select
                     )
                 } footer: {
-                    Text("Cloud Agent is ready now. Cursor SDK needs Runline Bridge on your Mac, and you can set it up later from Settings.")
+                    Text("Cloud Agent is ready now. Choose Cursor SDK to walk through Runline Bridge setup. You can change this later in Settings.")
                 }
             }
             .navigationTitle("Choose Runtime")
@@ -120,6 +122,8 @@ private struct WorkflowModeChooserSheet: View {
                     dismiss()
                 },
                 onOpenSettings: {
+                    SDKBridgePreferences.setEnabled(true)
+                    appState.syncSDKBridgeConfiguration(resetConnection: true)
                     choose(.cloudAgent)
                     appState.selectedTab = .settings
                     dismiss()
