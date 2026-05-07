@@ -198,7 +198,7 @@ struct CursorSDKOnboardingView: View {
                     .tag(step)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
+            .tabViewStyle(.page(indexDisplayMode: .never))
             .background(Color(uiColor: .systemGroupedBackground))
             .safeAreaInset(edge: .bottom) {
                 bottomActionBar
@@ -227,13 +227,19 @@ struct CursorSDKOnboardingView: View {
     }
 
     private var bottomActionBar: some View {
-        VStack(spacing: 10) {
-            Button(primaryButtonTitle) {
+        VStack(spacing: 12) {
+            RunlineBridgePageIndicator(selectedStep: selectedStep)
+
+            Button {
                 handlePrimaryAction()
+            } label: {
+                Text(primaryButtonTitle)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 48)
             }
             .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .frame(maxWidth: 520)
+            .buttonBorderShape(.capsule)
+            .frame(maxWidth: 540)
             .disabled(isPrimaryButtonDisabled)
 
             Button("Use Cloud Agent for Now") {
@@ -241,12 +247,12 @@ struct CursorSDKOnboardingView: View {
                 dismiss()
             }
             .buttonStyle(.borderless)
+            .font(.callout.weight(.medium))
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
-        .background(.bar)
+        .padding(.horizontal, 28)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
     }
 
     private var primaryButtonTitle: String {
@@ -298,54 +304,75 @@ private struct CursorSDKOnboardingPage: View {
     var openSettings: () -> Void
 
     var body: some View {
+        ViewThatFits(in: .vertical) {
+            fixedContent
+            scrollContent
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    private var fixedContent: some View {
+        VStack {
+            Spacer(minLength: 12)
+            pageContent
+            Spacer(minLength: 18)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
+    }
+
+    private var scrollContent: some View {
         ScrollView {
-            VStack(spacing: 18) {
-                CursorSDKOnboardingHeader(step: step)
+            pageContent
+                .frame(maxWidth: 540)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.top, 18)
+                .padding(.bottom, 18)
+        }
+    }
 
-                switch step {
-                case .overview:
-                    CursorSDKBenefitsList()
-                case .bridge:
-                    EmptyView()
-                case .start:
-                    RunlineBridgeStartModePanel(keepMacAwake: $keepMacAwake)
-                case .connect:
-                    CursorSDKBridgeSetupPanel(
-                        isSDKBridgeEnabled: $isSDKBridgeEnabled,
-                        sdkBridgeBaseURL: $sdkBridgeBaseURL,
-                        pairingCode: $pairingCode,
-                        openSettings: openSettings
-                    )
-                }
+    private var pageContent: some View {
+        VStack(spacing: 14) {
+            CursorSDKOnboardingHeader(step: step)
 
-                if let command = step.command(keepAwake: keepMacAwake) {
-                    CommandCopyRow(
-                        command: command,
-                        isCopied: copiedStepID == step.id
-                    ) {
-                        UIPasteboard.general.string = command
-                        withAnimation(.snappy(duration: 0.2)) {
-                            copiedStepID = step.id
-                        }
+            switch step {
+            case .overview:
+                CursorSDKBenefitsList()
+            case .bridge:
+                EmptyView()
+            case .start:
+                RunlineBridgeStartModePanel(keepMacAwake: $keepMacAwake)
+            case .connect:
+                CursorSDKBridgeSetupPanel(
+                    isSDKBridgeEnabled: $isSDKBridgeEnabled,
+                    sdkBridgeBaseURL: $sdkBridgeBaseURL,
+                    pairingCode: $pairingCode,
+                    openSettings: openSettings
+                )
+            }
+
+            if let command = step.command(keepAwake: keepMacAwake) {
+                CommandCopyRow(
+                    command: command,
+                    isCopied: copiedStepID == step.id
+                ) {
+                    UIPasteboard.general.string = command
+                    withAnimation(.snappy(duration: 0.2)) {
+                        copiedStepID = step.id
                     }
                 }
-
-                if let footnote = step.footnote {
-                    Text(footnote)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
-            .frame(maxWidth: 540)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.top, 26)
-            .padding(.bottom, 28)
+
+            if let footnote = step.footnote {
+                Text(footnote)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .contentMargins(.bottom, 108, for: .scrollContent)
-        .background(Color(uiColor: .systemGroupedBackground))
+        .frame(maxWidth: 540)
     }
 }
 
@@ -353,14 +380,14 @@ private struct CursorSDKOnboardingHeader: View {
     var step: RunlineBridgeOnboardingStep
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 11) {
             Image(systemName: step.symbolName)
-                .font(.system(size: 32, weight: .semibold))
+                .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(.tint)
-                .frame(width: 68, height: 68)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .frame(width: 60, height: 60)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-            VStack(spacing: 7) {
+            VStack(spacing: 6) {
                 Text(step.eyebrow.uppercased())
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tint)
@@ -409,6 +436,80 @@ private struct RunlineBridgeStartModePanel: View {
     }
 }
 
+private struct CursorSDKAPIKeyPanel: View {
+    @Environment(AppState.self) private var appState
+    @State private var apiKey = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Label("Cursor API Key", systemImage: "key")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                if appState.isConnected {
+                    Label("Keychain", systemImage: "checkmark.circle")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.green)
+                } else {
+                    Text("Required")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            if let account = appState.account {
+                Text("Stored in Keychain as \(account.apiKeyName).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                SecureField("Cursor API key", text: $apiKey)
+                    .textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isFocused)
+                    .accessibilityIdentifier("sdkOnboarding.cursorAPIKey")
+
+                Button {
+                    connectKey()
+                } label: {
+                    if appState.isLoading {
+                        ProgressView()
+                    } else {
+                        Label("Connect Key", systemImage: "key.fill")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(trimmedAPIKey.isEmpty || appState.isLoading)
+
+                Text("Runline stores the key in Keychain and sends it to Runline Bridge only as a per-request bearer token.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 10)
+    }
+
+    private var trimmedAPIKey: String {
+        apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func connectKey() {
+        let key = trimmedAPIKey
+        guard !key.isEmpty else { return }
+        isFocused = false
+        apiKey = ""
+        Task {
+            await appState.connect(apiKey: key)
+        }
+    }
+}
+
 private struct CursorSDKBridgeSetupPanel: View {
     @Environment(AppState.self) private var appState
     @Binding var isSDKBridgeEnabled: Bool
@@ -418,6 +519,10 @@ private struct CursorSDKBridgeSetupPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            CursorSDKAPIKeyPanel()
+
+            Divider()
+
             Toggle("Enable Runline Bridge", isOn: $isSDKBridgeEnabled)
                 .padding(.vertical, 10)
 
@@ -656,13 +761,13 @@ private struct CursorSDKBridgeSetupPanel: View {
 
 private struct CursorSDKBenefitsList: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             ForEach(RunlineBridgeBenefit.all) { benefit in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: 11) {
                     Image(systemName: benefit.symbolName)
-                        .font(.headline)
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.tint)
-                        .frame(width: 26)
+                        .frame(width: 24)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(benefit.title)
@@ -678,6 +783,28 @@ private struct CursorSDKBenefitsList: View {
         }
         .padding(16)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+private struct RunlineBridgePageIndicator: View {
+    var selectedStep: RunlineBridgeOnboardingStep
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(RunlineBridgeOnboardingStep.allCases) { step in
+                Capsule(style: .continuous)
+                    .fill(step == selectedStep ? Color.primary : Color.secondary.opacity(0.32))
+                    .frame(width: step == selectedStep ? 26 : 7, height: 7)
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: selectedStep)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Cursor SDK setup step")
+        .accessibilityValue("\(currentIndex) of \(RunlineBridgeOnboardingStep.allCases.count)")
+    }
+
+    private var currentIndex: Int {
+        (RunlineBridgeOnboardingStep.allCases.firstIndex(of: selectedStep) ?? 0) + 1
     }
 }
 
