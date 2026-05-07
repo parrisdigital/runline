@@ -108,6 +108,7 @@ const server = createServer(async (request, response) => {
         ok: true,
         service: serviceName,
         sdk: sdkName,
+        keepAwake: isTruthy(process.env.RUNLINE_BRIDGE_KEEP_AWAKE_ACTIVE),
         pairingRequired: isBridgeAuthRequired(),
         paired: isAuthorizedBridgeRequest(request),
       });
@@ -592,7 +593,11 @@ function bridgeTokenFrom(request: IncomingMessage): string | undefined {
 }
 
 function isBridgeAuthRequired() {
-  return process.env.RUNLINE_BRIDGE_DISABLE_PAIRING?.toLowerCase() !== "true";
+  return !isTruthy(process.env.RUNLINE_BRIDGE_DISABLE_PAIRING);
+}
+
+function isTruthy(value: string | undefined) {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
 }
 
 function cleanupExpiredPairings() {

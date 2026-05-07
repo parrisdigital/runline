@@ -537,7 +537,8 @@ final class AppState {
         do {
             let health = try await sdkBridgeClientFactory(baseURL, nil, sdkBridgeToken).health()
             if health.ok, health.paired != false {
-                sdkBridgeConnectionState = .connected("\(health.service) - \(health.sdk)")
+                let keepAwakeDetail = health.keepAwake == true ? " - Keep Awake" : ""
+                sdkBridgeConnectionState = .connected("\(health.service) - \(health.sdk)\(keepAwakeDetail)")
                 await reloadSDKBridgeProfiles()
             } else {
                 sdkBridgeConnectionState = .failed("The bridge responded but did not accept this pairing token.")

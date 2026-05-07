@@ -17,7 +17,7 @@ struct RunlineBridgeBenefit: Identifiable, Equatable {
         RunlineBridgeBenefit(
             symbolName: "macbook.and.iphone",
             title: "Mac runtime",
-            detail: "Your Mac runs the Cursor SDK while iPhone stays the native remote."
+            detail: "Your Mac runs Cursor SDK while iPhone stays the native remote."
         ),
         RunlineBridgeBenefit(
             symbolName: "message.badge.waveform",
@@ -27,14 +27,57 @@ struct RunlineBridgeBenefit: Identifiable, Equatable {
         RunlineBridgeBenefit(
             symbolName: "point.3.connected.trianglepath.dotted",
             title: "MCP profiles",
-            detail: "Expose bridge-side tools and subagents without storing them on device."
+            detail: "Expose bridge-side tools without storing private config on device."
+        ),
+        RunlineBridgeBenefit(
+            symbolName: "sparkles",
+            title: "Skills and subagents",
+            detail: "Publish bridge-side skills, hooks, and subagent profiles."
         ),
         RunlineBridgeBenefit(
             symbolName: "key",
             title: "Per-request keys",
-            detail: "Runline sends your Cursor key only as a bearer token for each request."
+            detail: "Runline sends your Cursor key as a bearer token for each request."
         ),
     ]
+}
+
+enum RunlineBridgeStartMode: String, CaseIterable, Identifiable, Equatable {
+    case standard
+    case keepAwake
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .standard:
+            "Standard"
+        case .keepAwake:
+            "Keep Awake"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .standard:
+            "Runs until you stop the terminal process. Your Mac follows normal sleep settings."
+        case .keepAwake:
+            "Uses macOS caffeinate while the bridge is running. Stops when the bridge exits."
+        }
+    }
+
+    var command: String {
+        switch self {
+        case .standard:
+            "runline-bridge up"
+        case .keepAwake:
+            "runline-bridge up --keep-awake"
+        }
+    }
+
+    static func resolve(keepAwake: Bool) -> RunlineBridgeStartMode {
+        keepAwake ? .keepAwake : .standard
+    }
 }
 
 enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable {
@@ -63,7 +106,7 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .overview:
             "Use Cursor SDK from your iPhone"
         case .bridge:
-            "Prepare the bridge"
+            "Install the bridge"
         case .start:
             "Start the bridge"
         case .connect:
@@ -74,13 +117,13 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
     var subtitle: String {
         switch self {
         case .overview:
-            "Cloud Agent remains the default. Cursor SDK is an optional mode for local SDK sessions, MCP profiles, files, images, planning, and execution."
+            "Cloud Agent remains the default. Cursor SDK is optional for local SDK sessions, MCP profiles, files, images, planning, and execution."
         case .bridge:
-            "Install Runline Bridge from npm. It keeps Cursor SDK execution on your Mac."
+            "Install Runline Bridge from npm only when you want Cursor SDK mode."
         case .start:
-            "Start the bridge on your Mac. For iPhone testing, use your Mac LAN address instead of localhost."
+            "Run the bridge on your Mac, then connect from iPhone using the Mac LAN address."
         case .connect:
-            "Enter the bridge URL, pair with the code printed in your Mac terminal, then verify the connection before making Cursor SDK your default."
+            "Enter the bridge URL, pair with the code printed in your Mac terminal, then verify the connection."
         }
     }
 
@@ -98,13 +141,17 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
     }
 
     var command: String? {
+        command(keepAwake: false)
+    }
+
+    func command(keepAwake: Bool) -> String? {
         switch self {
         case .overview, .connect:
             nil
         case .bridge:
             "npm install -g runline-bridge"
         case .start:
-            "CURSOR_API_KEY=your-cursor-key runline-bridge up"
+            RunlineBridgeStartMode.resolve(keepAwake: keepAwake).command
         }
     }
 
@@ -113,11 +160,11 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .overview:
             nil
         case .bridge:
-            "Only install this if you want Cursor SDK mode. Cloud Agent mode works without the bridge."
+            "Cloud Agent mode works without the bridge."
         case .start:
-            "Simulator can use http://localhost:8787. A physical iPhone needs a reachable Mac LAN URL such as http://192.168.1.10:8787."
+            "Simulator can use localhost. A physical iPhone needs a reachable Mac LAN URL such as http://192.168.1.10:8787."
         case .connect:
-            "Cloud Agent does not require this setup and remains available even when Cursor SDK is unavailable."
+            "Cloud Agent remains available even when Cursor SDK is unavailable."
         }
     }
 }
@@ -127,6 +174,7 @@ struct CursorSDKOnboardingView: View {
     @Environment(AppState.self) private var appState
     @AppStorage(SDKBridgePreferences.isEnabledKey) private var isSDKBridgeEnabled = SDKBridgePreferences.defaultIsEnabled
     @AppStorage(SDKBridgePreferences.baseURLKey) private var sdkBridgeBaseURL = SDKBridgePreferences.defaultBaseURLString
+    @AppStorage(SDKBridgePreferences.keepAwakeKey) private var keepMacAwake = SDKBridgePreferences.defaultKeepAwake
     var onUseCloud: (() -> Void)?
     var onUseSDK: (() -> Void)?
     var onOpenSettings: (() -> Void)?
@@ -136,40 +184,24 @@ struct CursorSDKOnboardingView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                TabView(selection: $selectedStep) {
-                    ForEach(RunlineBridgeOnboardingStep.allCases) { step in
-                        CursorSDKOnboardingPage(
-                            step: step,
-                            copiedStepID: $copiedStepID,
-                            isSDKBridgeEnabled: $isSDKBridgeEnabled,
-                            sdkBridgeBaseURL: $sdkBridgeBaseURL,
-                            pairingCode: $pairingCode,
-                            openSettings: openSettings
-                        )
-                        .tag(step)
-                    }
+            TabView(selection: $selectedStep) {
+                ForEach(RunlineBridgeOnboardingStep.allCases) { step in
+                    CursorSDKOnboardingPage(
+                        step: step,
+                        copiedStepID: $copiedStepID,
+                        keepMacAwake: $keepMacAwake,
+                        isSDKBridgeEnabled: $isSDKBridgeEnabled,
+                        sdkBridgeBaseURL: $sdkBridgeBaseURL,
+                        pairingCode: $pairingCode,
+                        openSettings: openSettings
+                    )
+                    .tag(step)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-
-                VStack(spacing: 10) {
-                    Button(primaryButtonTitle) {
-                        handlePrimaryAction()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
-                    .disabled(isPrimaryButtonDisabled)
-
-                    Button("Use Cloud Agent for Now") {
-                        onUseCloud?()
-                        dismiss()
-                    }
-                    .buttonStyle(.borderless)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 14)
-                .background(.bar)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+            .background(Color(uiColor: .systemGroupedBackground))
+            .safeAreaInset(edge: .bottom) {
+                bottomActionBar
             }
             .navigationTitle("Cursor SDK")
             .navigationBarTitleDisplayMode(.inline)
@@ -192,6 +224,29 @@ struct CursorSDKOnboardingView: View {
                 pairingCode = ""
             }
         }
+    }
+
+    private var bottomActionBar: some View {
+        VStack(spacing: 10) {
+            Button(primaryButtonTitle) {
+                handlePrimaryAction()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .frame(maxWidth: 520)
+            .disabled(isPrimaryButtonDisabled)
+
+            Button("Use Cloud Agent for Now") {
+                onUseCloud?()
+                dismiss()
+            }
+            .buttonStyle(.borderless)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .background(.bar)
     }
 
     private var primaryButtonTitle: String {
@@ -236,6 +291,7 @@ struct CursorSDKOnboardingView: View {
 private struct CursorSDKOnboardingPage: View {
     var step: RunlineBridgeOnboardingStep
     @Binding var copiedStepID: RunlineBridgeOnboardingStep.ID?
+    @Binding var keepMacAwake: Bool
     @Binding var isSDKBridgeEnabled: Bool
     @Binding var sdkBridgeBaseURL: String
     @Binding var pairingCode: String
@@ -243,34 +299,17 @@ private struct CursorSDKOnboardingPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                Image(systemName: step.symbolName)
-                    .font(.system(size: 44, weight: .semibold))
-                    .foregroundStyle(.tint)
-                    .frame(width: 88, height: 88)
-                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            VStack(spacing: 18) {
+                CursorSDKOnboardingHeader(step: step)
 
-                VStack(spacing: 8) {
-                    Text(step.eyebrow.uppercased())
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
-
-                    Text(step.title)
-                        .font(.title2.weight(.semibold))
-                        .multilineTextAlignment(.center)
-
-                    Text(step.subtitle)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if step == .overview {
+                switch step {
+                case .overview:
                     CursorSDKBenefitsList()
-                }
-
-                if step == .connect {
+                case .bridge:
+                    EmptyView()
+                case .start:
+                    RunlineBridgeStartModePanel(keepMacAwake: $keepMacAwake)
+                case .connect:
                     CursorSDKBridgeSetupPanel(
                         isSDKBridgeEnabled: $isSDKBridgeEnabled,
                         sdkBridgeBaseURL: $sdkBridgeBaseURL,
@@ -279,7 +318,7 @@ private struct CursorSDKOnboardingPage: View {
                     )
                 }
 
-                if let command = step.command {
+                if let command = step.command(keepAwake: keepMacAwake) {
                     CommandCopyRow(
                         command: command,
                         isCopied: copiedStepID == step.id
@@ -299,13 +338,74 @@ private struct CursorSDKOnboardingPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: 560)
+            .frame(maxWidth: 540)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
-            .padding(.top, 52)
-            .padding(.bottom, 96)
+            .padding(.top, 26)
+            .padding(.bottom, 28)
         }
+        .contentMargins(.bottom, 108, for: .scrollContent)
         .background(Color(uiColor: .systemGroupedBackground))
+    }
+}
+
+private struct CursorSDKOnboardingHeader: View {
+    var step: RunlineBridgeOnboardingStep
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: step.symbolName)
+                .font(.system(size: 32, weight: .semibold))
+                .foregroundStyle(.tint)
+                .frame(width: 68, height: 68)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            VStack(spacing: 7) {
+                Text(step.eyebrow.uppercased())
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
+
+                Text(step.title)
+                    .font(.title3.weight(.semibold))
+                    .multilineTextAlignment(.center)
+
+                Text(step.subtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct RunlineBridgeStartModePanel: View {
+    @Binding var keepMacAwake: Bool
+
+    private var selectedMode: RunlineBridgeStartMode {
+        RunlineBridgeStartMode.resolve(keepAwake: keepMacAwake)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Bridge Start Mode", selection: $keepMacAwake) {
+                Text("Standard").tag(false)
+                Text("Keep Awake").tag(true)
+            }
+            .pickerStyle(.segmented)
+
+            Label(selectedMode.detail, systemImage: keepMacAwake ? "moon.zzz.slash" : "terminal")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Keep Awake is disabled by default and only affects Cursor SDK mode.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -319,11 +419,11 @@ private struct CursorSDKBridgeSetupPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Toggle("Enable Runline Bridge", isOn: $isSDKBridgeEnabled)
-                .padding(.vertical, 12)
+                .padding(.vertical, 10)
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text("Bridge URL")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -337,12 +437,12 @@ private struct CursorSDKBridgeSetupPanel: View {
 
                 if let loopbackHelp = SDKBridgePreferences.deviceLoopbackHelp(for: SDKBridgePreferences.baseURL(from: sdkBridgeBaseURL)) {
                     Text(loopbackHelp)
-                        .font(.footnote)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
 
             Divider()
 
@@ -351,9 +451,9 @@ private struct CursorSDKBridgeSetupPanel: View {
             Divider()
 
             setupActions
-                .padding(.vertical, 12)
+                .padding(.vertical, 10)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onAppear {
             if !isSDKBridgeEnabled {
@@ -364,7 +464,7 @@ private struct CursorSDKBridgeSetupPanel: View {
     }
 
     private var statusRows: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Text("Status")
                 Spacer()
@@ -383,95 +483,97 @@ private struct CursorSDKBridgeSetupPanel: View {
 
             if let readiness = appState.sdkBridgeReadinessIssue {
                 Text(readiness)
-                    .font(.footnote)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Label("Cursor SDK is ready.", systemImage: "checkmark.circle")
-                    .font(.footnote)
+                    .font(.caption)
                     .foregroundStyle(.green)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .font(.subheadline)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
     private var setupActions: some View {
-        if appState.isSDKBridgeReadyForLaunch {
-            Button {
-                Task {
-                    await appState.checkSDKBridgeConnection()
-                }
-            } label: {
-                Label("Recheck Connection", systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(.bordered)
-        } else if appState.isSDKBridgePaired {
-            Button {
-                Task {
-                    await appState.checkSDKBridgeConnection()
-                }
-            } label: {
-                if appState.sdkBridgeConnectionState == .checking {
-                    ProgressView()
-                } else {
-                    Label("Check Connection", systemImage: "network")
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(appState.sdkBridgeConnectionState == .checking)
-        } else {
-            Button {
-                Task {
-                    await startPairing()
-                }
-            } label: {
-                if appState.sdkBridgePairingState == .starting {
-                    ProgressView()
-                } else {
-                    Label("Start Pairing", systemImage: "link.badge.plus")
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!isSDKBridgeEnabled || appState.sdkBridgePairingState == .starting || appState.sdkBridgePairingState == .completing)
-
-            if case .waiting = appState.sdkBridgePairingState {
-                TextField("Pairing Code", text: $pairingCode)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("sdkOnboarding.pairingCode")
-
+        VStack(alignment: .leading, spacing: 10) {
+            if appState.isSDKBridgeReadyForLaunch {
                 Button {
                     Task {
-                        await completePairing()
+                        await appState.checkSDKBridgeConnection()
                     }
                 } label: {
-                    if appState.sdkBridgePairingState == .completing {
-                        ProgressView()
-                    } else {
-                        Label("Complete Pairing", systemImage: "checkmark.circle")
-                    }
+                    Label("Recheck Connection", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
-                .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || appState.sdkBridgePairingState == .completing)
+            } else if appState.isSDKBridgePaired {
+                Button {
+                    Task {
+                        await appState.checkSDKBridgeConnection()
+                    }
+                } label: {
+                    if appState.sdkBridgeConnectionState == .checking {
+                        ProgressView()
+                    } else {
+                        Label("Check Connection", systemImage: "network")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(appState.sdkBridgeConnectionState == .checking)
+            } else {
+                Button {
+                    Task {
+                        await startPairing()
+                    }
+                } label: {
+                    if appState.sdkBridgePairingState == .starting {
+                        ProgressView()
+                    } else {
+                        Label("Start Pairing", systemImage: "link.badge.plus")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!isSDKBridgeEnabled || appState.sdkBridgePairingState == .starting || appState.sdkBridgePairingState == .completing)
+
+                if case .waiting = appState.sdkBridgePairingState {
+                    TextField("Pairing Code", text: $pairingCode)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("sdkOnboarding.pairingCode")
+
+                    Button {
+                        Task {
+                            await completePairing()
+                        }
+                    } label: {
+                        if appState.sdkBridgePairingState == .completing {
+                            ProgressView()
+                        } else {
+                            Label("Complete Pairing", systemImage: "checkmark.circle")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || appState.sdkBridgePairingState == .completing)
+                }
             }
 
             if let pairingDetail {
                 Text(pairingDetail)
-                    .font(.footnote)
+                    .font(.caption)
                     .foregroundStyle(pairingDetailIsError ? .red : .secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
 
-        Button("Open Full Settings") {
-            openSettings()
+            Button("Open Full Settings") {
+                openSettings()
+            }
+            .buttonStyle(.borderless)
         }
-        .buttonStyle(.borderless)
     }
 
     private var bridgeConnectionTitle: String {
@@ -554,20 +656,20 @@ private struct CursorSDKBridgeSetupPanel: View {
 
 private struct CursorSDKBenefitsList: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(RunlineBridgeBenefit.all) { benefit in
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: benefit.symbolName)
                         .font(.headline)
                         .foregroundStyle(.tint)
-                        .frame(width: 28)
+                        .frame(width: 26)
 
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(benefit.title)
-                            .font(.headline)
+                            .font(.subheadline.weight(.semibold))
 
                         Text(benefit.detail)
-                            .font(.subheadline)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

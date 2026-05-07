@@ -4,8 +4,8 @@ Runline Bridge is the optional Mac-side CLI for Cursor SDK workflows in [Runline
 
 The iOS app does not depend on this service for the core Cloud Agent path. Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
 
-Source package version: `runline-bridge@0.1.3`.
-Current published npm package: `runline-bridge@0.1.3`.
+Source package version: `runline-bridge@0.1.4`.
+Current published npm package: `runline-bridge@0.1.4`.
 
 Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 
@@ -26,6 +26,14 @@ runline-bridge up
 ```
 
 Only install Runline Bridge if you want Cursor SDK mode. Cloud Agent mode in the iOS app works without this package.
+
+To keep your Mac awake while SDK mode is connected:
+
+```bash
+runline-bridge up --keep-awake
+```
+
+On macOS this uses `caffeinate` while the bridge is running. It is disabled by default and stops when the bridge exits. It does not affect Cloud Agent mode.
 
 Check the installed version:
 

@@ -21,7 +21,7 @@ Runline is in public beta.
 - Cloud Agent mode: default, fully on-device direct integration with Cursor's Cloud Agents API.
 - Cursor SDK mode: optional, powered by `runline-bridge` on the user's Mac or a trusted HTTPS bridge.
 - TestFlight/App Store Connect releases: maintainer-managed.
-- npm package: `runline-bridge@0.1.3` is published on both `latest` and `beta`.
+- npm package: `runline-bridge@0.1.4` is published on both `latest` and `beta`.
 
 ## What Runline Does
 
@@ -70,6 +70,14 @@ npm install -g runline-bridge
 export CURSOR_API_KEY="replace-with-your-cursor-key"
 runline-bridge up
 ```
+
+To keep your Mac awake while testing Cursor SDK mode:
+
+```bash
+runline-bridge up --keep-awake
+```
+
+Keep Awake is optional, macOS-only, and stops when the bridge exits. Cloud Agent mode does not need your Mac awake.
 
 For Simulator development, `http://localhost:8787` is usually enough.
 
@@ -155,7 +163,7 @@ gitleaks detect --source . --no-git --redact --verbose
 | Channel | Current state | Notes |
 | --- | --- | --- |
 | GitHub | Public repository at `parrisdigital/runline` | Source, docs, issues, releases |
-| npm | `runline-bridge@0.1.3` on `latest` and `beta` | Optional bridge for Cursor SDK mode |
+| npm | `runline-bridge@0.1.4` on `latest` and `beta` | Optional bridge for Cursor SDK mode |
 | TestFlight | Runline `1.0 (13)` in internal and external beta testing | Requires App Store Connect access |
 
 See [docs/RELEASES.md](docs/RELEASES.md) for the maintainer release checklist, [CHANGELOG.md](CHANGELOG.md) for public release notes, and [docs/ROADMAP.md](docs/ROADMAP.md) for the beta roadmap.

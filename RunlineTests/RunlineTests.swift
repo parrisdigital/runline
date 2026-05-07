@@ -69,10 +69,18 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.first, .overview)
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.last, .connect)
         XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "npm install -g runline-bridge")
-        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "CURSOR_API_KEY=your-cursor-key runline-bridge up")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "runline-bridge up")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command(keepAwake: true), "runline-bridge up --keep-awake")
         XCTAssertEqual(RunlineBridgeOnboardingStep.connect.title, "Pair and verify")
         XCTAssertTrue(RunlineBridgeOnboardingStep.connect.subtitle.contains("verify"))
         XCTAssertNil(RunlineBridgeOnboardingStep.connect.command)
+    }
+
+    func testRunlineBridgeStartModesExposeKeepAwakeCommand() {
+        XCTAssertEqual(RunlineBridgeStartMode.standard.command, "runline-bridge up")
+        XCTAssertEqual(RunlineBridgeStartMode.keepAwake.command, "runline-bridge up --keep-awake")
+        XCTAssertEqual(RunlineBridgeStartMode.resolve(keepAwake: false), .standard)
+        XCTAssertEqual(RunlineBridgeStartMode.resolve(keepAwake: true), .keepAwake)
     }
 
     func testSDKBridgePreferencesCanEnableBridgeForSetupFlow() {

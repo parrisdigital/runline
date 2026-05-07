@@ -18,6 +18,7 @@ struct SDKBridgeHealthResponse: Decodable, Equatable {
     var ok: Bool
     var service: String
     var sdk: String
+    var keepAwake: Bool?
     var pairingRequired: Bool?
     var paired: Bool?
 }
@@ -49,8 +50,10 @@ enum SDKBridgePairingState: Equatable {
 enum SDKBridgePreferences {
     static let isEnabledKey = "sdkBridge.isEnabled"
     static let baseURLKey = "sdkBridge.baseURL"
+    static let keepAwakeKey = "sdkBridge.keepAwake"
     static let defaultIsEnabled = false
     static let defaultBaseURLString = "http://localhost:8787"
+    static let defaultKeepAwake = false
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: isEnabledKey)

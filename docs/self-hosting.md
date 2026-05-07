@@ -49,6 +49,14 @@ export CURSOR_API_KEY="replace-with-your-cursor-key"
 runline-bridge up
 ```
 
+For Mac-assisted Cursor SDK sessions that should continue while you are away from the keyboard, start the bridge with Keep Awake:
+
+```bash
+runline-bridge up --keep-awake
+```
+
+On macOS this uses `caffeinate` while the bridge process is running. It is disabled by default, stops when the bridge exits, and does not apply to Cloud Agent mode.
+
 Find your Mac's LAN IP:
 
 ```bash

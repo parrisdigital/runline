@@ -9,9 +9,17 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Keep Cloud Agent mode as the default iOS experience.
 - Continue refining Cursor SDK mode and Runline Bridge pairing for power users.
 - Improve iPhone and iPad polish while staying native to SwiftUI and iOS system patterns.
+- Refined Cursor SDK onboarding into shorter native pages with a fixed bottom action area and a Standard/Keep Awake bridge start option.
 - Added public self-hosting, bridge setup, trademark, environment example, and coding-agent guidance.
 - Refined post-API-key onboarding with an inline Cursor SDK bridge setup, pairing, and connection check flow.
 - Added a native SDK Tools experience for inspecting bridge-published MCP servers, tools, skills, hooks, and subagents from Settings, New Chat, and SDK chats.
+
+## runline-bridge 0.1.4
+
+- Published `runline-bridge@0.1.4` to npm.
+- Set both `latest` and `beta` npm dist-tags to `0.1.4`.
+- Added `runline-bridge up --keep-awake`, backed by macOS `caffeinate`.
+- Added bridge health metadata for whether Keep Awake is active.
 
 ## runline-bridge 0.1.3
 
