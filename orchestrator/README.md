@@ -14,7 +14,8 @@ Use this service only for work that benefits from `@cursor/sdk`:
 
 ```bash
 npm install -g runline-bridge@beta
-CURSOR_API_KEY=your-cursor-key runline-bridge up
+export CURSOR_API_KEY="replace-with-your-cursor-key"
+runline-bridge up
 ```
 
 Only install Runline Bridge if you want Cursor SDK mode. Cloud Agent mode in the iOS app works without this package.
@@ -25,7 +26,8 @@ Only install Runline Bridge if you want Cursor SDK mode. Cloud Agent mode in the
 cd orchestrator
 npm install
 npm run build
-CURSOR_API_KEY=your-cursor-key npm run bridge
+export CURSOR_API_KEY="replace-with-your-cursor-key"
+npm run bridge
 ```
 
 For Simulator testing, `http://localhost:8787` is usually enough. For a physical iPhone or TestFlight build on the same Wi-Fi network, use your Mac's LAN address instead:
@@ -36,7 +38,7 @@ ipconfig getifaddr en0
 
 Then set the app's bridge URL to `http://<mac-lan-ip>:8787`. For broader TestFlight use, deploy the bridge behind HTTPS and use that hosted URL.
 
-The iOS app can also send a per-request `Authorization: Bearer <key>` header. Prefer that for user-owned keys; the bridge does not need to store keys server-side.
+The iOS app can also send the user's Cursor API key as a per-request bearer token. Prefer that for user-owned keys; the bridge does not need to store keys server-side.
 
 ## Pairing
 
@@ -45,7 +47,8 @@ Runline Bridge requires a local pairing token by default. In the iOS app, open S
 For local development only, you can disable pairing:
 
 ```bash
-RUNLINE_BRIDGE_DISABLE_PAIRING=true CURSOR_API_KEY=your-cursor-key runline-bridge up
+export CURSOR_API_KEY="replace-with-your-cursor-key"
+RUNLINE_BRIDGE_DISABLE_PAIRING=true runline-bridge up
 ```
 
 ## MCP Profiles
@@ -87,14 +90,14 @@ export RUNLINE_SDK_MCP_PROFILES='[
 - `GET /agents/:agentId/runs/:runId/state`
 - `GET /agents/:agentId/runs/:runId/events`
 
-Requests may pass a Cursor API key with `Authorization: Bearer <key>`. If omitted, the service uses `CURSOR_API_KEY`. Do not put user keys in logs or long-lived storage.
+Requests may pass a Cursor API key with bearer authentication. If omitted, the service uses `CURSOR_API_KEY`. Do not put user keys in logs or long-lived storage.
 
 ## SDK Session Example
 
 ```bash
 curl http://localhost:8787/sdk/sessions \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer YOUR_CURSOR_API_KEY' \
+  --oauth2-bearer "$CURSOR_API_KEY" \
   -d '{
     "prompt": "Create an implementation plan for the failing tests.",
     "intent": "plan",
@@ -113,7 +116,7 @@ The response includes `sessionId`, `agentId`, `runId`, `sessionEventsURL`, and `
 ```bash
 curl http://localhost:8787/sdk/sessions/bc-example/messages \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer YOUR_CURSOR_API_KEY' \
+  --oauth2-bearer "$CURSOR_API_KEY" \
   -d '{
     "prompt": "Execute the approved plan.",
     "intent": "execute",

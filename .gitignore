@@ -25,9 +25,16 @@ orchestrator/dist/
 .asc/runs/
 .env
 .env.*
+.npmrc
 *.local.xcconfig
 Secrets.plist
 *.p8
+*.p12
+*.pem
+*.key
+*.cer
+*.mobileprovision
+*.provisionprofile
 
 # macOS
 .DS_Store
