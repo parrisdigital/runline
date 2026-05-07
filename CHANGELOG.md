@@ -21,6 +21,12 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Added `runline-bridge up --keep-awake`, backed by macOS `caffeinate`.
 - Added bridge health metadata for whether Keep Awake is active.
 
+## TestFlight Build 1.0 (14)
+
+- Uploaded the refined Cursor SDK onboarding and Keep Awake build to TestFlight.
+- Submitted and received approval for external TestFlight beta testing.
+- Includes the shorter native SDK onboarding pages, fixed bottom action bar, and Standard/Keep Awake bridge start option.
+
 ## runline-bridge 0.1.3
 
 - Published `runline-bridge@0.1.3` to npm.
