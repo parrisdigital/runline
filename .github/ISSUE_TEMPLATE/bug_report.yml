@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible Runline issue.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include Cursor API keys, bridge pairing tokens, Apple credentials, private repository contents, or other secrets.
+  - type: input
+    id: version
+    attributes:
+      label: App or bridge version
+      description: Include the TestFlight build number or `runline-bridge --version`.
+      placeholder: "Runline 1.0 (11), runline-bridge 0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Cloud Agent
+        - Cursor SDK with Runline Bridge
+        - Settings or onboarding
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open...\n2. Tap...\n3. See..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "iPhone/iPad model, iOS version, Mac version, Node version, network setup"
+    validations:
+      required: false

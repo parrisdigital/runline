@@ -1,0 +1,6 @@
+[allowlist]
+description = "Allow documentation placeholders that are intentionally non-secret."
+regexes = [
+  '''YOUR_CURSOR_API_KEY''',
+  '''your-cursor-key'''
+]
