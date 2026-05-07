@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import CursorMobile
+@testable import Runline
 
 final class CursorAPITests: XCTestCase {
     override func setUp() {
@@ -517,7 +517,7 @@ final class CursorAPITests: XCTestCase {
                 "",
                 "id: evt-tool",
                 "event: interaction_update",
-                #"data: {"type":"tool-call-started","callId":"call-1","toolCall":{"name":"read_file","args":{"path":"CursorMobile/App/AppState.swift"}}}"#,
+                #"data: {"type":"tool-call-started","callId":"call-1","toolCall":{"name":"read_file","args":{"path":"Runline/App/AppState.swift"}}}"#,
                 "",
             ].joined(separator: "\n")
             return HTTPResponse(
@@ -732,7 +732,7 @@ final class CursorAPITests: XCTestCase {
     }
 
     func testPushPayloadUsesDeepLinksWithoutPromptText() throws {
-        let payload = CursorMobilePushPayload(
+        let payload = RunlinePushPayload(
             event: .runFinished,
             agentID: "agent_123",
             runID: "run_123",

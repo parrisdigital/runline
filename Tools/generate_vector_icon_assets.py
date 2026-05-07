@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_ICON_DIR = ROOT / "CursorMobile/Resources/Assets.xcassets/AppIcon.appiconset"
+APP_ICON_DIR = ROOT / "Runline/Resources/Assets.xcassets/AppIcon.appiconset"
 DESIGN_DIR = ROOT / "DesignAssets"
 
 

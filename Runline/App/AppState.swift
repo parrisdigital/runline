@@ -1117,7 +1117,7 @@ final class AppState {
     }
 
     func handleDeepLink(_ url: URL) {
-        guard let deepLink = CursorMobileDeepLink(url: url) else { return }
+        guard let deepLink = RunlineDeepLink(url: url) else { return }
         switch deepLink {
         case .agent(let agentID):
             focusedAgentID = agentID

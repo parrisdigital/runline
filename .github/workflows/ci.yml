@@ -34,6 +34,6 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: xcodebuild -list -project CursorMobile.xcodeproj
+      - run: xcodebuild -list -project Runline.xcodeproj
       - run: ruby -c Tools/set_build_number.rb
-      - run: plutil -lint ExportOptions-AppStore.plist ExportOptions-TestFlightUpload.plist CursorMobile/Resources/Info.plist CursorMobile/Resources/PrivacyInfo.xcprivacy CursorMobile/Resources/CursorMobile.entitlements
+      - run: plutil -lint ExportOptions-AppStore.plist ExportOptions-TestFlightUpload.plist Runline/Resources/Info.plist Runline/Resources/PrivacyInfo.xcprivacy Runline/Resources/Runline.entitlements

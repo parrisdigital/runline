@@ -14,7 +14,7 @@ struct DeviceTokenRegistration: Codable, Equatable, Hashable {
     var updatedAt: Date
 }
 
-enum CursorMobilePushEventKind: String, Codable, Equatable, Hashable {
+enum RunlinePushEventKind: String, Codable, Equatable, Hashable {
     case runStarted
     case runFinished
     case runFailed
@@ -22,8 +22,8 @@ enum CursorMobilePushEventKind: String, Codable, Equatable, Hashable {
     case pullRequestCreated
 }
 
-struct CursorMobilePushPayload: Codable, Equatable, Hashable {
-    var event: CursorMobilePushEventKind
+struct RunlinePushPayload: Codable, Equatable, Hashable {
+    var event: RunlinePushEventKind
     var agentID: Agent.ID
     var runID: AgentRun.ID?
     var artifactPath: String?
@@ -31,7 +31,7 @@ struct CursorMobilePushPayload: Codable, Equatable, Hashable {
     var deepLinkURL: URL
 
     init(
-        event: CursorMobilePushEventKind,
+        event: RunlinePushEventKind,
         agentID: Agent.ID,
         runID: AgentRun.ID? = nil,
         artifactPath: String? = nil,

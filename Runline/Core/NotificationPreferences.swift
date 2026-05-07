@@ -8,7 +8,7 @@ struct NotificationPreferences: Codable, Equatable, Hashable {
     var pullRequestCreated = true
 }
 
-enum CursorMobileDeepLink: Equatable, Hashable {
+enum RunlineDeepLink: Equatable, Hashable {
     case agent(Agent.ID)
     case run(agentID: Agent.ID, runID: AgentRun.ID)
 

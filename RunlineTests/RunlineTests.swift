@@ -1,8 +1,8 @@
 import SwiftUI
 import XCTest
-@testable import CursorMobile
+@testable import Runline
 
-final class CursorMobileTests: XCTestCase {
+final class RunlineTests: XCTestCase {
     @MainActor
     func testMockProviderLaunchCreatesAgentAndRun() async throws {
         let provider = MockAgentProvider()

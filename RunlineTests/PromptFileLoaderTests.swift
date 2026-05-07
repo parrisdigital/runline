@@ -1,5 +1,5 @@
 import XCTest
-@testable import CursorMobile
+@testable import Runline
 
 final class PromptFileLoaderTests: XCTestCase {
     func testLoadsUTF8TextFilesAndSkipsBinaryFiles() throws {

@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import CursorMobile
+@testable import Runline
 
 final class SDKBridgeClientTests: XCTestCase {
     override func setUp() {

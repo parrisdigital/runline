@@ -15,10 +15,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "27600BF9BD434A798C02A274"
-               BuildableName = "CursorMobile.app"
-               BlueprintName = "CursorMobile"
-               ReferencedContainer = "container:CursorMobile.xcodeproj">
+               BlueprintIdentifier = "74FFFF01E4D90A2D3C8516CA"
+               BuildableName = "Runline.app"
+               BlueprintName = "Runline"
+               ReferencedContainer = "container:Runline.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -29,10 +29,10 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "87C0821E27F14F4143BBE8FA"
-               BuildableName = "CursorMobileTests.xctest"
-               BlueprintName = "CursorMobileTests"
-               ReferencedContainer = "container:CursorMobile.xcodeproj">
+               BlueprintIdentifier = "1100C23B22C1F9A4D15BDF36"
+               BuildableName = "RunlineTests.xctest"
+               BlueprintName = "RunlineTests"
+               ReferencedContainer = "container:Runline.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,10 +46,10 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "27600BF9BD434A798C02A274"
-            BuildableName = "CursorMobile.app"
-            BlueprintName = "CursorMobile"
-            ReferencedContainer = "container:CursorMobile.xcodeproj">
+            BlueprintIdentifier = "74FFFF01E4D90A2D3C8516CA"
+            BuildableName = "Runline.app"
+            BlueprintName = "Runline"
+            ReferencedContainer = "container:Runline.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -58,10 +58,10 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "87C0821E27F14F4143BBE8FA"
-               BuildableName = "CursorMobileTests.xctest"
-               BlueprintName = "CursorMobileTests"
-               ReferencedContainer = "container:CursorMobile.xcodeproj">
+               BlueprintIdentifier = "1100C23B22C1F9A4D15BDF36"
+               BuildableName = "RunlineTests.xctest"
+               BlueprintName = "RunlineTests"
+               ReferencedContainer = "container:Runline.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -82,10 +82,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "27600BF9BD434A798C02A274"
-            BuildableName = "CursorMobile.app"
-            BlueprintName = "CursorMobile"
-            ReferencedContainer = "container:CursorMobile.xcodeproj">
+            BlueprintIdentifier = "74FFFF01E4D90A2D3C8516CA"
+            BuildableName = "Runline.app"
+            BlueprintName = "Runline"
+            ReferencedContainer = "container:Runline.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>
@@ -101,10 +101,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "27600BF9BD434A798C02A274"
-            BuildableName = "CursorMobile.app"
-            BlueprintName = "CursorMobile"
-            ReferencedContainer = "container:CursorMobile.xcodeproj">
+            BlueprintIdentifier = "74FFFF01E4D90A2D3C8516CA"
+            BuildableName = "Runline.app"
+            BlueprintName = "Runline"
+            ReferencedContainer = "container:Runline.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

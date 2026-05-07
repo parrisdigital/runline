@@ -1,17 +1,17 @@
 {
   "name": "runline-bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local Mac bridge for Runline Cursor SDK sessions.",
   "license": "MIT",
   "type": "module",
-  "homepage": "https://github.com/parrisdigital/cursor_mobile#readme",
+  "homepage": "https://github.com/parrisdigital/runline#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/parrisdigital/cursor_mobile.git",
+    "url": "git+https://github.com/parrisdigital/runline.git",
     "directory": "orchestrator"
   },
   "bugs": {
-    "url": "https://github.com/parrisdigital/cursor_mobile/issues"
+    "url": "https://github.com/parrisdigital/runline/issues"
   },
   "keywords": [
     "cursor",

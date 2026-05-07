@@ -1,5 +1,5 @@
 import XCTest
-@testable import CursorMobile
+@testable import Runline
 
 final class ChatTimelineBuilderTests: XCTestCase {
     func testCoalescesThinkingDeltasAndCompletion() {

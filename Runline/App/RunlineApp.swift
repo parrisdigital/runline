@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-final class CursorMobileAppDelegate: NSObject, UIApplicationDelegate {
+final class RunlineAppDelegate: NSObject, UIApplicationDelegate {
     weak var appState: AppState?
 
     func application(
@@ -24,8 +24,8 @@ final class CursorMobileAppDelegate: NSObject, UIApplicationDelegate {
 }
 
 @main
-struct CursorMobileApp: App {
-    @UIApplicationDelegateAdaptor(CursorMobileAppDelegate.self) private var appDelegate
+struct RunlineApp: App {
+    @UIApplicationDelegateAdaptor(RunlineAppDelegate.self) private var appDelegate
     @AppStorage("appearance.mode") private var appearanceMode = AppAppearanceMode.system.rawValue
     @State private var appState = Self.makeAppState()
 

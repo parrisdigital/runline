@@ -8,7 +8,7 @@ struct WelcomeView: View {
     var body: some View {
         GeometryReader { geometry in
             VStack(alignment: .leading, spacing: 0) {
-                CursorMobileLogoMarkView()
+                RunlineLogoMarkView()
                     .frame(width: 56, height: 56)
                     .padding(.horizontal, 24)
                     .padding(.top, 28)
@@ -94,12 +94,12 @@ struct WelcomeView: View {
     }
 }
 
-private struct CursorMobileLogoMarkView: View {
+private struct RunlineLogoMarkView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
-            CursorMobileChevronShape()
+            RunlineChevronShape()
                 .stroke(
                     colorScheme == .dark ? Color(red: 0.35, green: 0.56, blue: 1.0) : Color(red: 0.07, green: 0.08, blue: 0.10),
                     style: StrokeStyle(lineWidth: 8.25, lineCap: .round, lineJoin: .round)
@@ -114,7 +114,7 @@ private struct CursorMobileLogoMarkView: View {
     }
 }
 
-private struct CursorMobileChevronShape: Shape {
+private struct RunlineChevronShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX + rect.width * 0.32, y: rect.minY + rect.height * 0.27))

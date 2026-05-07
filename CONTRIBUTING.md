@@ -30,8 +30,8 @@ Run iOS tests:
 
 ```bash
 xcodebuild test \
-  -project CursorMobile.xcodeproj \
-  -scheme CursorMobile \
+  -project Runline.xcodeproj \
+  -scheme Runline \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1'
 ```
 

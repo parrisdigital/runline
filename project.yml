@@ -1,4 +1,4 @@
-name: CursorMobile
+name: Runline
 
 options:
   bundleIdPrefix: com.matthewparris
@@ -14,14 +14,14 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
 targets:
-  CursorMobile:
+  Runline:
     type: application
     platform: iOS
     deploymentTarget: "26.0"
     sources:
-      - path: CursorMobile
+      - path: Runline
     info:
-      path: CursorMobile/Resources/Info.plist
+      path: Runline/Resources/Info.plist
       properties:
         CFBundleDisplayName: Runline
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -46,36 +46,36 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.matthewparris.runline
-        PRODUCT_NAME: CursorMobile
+        PRODUCT_NAME: Runline
         DEVELOPMENT_TEAM: 5RAN7S95SJ
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_ENTITLEMENTS: CursorMobile/Resources/CursorMobile.entitlements
+        CODE_SIGN_ENTITLEMENTS: Runline/Resources/Runline.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"
 
-  CursorMobileTests:
+  RunlineTests:
     type: bundle.unit-test
     platform: iOS
     deploymentTarget: "26.0"
     sources:
-      - path: CursorMobileTests
+      - path: RunlineTests
     dependencies:
-      - target: CursorMobile
+      - target: Runline
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.matthewparris.runline.tests
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
-  CursorMobile:
+  Runline:
     build:
       targets:
-        CursorMobile: all
-        CursorMobileTests: [test]
+        Runline: all
+        RunlineTests: [test]
     test:
       config: Debug
       targets:
-        - CursorMobileTests
+        - RunlineTests
     run:
       config: Debug
