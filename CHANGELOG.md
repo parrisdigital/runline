@@ -10,6 +10,7 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Continue refining Cursor SDK mode and Runline Bridge pairing for power users.
 - Improve iPhone and iPad polish while staying native to SwiftUI and iOS system patterns.
 - Added public self-hosting, bridge setup, trademark, environment example, and coding-agent guidance.
+- Refined post-API-key onboarding with an inline Cursor SDK bridge setup, pairing, and connection check flow.
 
 ## Runline Public Beta
 

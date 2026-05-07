@@ -262,6 +262,11 @@ struct SettingsFormContent: View {
                     didChooseDefaultRunMode = true
                     appState.applyDefaultRunMode(.cloudAgent)
                 },
+                onUseSDK: {
+                    defaultRunModeRawValue = AgentRunMode.sdkBridge.rawValue
+                    didChooseDefaultRunMode = true
+                    appState.applyDefaultRunMode(.sdkBridge)
+                },
                 onOpenSettings: {
                     isSDKBridgeEnabled = true
                     appState.syncSDKBridgeConfiguration(resetConnection: true)

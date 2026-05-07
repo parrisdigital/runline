@@ -70,6 +70,8 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.last, .connect)
         XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "npm install -g runline-bridge")
         XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "CURSOR_API_KEY=your-cursor-key runline-bridge up")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.connect.title, "Pair and verify")
+        XCTAssertTrue(RunlineBridgeOnboardingStep.connect.subtitle.contains("verify"))
         XCTAssertNil(RunlineBridgeOnboardingStep.connect.command)
     }
 

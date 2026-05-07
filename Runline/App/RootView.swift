@@ -121,6 +121,10 @@ private struct WorkflowModeChooserSheet: View {
                     choose(.cloudAgent)
                     dismiss()
                 },
+                onUseSDK: {
+                    choose(.sdkBridge)
+                    dismiss()
+                },
                 onOpenSettings: {
                     SDKBridgePreferences.setEnabled(true)
                     appState.syncSDKBridgeConfiguration(resetConnection: true)

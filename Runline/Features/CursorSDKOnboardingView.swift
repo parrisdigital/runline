@@ -67,7 +67,7 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .start:
             "Start the bridge"
         case .connect:
-            "Connect Runline"
+            "Pair and verify"
         }
     }
 
@@ -80,7 +80,7 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .start:
             "Start the bridge on your Mac. For iPhone testing, use your Mac LAN address instead of localhost."
         case .connect:
-            "Enable Cursor SDK in Settings, enter the bridge URL, start pairing, then type the code printed in your Mac terminal."
+            "Enter the bridge URL, pair with the code printed in your Mac terminal, then verify the connection before making Cursor SDK your default."
         }
     }
 
@@ -124,10 +124,15 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
 
 struct CursorSDKOnboardingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+    @AppStorage(SDKBridgePreferences.isEnabledKey) private var isSDKBridgeEnabled = SDKBridgePreferences.defaultIsEnabled
+    @AppStorage(SDKBridgePreferences.baseURLKey) private var sdkBridgeBaseURL = SDKBridgePreferences.defaultBaseURLString
     var onUseCloud: (() -> Void)?
+    var onUseSDK: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     @State private var selectedStep: RunlineBridgeOnboardingStep = .overview
     @State private var copiedStepID: RunlineBridgeOnboardingStep.ID?
+    @State private var pairingCode = ""
 
     var body: some View {
         NavigationStack {
@@ -136,7 +141,11 @@ struct CursorSDKOnboardingView: View {
                     ForEach(RunlineBridgeOnboardingStep.allCases) { step in
                         CursorSDKOnboardingPage(
                             step: step,
-                            copiedStepID: $copiedStepID
+                            copiedStepID: $copiedStepID,
+                            isSDKBridgeEnabled: $isSDKBridgeEnabled,
+                            sdkBridgeBaseURL: $sdkBridgeBaseURL,
+                            pairingCode: $pairingCode,
+                            openSettings: openSettings
                         )
                         .tag(step)
                     }
@@ -150,6 +159,7 @@ struct CursorSDKOnboardingView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
+                    .disabled(isPrimaryButtonDisabled)
 
                     Button("Use Cloud Agent for Now") {
                         onUseCloud?()
@@ -171,10 +181,25 @@ struct CursorSDKOnboardingView: View {
                 }
             }
         }
+        .onChange(of: isSDKBridgeEnabled) { _, _ in
+            appState.syncSDKBridgeConfiguration(resetConnection: true)
+        }
+        .onChange(of: sdkBridgeBaseURL) { _, _ in
+            appState.syncSDKBridgeConfiguration(resetConnection: true)
+        }
+        .onChange(of: appState.sdkBridgePairingState) { _, state in
+            if case .paired = state {
+                pairingCode = ""
+            }
+        }
     }
 
     private var primaryButtonTitle: String {
-        selectedStep == .connect ? "Open Bridge Settings" : "Continue"
+        selectedStep == .connect ? "Use Cursor SDK" : "Continue"
+    }
+
+    private var isPrimaryButtonDisabled: Bool {
+        selectedStep == .connect && !appState.isSDKBridgeReadyForLaunch
     }
 
     private func handlePrimaryAction() {
@@ -182,7 +207,8 @@ struct CursorSDKOnboardingView: View {
             advance()
             return
         }
-        onOpenSettings?()
+        guard appState.isSDKBridgeReadyForLaunch else { return }
+        onUseSDK?()
         dismiss()
     }
 
@@ -200,11 +226,20 @@ struct CursorSDKOnboardingView: View {
             selectedStep = .connect
         }
     }
+
+    private func openSettings() {
+        onOpenSettings?()
+        dismiss()
+    }
 }
 
 private struct CursorSDKOnboardingPage: View {
     var step: RunlineBridgeOnboardingStep
     @Binding var copiedStepID: RunlineBridgeOnboardingStep.ID?
+    @Binding var isSDKBridgeEnabled: Bool
+    @Binding var sdkBridgeBaseURL: String
+    @Binding var pairingCode: String
+    var openSettings: () -> Void
 
     var body: some View {
         ScrollView {
@@ -235,6 +270,15 @@ private struct CursorSDKOnboardingPage: View {
                     CursorSDKBenefitsList()
                 }
 
+                if step == .connect {
+                    CursorSDKBridgeSetupPanel(
+                        isSDKBridgeEnabled: $isSDKBridgeEnabled,
+                        sdkBridgeBaseURL: $sdkBridgeBaseURL,
+                        pairingCode: $pairingCode,
+                        openSettings: openSettings
+                    )
+                }
+
                 if let command = step.command {
                     CommandCopyRow(
                         command: command,
@@ -262,6 +306,249 @@ private struct CursorSDKOnboardingPage: View {
             .padding(.bottom, 96)
         }
         .background(Color(uiColor: .systemGroupedBackground))
+    }
+}
+
+private struct CursorSDKBridgeSetupPanel: View {
+    @Environment(AppState.self) private var appState
+    @Binding var isSDKBridgeEnabled: Bool
+    @Binding var sdkBridgeBaseURL: String
+    @Binding var pairingCode: String
+    var openSettings: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Toggle("Enable Runline Bridge", isOn: $isSDKBridgeEnabled)
+                .padding(.vertical, 12)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Bridge URL")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                TextField("http://192.168.1.10:8787", text: $sdkBridgeBaseURL)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .disabled(!isSDKBridgeEnabled)
+                    .accessibilityIdentifier("sdkOnboarding.bridgeURL")
+
+                if let loopbackHelp = SDKBridgePreferences.deviceLoopbackHelp(for: SDKBridgePreferences.baseURL(from: sdkBridgeBaseURL)) {
+                    Text(loopbackHelp)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, 12)
+
+            Divider()
+
+            statusRows
+
+            Divider()
+
+            setupActions
+                .padding(.vertical, 12)
+        }
+        .padding(.horizontal, 16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onAppear {
+            if !isSDKBridgeEnabled {
+                isSDKBridgeEnabled = true
+            }
+            appState.syncSDKBridgeConfiguration(resetConnection: false)
+        }
+    }
+
+    private var statusRows: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Text("Status")
+                Spacer()
+                Label(bridgeConnectionTitle, systemImage: bridgeConnectionSystemImage)
+                    .foregroundStyle(bridgeConnectionTint)
+                    .labelStyle(.titleAndIcon)
+                    .multilineTextAlignment(.trailing)
+            }
+
+            HStack(spacing: 12) {
+                Text("Pairing")
+                Spacer()
+                Text(appState.isSDKBridgePaired ? "Paired" : "Not Paired")
+                    .foregroundStyle(appState.isSDKBridgePaired ? .green : .secondary)
+            }
+
+            if let readiness = appState.sdkBridgeReadinessIssue {
+                Text(readiness)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Label("Cursor SDK is ready.", systemImage: "checkmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.green)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .font(.subheadline)
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder
+    private var setupActions: some View {
+        if appState.isSDKBridgeReadyForLaunch {
+            Button {
+                Task {
+                    await appState.checkSDKBridgeConnection()
+                }
+            } label: {
+                Label("Recheck Connection", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+        } else if appState.isSDKBridgePaired {
+            Button {
+                Task {
+                    await appState.checkSDKBridgeConnection()
+                }
+            } label: {
+                if appState.sdkBridgeConnectionState == .checking {
+                    ProgressView()
+                } else {
+                    Label("Check Connection", systemImage: "network")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(appState.sdkBridgeConnectionState == .checking)
+        } else {
+            Button {
+                Task {
+                    await startPairing()
+                }
+            } label: {
+                if appState.sdkBridgePairingState == .starting {
+                    ProgressView()
+                } else {
+                    Label("Start Pairing", systemImage: "link.badge.plus")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!isSDKBridgeEnabled || appState.sdkBridgePairingState == .starting || appState.sdkBridgePairingState == .completing)
+
+            if case .waiting = appState.sdkBridgePairingState {
+                TextField("Pairing Code", text: $pairingCode)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("sdkOnboarding.pairingCode")
+
+                Button {
+                    Task {
+                        await completePairing()
+                    }
+                } label: {
+                    if appState.sdkBridgePairingState == .completing {
+                        ProgressView()
+                    } else {
+                        Label("Complete Pairing", systemImage: "checkmark.circle")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || appState.sdkBridgePairingState == .completing)
+            }
+
+            if let pairingDetail {
+                Text(pairingDetail)
+                    .font(.footnote)
+                    .foregroundStyle(pairingDetailIsError ? .red : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+
+        Button("Open Full Settings") {
+            openSettings()
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private var bridgeConnectionTitle: String {
+        switch appState.sdkBridgeConnectionState {
+        case .disabled:
+            "Disabled"
+        case .unchecked:
+            "Needs Check"
+        case .checking:
+            "Checking"
+        case .connected:
+            "Connected"
+        case .failed:
+            "Unavailable"
+        }
+    }
+
+    private var bridgeConnectionSystemImage: String {
+        switch appState.sdkBridgeConnectionState {
+        case .disabled, .unchecked:
+            "circle"
+        case .checking:
+            "clock"
+        case .connected:
+            "checkmark.circle"
+        case .failed:
+            "exclamationmark.circle"
+        }
+    }
+
+    private var bridgeConnectionTint: Color {
+        switch appState.sdkBridgeConnectionState {
+        case .connected:
+            .green
+        case .failed:
+            .red
+        case .checking, .disabled, .unchecked:
+            .secondary
+        }
+    }
+
+    private var pairingDetail: String? {
+        switch appState.sdkBridgePairingState {
+        case .idle:
+            "Start pairing, then enter the code printed in the Runline Bridge terminal."
+        case .starting:
+            "Starting a pairing session..."
+        case .waiting(_, let expiresAt, let message):
+            [message, expiresAt.map { "Expires at \($0)." }]
+                .compactMap { $0 }
+                .joined(separator: " ")
+        case .completing:
+            "Completing pairing..."
+        case .paired(let name):
+            "Paired with \(name)."
+        case .failed(let message):
+            message
+        }
+    }
+
+    private var pairingDetailIsError: Bool {
+        if case .failed = appState.sdkBridgePairingState {
+            return true
+        }
+        return false
+    }
+
+    private func startPairing() async {
+        if !isSDKBridgeEnabled {
+            isSDKBridgeEnabled = true
+        }
+        pairingCode = ""
+        await appState.startSDKBridgePairing()
+    }
+
+    private func completePairing() async {
+        await appState.completeSDKBridgePairing(code: pairingCode)
     }
 }
 

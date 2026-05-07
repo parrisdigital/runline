@@ -290,6 +290,9 @@ struct NewChatForm: View {
                 onUseCloud: {
                     appState.launchDraft.runMode = .cloudAgent
                 },
+                onUseSDK: {
+                    appState.launchDraft.runMode = .sdkBridge
+                },
                 onOpenSettings: {
                     appState.launchDraft.runMode = .cloudAgent
                     appState.selectedTab = .settings
