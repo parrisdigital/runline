@@ -24,6 +24,7 @@ Run bridge checks:
 ```bash
 npm --prefix orchestrator run typecheck
 npm --prefix orchestrator run build
+npm --prefix orchestrator audit --audit-level=high
 ```
 
 Run iOS tests:
@@ -42,7 +43,8 @@ xcodebuild test \
 - Keep Cursor SDK mode optional and clearly labeled as requiring Runline Bridge.
 - Add or update tests for behavior changes.
 - Do not commit generated archives, IPAs, derived data, local ASC artifacts, npm tokens, Apple signing material, API keys, or private repository data.
-- Run `git diff --check`, bridge typecheck/build, and relevant iOS tests before opening a PR.
+- Run `git diff --check`, bridge typecheck/build/audit, and relevant iOS tests before opening a PR.
+- For release process changes, update [docs/RELEASES.md](docs/RELEASES.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Security
 

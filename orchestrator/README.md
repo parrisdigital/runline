@@ -1,6 +1,12 @@
 # Runline Bridge
 
-Runline Bridge is the optional Mac-side CLI for Cursor SDK workflows. The iOS app does not depend on this service for the core Cloud Agent path; Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
+Runline Bridge is the optional Mac-side CLI for Cursor SDK workflows in [Runline for Cursor](https://github.com/parrisdigital/runline).
+
+The iOS app does not depend on this service for the core Cloud Agent path. Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
+
+Current npm package: `runline-bridge@0.1.2`.
+
+Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 
 Use this service only for work that benefits from `@cursor/sdk`:
 
@@ -13,12 +19,18 @@ Use this service only for work that benefits from `@cursor/sdk`:
 ## Install
 
 ```bash
-npm install -g runline-bridge@beta
+npm install -g runline-bridge
 export CURSOR_API_KEY="replace-with-your-cursor-key"
 runline-bridge up
 ```
 
 Only install Runline Bridge if you want Cursor SDK mode. Cloud Agent mode in the iOS app works without this package.
+
+Check the installed version:
+
+```bash
+runline-bridge --version
+```
 
 ## Run From This Repo
 
@@ -91,6 +103,25 @@ export RUNLINE_SDK_MCP_PROFILES='[
 - `GET /agents/:agentId/runs/:runId/events`
 
 Requests may pass a Cursor API key with bearer authentication. If omitted, the service uses `CURSOR_API_KEY`. Do not put user keys in logs or long-lived storage.
+
+## Package Checks
+
+Run these before publishing:
+
+```bash
+npm run typecheck
+npm run build
+npm audit --audit-level=high
+npm pack --dry-run
+```
+
+Publish from `orchestrator/`:
+
+```bash
+npm version patch --no-git-tag-version
+npm publish --tag beta
+npm dist-tag add runline-bridge@<version> latest
+```
 
 ## SDK Session Example
 

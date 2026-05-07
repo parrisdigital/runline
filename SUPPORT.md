@@ -13,6 +13,8 @@ Open a GitHub issue for:
 
 Include the app build number, iOS version, device type, bridge version, and clear reproduction steps when relevant.
 
+For Cursor SDK mode, also include whether the bridge is local LAN, Simulator localhost, or hosted HTTPS. Do not include pairing tokens, API keys, terminal environment dumps, or private repository contents.
+
 ## Security Issues
 
 Do not open public issues for security reports. Use [SECURITY.md](SECURITY.md).
