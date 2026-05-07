@@ -1,12 +1,25 @@
 {
-  "name": "runline-orchestrator",
+  "name": "runline-bridge",
   "version": "0.1.0",
-  "private": true,
+  "description": "Local Mac bridge for Runline Cursor SDK sessions.",
   "type": "module",
+  "bin": {
+    "runline-bridge": "./bin/runline-bridge.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "bridge": "tsx src/server.ts",
+    "build": "tsc",
+    "bridge": "node dist/server.js",
     "dev": "tsx src/server.ts",
+    "prepack": "npm run build",
     "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "tag": "beta"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.11"
@@ -17,6 +30,6 @@
     "typescript": "^5.8.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   }
 }

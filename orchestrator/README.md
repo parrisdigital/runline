@@ -1,6 +1,6 @@
-# Runline Orchestrator
+# Runline Bridge
 
-This is an optional TypeScript backend for Cursor SDK-only workflows. The iOS app does not depend on this service for the core Cloud Agent path; Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
+Runline Bridge is the optional Mac-side CLI for Cursor SDK workflows. The iOS app does not depend on this service for the core Cloud Agent path; Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
 
 Use this service only for work that benefits from `@cursor/sdk`:
 
@@ -10,15 +10,23 @@ Use this service only for work that benefits from `@cursor/sdk`:
 - Service-account workflows for teams.
 - Future automation or APNs backend jobs that should not run in the iOS app.
 
-## Run Locally
+## Install
+
+```bash
+npm install -g runline-bridge@beta
+CURSOR_API_KEY=your-cursor-key runline-bridge up
+```
+
+Only install Runline Bridge if you want Cursor SDK mode. Cloud Agent mode in the iOS app works without this package.
+
+## Run From This Repo
 
 ```bash
 cd orchestrator
 npm install
-CURSOR_API_KEY=your-cursor-key npm run dev
+npm run build
+CURSOR_API_KEY=your-cursor-key npm run bridge
 ```
-
-`npm run bridge` is an alias for the same local bridge process and is the command shown in the iOS Cursor SDK setup flow.
 
 For Simulator testing, `http://localhost:8787` is usually enough. For a physical iPhone or TestFlight build on the same Wi-Fi network, use your Mac's LAN address instead:
 
@@ -37,7 +45,7 @@ Runline Bridge requires a local pairing token by default. In the iOS app, open S
 For local development only, you can disable pairing:
 
 ```bash
-RUNLINE_BRIDGE_DISABLE_PAIRING=true CURSOR_API_KEY=your-cursor-key npm run bridge
+RUNLINE_BRIDGE_DISABLE_PAIRING=true CURSOR_API_KEY=your-cursor-key runline-bridge up
 ```
 
 ## MCP Profiles
