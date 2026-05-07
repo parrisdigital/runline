@@ -101,15 +101,31 @@ struct NewChatForm: View {
 
                     if let selectedProfile = selectedSDKProfile {
                         LabeledContent("Profile", value: selectedProfile.summary)
+                        LabeledContent("MCP Servers", value: "\(selectedProfile.mcpServers.count)")
+                        LabeledContent("Subagents", value: "\(selectedProfile.subagents.count)")
+                        LabeledContent("Skills", value: "\(selectedProfile.skills.count)")
+                        LabeledContent("Hooks", value: "\(selectedProfile.hooks.count)")
                         if let description = selectedProfile.description {
                             Text(description)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
+
+                        NavigationLink {
+                            SDKBridgeProfileDetailView(profile: selectedProfile)
+                        } label: {
+                            Label("Profile Details", systemImage: "wrench.and.screwdriver")
+                        }
                     } else if appState.sdkBridgeProfiles.isEmpty {
                         Text("No bridge profiles are published. Add MCP or subagent profiles on Runline Bridge to make them available here.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                    } else {
+                        NavigationLink {
+                            SDKToolsView()
+                        } label: {
+                            Label("Browse SDK Tools", systemImage: "wrench.and.screwdriver")
+                        }
                     }
                 }
             }

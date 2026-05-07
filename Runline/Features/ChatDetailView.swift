@@ -22,6 +22,7 @@ struct ChatDetailView: View {
     @State private var isLoadingFollowUpFiles = false
     @State private var followUpFileImportMessage: String?
     @State private var isArtifactsPresented = false
+    @State private var isSDKToolsPresented = false
     @State private var sdkMessageIntent: SDKMessageIntent = .continueConversation
     @State private var selectedSDKModelID: String?
     @State private var selectedSDKMCPProfileID: String?
@@ -39,6 +40,12 @@ struct ChatDetailView: View {
                 LabeledContent("Model", value: currentAgent.modelID)
                 if let profile = appState.sdkBridgeProfile(for: currentAgent) {
                     LabeledContent("SDK Profile", value: profile.name)
+                    LabeledContent("SDK Tools", value: profile.summary)
+                    NavigationLink {
+                        SDKBridgeProfileDetailView(profile: profile)
+                    } label: {
+                        Label("View SDK Profile", systemImage: "wrench.and.screwdriver")
+                    }
                 }
                 if let latestRun {
                     LabeledContent("Run", value: latestRun.id)
@@ -116,6 +123,14 @@ struct ChatDetailView: View {
                         Label("Artifacts", systemImage: "tray.full")
                     }
 
+                    if appState.isSDKBridgeAgent(currentAgent) {
+                        Button {
+                            isSDKToolsPresented = true
+                        } label: {
+                            Label("SDK Tools", systemImage: "wrench.and.screwdriver")
+                        }
+                    }
+
                     if let url = currentAgent.pullRequestURL {
                         Button {
                             openURL(url)
@@ -180,6 +195,15 @@ struct ChatDetailView: View {
         }
         .sheet(isPresented: $isArtifactsPresented) {
             ArtifactsSheet(agent: currentAgent)
+        }
+        .sheet(isPresented: $isSDKToolsPresented) {
+            NavigationStack {
+                if let profile = appState.sdkBridgeProfile(for: appState.agent(id: currentAgent.id) ?? currentAgent) {
+                    SDKBridgeProfileDetailView(profile: profile)
+                } else {
+                    SDKToolsView()
+                }
+            }
         }
         .fileImporter(
             isPresented: $isFollowUpFileImporterPresented,
@@ -321,6 +345,13 @@ struct ChatDetailView: View {
                     }
                 } label: {
                     Label(selectedSDKProfileTitle, systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    isSDKToolsPresented = true
+                } label: {
+                    Label("Tools", systemImage: "wrench.and.screwdriver")
                 }
                 .buttonStyle(.bordered)
 

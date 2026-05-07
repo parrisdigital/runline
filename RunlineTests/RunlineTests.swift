@@ -94,6 +94,102 @@ final class RunlineTests: XCTestCase {
         XCTAssertFalse(SDKMessageIntent.plan.symbolName.isEmpty)
     }
 
+    func testSDKBridgeProfileDecodesDetailedToolMetadata() throws {
+        let data = Data("""
+        {
+          "id": "github-tools",
+          "name": "GitHub Tools",
+          "description": "GitHub MCP plus review helpers.",
+          "mcpServerCount": 1,
+          "subagentCount": 1,
+          "mcpServers": [
+            {
+              "id": "github",
+              "name": "github",
+              "transport": "stdio",
+              "command": "npx -y @modelcontextprotocol/server-github",
+              "hasAuth": true,
+              "environmentKeys": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+              "toolHints": [
+                {
+                  "id": "github-prs",
+                  "name": "Pull requests",
+                  "description": "Review pull request context.",
+                  "server": "github"
+                }
+              ]
+            }
+          ],
+          "subagents": [
+            {
+              "id": "reviewer",
+              "name": "reviewer",
+              "description": "Reviews implementation risk.",
+              "promptPreview": "Review implementation risk and missing tests.",
+              "modelID": "inherit",
+              "mcpServerNames": ["github"]
+            }
+          ],
+          "skills": [
+            {
+              "id": "review-checklist",
+              "name": "Review checklist",
+              "description": "Apply project review criteria.",
+              "source": ".cursor/skills/review-checklist",
+              "enabled": true
+            }
+          ],
+          "hooks": [
+            {
+              "id": "preflight",
+              "name": "Preflight checks",
+              "event": "before_execute",
+              "command": "npm test",
+              "enabled": true
+            }
+          ],
+          "toolHints": [
+            {
+              "id": "github-prs",
+              "name": "Pull requests",
+              "description": "Review pull request context.",
+              "server": "github"
+            }
+          ]
+        }
+        """.utf8)
+
+        let profile = try JSONDecoder().decode(SDKBridgeMCPProfile.self, from: data)
+
+        XCTAssertEqual(profile.summary, "1 MCP / 1 subagent / 1 skill / 1 hook / 1 tool")
+        XCTAssertTrue(profile.hasDetailedMetadata)
+        XCTAssertEqual(profile.mcpServers.first?.name, "github")
+        XCTAssertEqual(profile.mcpServers.first?.environmentKeys, ["GITHUB_PERSONAL_ACCESS_TOKEN"])
+        XCTAssertEqual(profile.subagents.first?.mcpServerNames, ["github"])
+        XCTAssertEqual(profile.skills.first?.source, ".cursor/skills/review-checklist")
+        XCTAssertEqual(profile.hooks.first?.event, "before_execute")
+        XCTAssertEqual(profile.toolHints.first?.server, "github")
+    }
+
+    func testSDKBridgeProfileDecodesLegacyMetadataWithoutDetails() throws {
+        let data = Data("""
+        {
+          "id": "basic",
+          "name": "Basic",
+          "mcpServerCount": 1,
+          "subagentCount": 0
+        }
+        """.utf8)
+
+        let profile = try JSONDecoder().decode(SDKBridgeMCPProfile.self, from: data)
+
+        XCTAssertEqual(profile.summary, "1 MCP")
+        XCTAssertFalse(profile.hasDetailedMetadata)
+        XCTAssertTrue(profile.mcpServers.isEmpty)
+        XCTAssertTrue(profile.skills.isEmpty)
+        XCTAssertTrue(profile.hooks.isEmpty)
+    }
+
     func testLaunchDraftDecodesLegacyCacheAsCloudAgentRunMode() throws {
         let draft = AgentLaunchDraft(
             prompt: AgentPrompt(text: "Build settings"),

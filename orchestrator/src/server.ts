@@ -45,6 +45,34 @@ type SDKMCPProfile = {
   description?: string;
   mcpServers?: Record<string, McpServerConfig>;
   agents?: unknown;
+  skills?: SDKSkill[];
+  hooks?: SDKHook[];
+  toolHints?: SDKToolHint[];
+  tools?: SDKToolHint[];
+};
+
+type SDKToolHint = {
+  id?: string;
+  name: string;
+  description?: string;
+  server?: string;
+};
+
+type SDKSkill = {
+  id?: string;
+  name: string;
+  description?: string;
+  source?: string;
+  enabled?: boolean;
+};
+
+type SDKHook = {
+  id?: string;
+  name: string;
+  event?: string;
+  command?: string;
+  description?: string;
+  enabled?: boolean;
 };
 
 type PairingSession = {
@@ -594,13 +622,167 @@ function publicMCPProfiles() {
 }
 
 function publicMCPProfile(profile: SDKMCPProfile) {
+  const toolHints = publicToolHints(profile);
+  const subagents = publicSubagents(profile);
+  const mcpServers = publicMCPServers(profile, toolHints);
   return {
     id: profile.id,
     name: profile.name,
     description: profile.description,
-    mcpServerCount: Object.keys(profile.mcpServers ?? {}).length,
-    subagentCount: profile.agents && typeof profile.agents === "object" ? Object.keys(profile.agents).length : 0,
+    mcpServerCount: mcpServers.length,
+    subagentCount: subagents.length,
+    mcpServers,
+    subagents,
+    skills: publicSkills(profile),
+    hooks: publicHooks(profile),
+    toolHints,
   };
+}
+
+function publicMCPServers(profile: SDKMCPProfile, toolHints: ReturnType<typeof publicToolHints>) {
+  return Object.entries(profile.mcpServers ?? {}).map(([id, config]) => {
+    const record = config as Record<string, unknown>;
+    const transport = serverTransport(record);
+    const relatedTools = toolHints.filter((tool) => tool.server === id);
+    return {
+      id,
+      name: id,
+      transport,
+      command: commandSummary(record),
+      url: typeof record.url === "string" ? record.url : undefined,
+      hasAuth: Boolean(record.auth || record.headers),
+      environmentKeys: objectKeys(record.env),
+      toolHints: relatedTools,
+    };
+  });
+}
+
+function publicSubagents(profile: SDKMCPProfile) {
+  const agents = profile.agents;
+  if (!agents || typeof agents !== "object" || Array.isArray(agents)) {
+    return [];
+  }
+
+  return Object.entries(agents as Record<string, Record<string, unknown>>).map(([id, agent]) => {
+    const description = typeof agent.description === "string" ? agent.description : undefined;
+    const prompt = typeof agent.prompt === "string" ? agent.prompt : undefined;
+    return {
+      id,
+      name: id,
+      description,
+      promptPreview: prompt ? compactPreview(prompt, 180) : undefined,
+      modelID: modelID(agent.model),
+      mcpServerNames: mcpServerNames(agent.mcpServers),
+    };
+  });
+}
+
+function publicSkills(profile: SDKMCPProfile) {
+  return arrayOfObjects(profile.skills).map((skill, index) => ({
+    id: stringOrDefault(skill.id, `skill-${index + 1}`),
+    name: stringOrDefault(skill.name, `Skill ${index + 1}`),
+    description: optionalString(skill.description),
+    source: optionalString(skill.source),
+    enabled: typeof skill.enabled === "boolean" ? skill.enabled : true,
+  }));
+}
+
+function publicHooks(profile: SDKMCPProfile) {
+  return arrayOfObjects(profile.hooks).map((hook, index) => ({
+    id: stringOrDefault(hook.id, `hook-${index + 1}`),
+    name: stringOrDefault(hook.name, `Hook ${index + 1}`),
+    event: stringOrDefault(hook.event, "unspecified"),
+    command: optionalString(hook.command),
+    description: optionalString(hook.description),
+    enabled: typeof hook.enabled === "boolean" ? hook.enabled : true,
+  }));
+}
+
+function publicToolHints(profile: SDKMCPProfile) {
+  const hints = profile.toolHints ?? profile.tools ?? [];
+  return arrayOfObjects(hints).map((tool, index) => ({
+    id: stringOrDefault(tool.id, `tool-${index + 1}`),
+    name: stringOrDefault(tool.name, `Tool ${index + 1}`),
+    description: optionalString(tool.description),
+    server: optionalString(tool.server),
+  }));
+}
+
+function serverTransport(record: Record<string, unknown>) {
+  const explicitType = typeof record.type === "string" ? record.type : undefined;
+  if (explicitType) {
+    return explicitType;
+  }
+  if (typeof record.url === "string") {
+    return "http";
+  }
+  return "stdio";
+}
+
+function commandSummary(record: Record<string, unknown>) {
+  const command = optionalString(record.command);
+  if (!command) {
+    return undefined;
+  }
+  const args = Array.isArray(record.args)
+    ? record.args.filter((arg): arg is string => typeof arg === "string")
+    : [];
+  return [command, ...args].join(" ");
+}
+
+function mcpServerNames(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    if (typeof entry === "string") {
+      return [entry];
+    }
+    if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+      return Object.keys(entry);
+    }
+    return [];
+  });
+}
+
+function modelID(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    return optionalString(record.id);
+  }
+  return undefined;
+}
+
+function compactPreview(value: string, maxLength: number) {
+  const compacted = value.replace(/\s+/g, " ").trim();
+  return compacted.length > maxLength ? `${compacted.slice(0, maxLength - 1)}…` : compacted;
+}
+
+function arrayOfObjects(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is Record<string, unknown> => {
+    return Boolean(item && typeof item === "object" && !Array.isArray(item));
+  });
+}
+
+function objectKeys(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+  return Object.keys(value);
+}
+
+function optionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function stringOrDefault(value: unknown, fallback: string) {
+  return optionalString(value) ?? fallback;
 }
 
 function mcpProfiles(): SDKMCPProfile[] {

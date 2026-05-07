@@ -4,7 +4,8 @@ Runline Bridge is the optional Mac-side CLI for Cursor SDK workflows in [Runline
 
 The iOS app does not depend on this service for the core Cloud Agent path. Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
 
-Current npm package: `runline-bridge@0.1.2`.
+Source package version: `runline-bridge@0.1.3`.
+Current published npm package: `runline-bridge@0.1.2` until the npm 2FA-gated publish completes.
 
 Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 
@@ -67,28 +68,66 @@ RUNLINE_BRIDGE_DISABLE_PAIRING=true runline-bridge up
 
 ## MCP Profiles
 
-Publish SDK tool profiles with `RUNLINE_SDK_MCP_PROFILES`. The value is a JSON array. Each profile is exposed to iOS as metadata only, while the private MCP/subagent config stays on the bridge.
+Publish SDK tool profiles with `RUNLINE_SDK_MCP_PROFILES`. The value is a JSON array. Each profile is exposed to iOS as selectable metadata, while private MCP credentials, command environments, hook scripts, and full subagent prompts stay on the bridge.
 
 ```bash
 export RUNLINE_SDK_MCP_PROFILES='[
   {
     "id": "github-tools",
     "name": "GitHub Tools",
-    "description": "GitHub MCP plus reviewer subagent.",
+    "description": "GitHub MCP plus reviewer subagent and project skills.",
     "mcpServers": {
       "github": {
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-github"]
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "from-your-shell"
+        }
       }
     },
+    "toolHints": [
+      {
+        "id": "github-prs",
+        "name": "Pull requests",
+        "description": "Read, create, and update pull request context.",
+        "server": "github"
+      }
+    ],
+    "skills": [
+      {
+        "id": "review-checklist",
+        "name": "Review checklist",
+        "description": "Apply project review criteria before execution.",
+        "source": ".cursor/skills/review-checklist"
+      }
+    ],
+    "hooks": [
+      {
+        "id": "preflight",
+        "name": "Preflight checks",
+        "event": "before_execute",
+        "command": "npm test"
+      }
+    ],
     "agents": {
       "reviewer": {
+        "description": "Checks implementation risk and missing tests.",
         "prompt": "Review implementation risk and missing tests."
       }
     }
   }
 ]'
 ```
+
+The iOS app displays profile details for:
+
+- MCP servers, transport, auth presence, environment key names, and tool hints.
+- Subagents, prompt previews, model inheritance, and server references.
+- Cursor skills published by the bridge.
+- Hooks published by the bridge.
+- Per-chat profile selection for new SDK sessions and follow-up messages.
+
+Runline does not currently edit bridge profile JSON from iOS. That is intentional for the beta: the bridge remains the source of truth for local commands and secrets.
 
 ## Endpoints
 

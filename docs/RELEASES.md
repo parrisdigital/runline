@@ -11,7 +11,7 @@ This document is the maintainer checklist for GitHub, npm, and TestFlight releas
 | iOS bundle ID | `com.matthewparris.runline` |
 | iOS marketing version | `1.0` |
 | Local project build number | `11` in `project.yml` |
-| npm package | `runline-bridge@0.1.2` |
+| npm package | `runline-bridge@0.1.2` published; `0.1.3` prepared in source |
 | npm dist-tags | `latest` -> `0.1.2`, `beta` -> `0.1.2` |
 | GitHub releases | Source beta `v1.0.0-beta.1`; historical TestFlight release `testflight-1.0-6` |
 

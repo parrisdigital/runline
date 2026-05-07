@@ -78,6 +78,12 @@ struct SettingsFormContent: View {
                     Label("Cursor SDK Setup", systemImage: "point.3.connected.trianglepath.dotted")
                 }
 
+                NavigationLink {
+                    SDKToolsView()
+                } label: {
+                    Label("SDK Tools", systemImage: "wrench.and.screwdriver")
+                }
+
                 Toggle("Enable Runline Bridge", isOn: $isSDKBridgeEnabled)
 
                 TextField("Bridge URL", text: $sdkBridgeBaseURL)

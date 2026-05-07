@@ -11,6 +11,12 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Improve iPhone and iPad polish while staying native to SwiftUI and iOS system patterns.
 - Added public self-hosting, bridge setup, trademark, environment example, and coding-agent guidance.
 - Refined post-API-key onboarding with an inline Cursor SDK bridge setup, pairing, and connection check flow.
+- Added a native SDK Tools experience for inspecting bridge-published MCP servers, tools, skills, hooks, and subagents from Settings, New Chat, and SDK chats.
+
+## runline-bridge 0.1.3
+
+- Prepared richer SDK profile metadata for MCP servers, tool hints, skills, hooks, and subagents.
+- Kept bridge-side MCP credentials, command environments, hook scripts, and full subagent prompts out of iOS metadata responses.
 
 ## Runline Public Beta
 

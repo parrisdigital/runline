@@ -258,6 +258,49 @@ struct SDKBridgeMCPProfile: Identifiable, Hashable, Codable {
     var description: String?
     var mcpServerCount: Int
     var subagentCount: Int
+    var mcpServers: [SDKBridgeMCPServer]
+    var subagents: [SDKBridgeSubagent]
+    var skills: [SDKBridgeSkill]
+    var hooks: [SDKBridgeHook]
+    var toolHints: [SDKBridgeToolHint]
+
+    init(
+        id: String,
+        name: String,
+        description: String? = nil,
+        mcpServerCount: Int,
+        subagentCount: Int,
+        mcpServers: [SDKBridgeMCPServer] = [],
+        subagents: [SDKBridgeSubagent] = [],
+        skills: [SDKBridgeSkill] = [],
+        hooks: [SDKBridgeHook] = [],
+        toolHints: [SDKBridgeToolHint] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.mcpServerCount = mcpServerCount
+        self.subagentCount = subagentCount
+        self.mcpServers = mcpServers
+        self.subagents = subagents
+        self.skills = skills
+        self.hooks = hooks
+        self.toolHints = toolHints
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        mcpServerCount = try container.decodeIfPresent(Int.self, forKey: .mcpServerCount) ?? 0
+        subagentCount = try container.decodeIfPresent(Int.self, forKey: .subagentCount) ?? 0
+        mcpServers = try container.decodeIfPresent([SDKBridgeMCPServer].self, forKey: .mcpServers) ?? []
+        subagents = try container.decodeIfPresent([SDKBridgeSubagent].self, forKey: .subagents) ?? []
+        skills = try container.decodeIfPresent([SDKBridgeSkill].self, forKey: .skills) ?? []
+        hooks = try container.decodeIfPresent([SDKBridgeHook].self, forKey: .hooks) ?? []
+        toolHints = try container.decodeIfPresent([SDKBridgeToolHint].self, forKey: .toolHints) ?? []
+    }
 
     var summary: String {
         var parts: [String] = []
@@ -267,8 +310,65 @@ struct SDKBridgeMCPProfile: Identifiable, Hashable, Codable {
         if subagentCount > 0 {
             parts.append("\(subagentCount) subagent")
         }
+        if !skills.isEmpty {
+            parts.append("\(skills.count) skill")
+        }
+        if !hooks.isEmpty {
+            parts.append("\(hooks.count) hook")
+        }
+        if !toolHints.isEmpty {
+            parts.append("\(toolHints.count) tool")
+        }
         return parts.isEmpty ? "SDK profile" : parts.joined(separator: " / ")
     }
+
+    var hasDetailedMetadata: Bool {
+        !mcpServers.isEmpty || !subagents.isEmpty || !skills.isEmpty || !hooks.isEmpty || !toolHints.isEmpty
+    }
+}
+
+struct SDKBridgeMCPServer: Identifiable, Hashable, Codable {
+    var id: String
+    var name: String
+    var transport: String
+    var command: String?
+    var url: String?
+    var hasAuth: Bool
+    var environmentKeys: [String]
+    var toolHints: [SDKBridgeToolHint]
+}
+
+struct SDKBridgeSubagent: Identifiable, Hashable, Codable {
+    var id: String
+    var name: String
+    var description: String?
+    var promptPreview: String?
+    var modelID: String?
+    var mcpServerNames: [String]
+}
+
+struct SDKBridgeSkill: Identifiable, Hashable, Codable {
+    var id: String
+    var name: String
+    var description: String?
+    var source: String?
+    var enabled: Bool
+}
+
+struct SDKBridgeHook: Identifiable, Hashable, Codable {
+    var id: String
+    var name: String
+    var event: String
+    var command: String?
+    var description: String?
+    var enabled: Bool
+}
+
+struct SDKBridgeToolHint: Identifiable, Hashable, Codable {
+    var id: String
+    var name: String
+    var description: String?
+    var server: String?
 }
 
 struct AgentLaunchDraft: Hashable, Codable {
