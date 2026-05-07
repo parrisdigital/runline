@@ -4,7 +4,7 @@
   "description": "Local Mac bridge for Runline Cursor SDK sessions.",
   "type": "module",
   "bin": {
-    "runline-bridge": "./bin/runline-bridge.js"
+    "runline-bridge": "bin/runline-bridge.js"
   },
   "files": [
     "bin",
