@@ -19,6 +19,17 @@ Runline is independent and is not affiliated with, endorsed by, or connected to 
 - Local cache for account, repositories, models, agents, runs, stream events, artifacts, notification preferences, and launch draft
 - Unit tests for Cursor v1 request contracts, SSE parsing, cache persistence, app routing, push payloads, chat event cleanup, file attachment loading, and SDK bridge request mapping
 
+## Cursor SDK Mode
+
+Cloud Agent mode works directly from iOS. Cursor SDK mode is optional and requires Runline Bridge on the user's Mac:
+
+```bash
+npm install -g runline-bridge@beta
+CURSOR_API_KEY=your-cursor-key runline-bridge up
+```
+
+Runline Bridge prints the iPhone-reachable URL and pairing instructions. The iOS app stores the bridge token in Keychain after pairing.
+
 ## Release Workflow
 
 ASC is configured through the local `Runline` keychain profile. Release automation lives in `.asc/workflow.json`.

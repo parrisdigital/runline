@@ -18,6 +18,7 @@ Package.resolved
 # Node
 node_modules/
 **/node_modules/
+orchestrator/dist/
 
 # Local secrets and generated config
 .asc/artifacts/

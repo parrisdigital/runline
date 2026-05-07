@@ -7,6 +7,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "dist",
     "noUncheckedIndexedAccess": true
   },
   "include": ["src/**/*.ts"]

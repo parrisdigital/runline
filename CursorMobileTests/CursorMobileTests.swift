@@ -68,8 +68,8 @@ final class CursorMobileTests: XCTestCase {
     func testCursorSDKOnboardingStepsExposeCurrentBridgeCommands() {
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.first, .overview)
         XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.last, .connect)
-        XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "cd cursor_mobile/orchestrator && npm install")
-        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "CURSOR_API_KEY=your-cursor-key npm run bridge")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "npm install -g runline-bridge@beta")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "CURSOR_API_KEY=your-cursor-key runline-bridge up")
         XCTAssertNil(RunlineBridgeOnboardingStep.connect.command)
     }
 

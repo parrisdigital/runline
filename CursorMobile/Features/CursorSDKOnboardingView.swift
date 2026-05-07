@@ -76,7 +76,7 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .overview:
             "Cloud Agent remains the default. Cursor SDK is an optional mode for local SDK sessions, MCP profiles, files, images, planning, and execution."
         case .bridge:
-            "Runline Bridge runs from the orchestrator folder and keeps Cursor SDK execution on your Mac."
+            "Install Runline Bridge from npm. It keeps Cursor SDK execution on your Mac."
         case .start:
             "Start the bridge on your Mac. For iPhone testing, use your Mac LAN address instead of localhost."
         case .connect:
@@ -102,9 +102,9 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .overview, .connect:
             nil
         case .bridge:
-            "cd cursor_mobile/orchestrator && npm install"
+            "npm install -g runline-bridge@beta"
         case .start:
-            "CURSOR_API_KEY=your-cursor-key npm run bridge"
+            "CURSOR_API_KEY=your-cursor-key runline-bridge up"
         }
     }
 
@@ -113,7 +113,7 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .overview:
             nil
         case .bridge:
-            "Runline Bridge now uses a one-time pairing code and stores the bridge token in the iOS Keychain."
+            "Only install this if you want Cursor SDK mode. Cloud Agent mode works without the bridge."
         case .start:
             "Simulator can use http://localhost:8787. A physical iPhone needs a reachable Mac LAN URL such as http://192.168.1.10:8787."
         case .connect:
