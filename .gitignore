@@ -28,6 +28,8 @@ orchestrator/dist/
 # Local secrets and generated config
 .env
 .env.*
+!.env.example
+!orchestrator/.env.example
 .npmrc
 *.local.xcconfig
 Secrets.plist

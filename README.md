@@ -47,6 +47,8 @@ Cloud Agent mode does not require Node, a Mac bridge, a hosted backend, or any R
 
 Cursor SDK mode is intentionally opt-in. It should be treated as a power-user path until the bridge and pairing flow are hardened further.
 
+For the public-source boundary between direct Cloud Agent usage, optional bridge usage, and private release/deployment configuration, see [SELF_HOSTING_MODEL.md](SELF_HOSTING_MODEL.md).
+
 ## Install the iOS Beta
 
 The iOS beta is distributed through TestFlight by the maintainer. Once installed:
@@ -81,6 +83,8 @@ Then enter `http://<mac-lan-ip>:8787` in Runline Settings and pair with the one-
 
 The bridge does not need to store Cursor API keys. It can accept a per-request bearer token from the iOS app, or use `CURSOR_API_KEY` from the user's local shell environment.
 
+For LAN, Tailscale, temporary tunnel, and hosted HTTPS bridge setups, see [docs/self-hosting.md](docs/self-hosting.md).
+
 ## Repository Layout
 
 ```text
@@ -88,10 +92,13 @@ Runline/                  SwiftUI app source
 RunlineTests/             Unit tests for app state, providers, cache, routing, and bridge mapping
 orchestrator/             runline-bridge npm package
 DesignAssets/             Public logo and app icon source previews
+Legal/                    Trademark and branding guidance
 Tools/                    Maintainer utilities such as build-number updates
-.asc/                     Maintainer App Store Connect workflow config
+.asc/                     Sanitized ASC workflow example only; live config is ignored
 .github/                  CI, issue templates, PR template, Dependabot
 docs/                     Release and maintainer documentation
+AGENTS.md                 Operating rules for contributors and coding agents
+SELF_HOSTING_MODEL.md     Public repo and self-hosting boundary
 ```
 
 ## Development Setup
@@ -194,7 +201,7 @@ Report vulnerabilities privately through [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md), [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [Legal/TRADEMARKS.md](Legal/TRADEMARKS.md).
 
 ## License
 

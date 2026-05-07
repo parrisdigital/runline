@@ -32,6 +32,13 @@ gitleaks detect --source . --no-git --redact --verbose
 xcodebuild test -project Runline.xcodeproj -scheme Runline -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1'
 ```
 
+Review public-boundary docs before source releases:
+
+- [SELF_HOSTING_MODEL.md](../SELF_HOSTING_MODEL.md)
+- [docs/self-hosting.md](self-hosting.md)
+- [AGENTS.md](../AGENTS.md)
+- [Legal/TRADEMARKS.md](../Legal/TRADEMARKS.md)
+
 For a faster metadata-only check:
 
 ```bash
@@ -145,6 +152,7 @@ Runline <version> (<build>)
 
 - No `.env`, `.npmrc`, `.p8`, `.p12`, `.mobileprovision`, `.ipa`, `.xcarchive`, private key, certificate, or ASC artifact is tracked.
 - No live `.asc/workflow.json` maintainer config is tracked.
+- Only safe examples such as `.asc/workflow.example.json` and `orchestrator/.env.example` are tracked.
 - `gitleaks detect --source . --redact --verbose` passes.
 - `gitleaks detect --source . --no-git --redact --verbose` passes.
 - npm package contents are checked with `npm pack --dry-run`.

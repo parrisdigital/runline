@@ -9,6 +9,7 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Keep Cloud Agent mode as the default iOS experience.
 - Continue refining Cursor SDK mode and Runline Bridge pairing for power users.
 - Improve iPhone and iPad polish while staying native to SwiftUI and iOS system patterns.
+- Added public self-hosting, bridge setup, trademark, environment example, and coding-agent guidance.
 
 ## Runline Public Beta
 

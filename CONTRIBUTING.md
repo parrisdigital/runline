@@ -45,6 +45,7 @@ xcodebuild test \
 - Do not commit generated archives, IPAs, derived data, local ASC artifacts, npm tokens, Apple signing material, API keys, or private repository data.
 - Run `git diff --check`, bridge typecheck/build/audit, and relevant iOS tests before opening a PR.
 - For release process changes, update [docs/RELEASES.md](docs/RELEASES.md) and [CHANGELOG.md](CHANGELOG.md).
+- Follow [AGENTS.md](AGENTS.md) for repository operating rules and [Legal/TRADEMARKS.md](Legal/TRADEMARKS.md) for branding boundaries.
 
 ## Security
 

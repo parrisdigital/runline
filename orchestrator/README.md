@@ -32,6 +32,8 @@ Check the installed version:
 runline-bridge --version
 ```
 
+For LAN, Tailscale, temporary tunnel, and hosted HTTPS bridge setups, see [docs/self-hosting.md](../docs/self-hosting.md).
+
 ## Run From This Repo
 
 ```bash
@@ -103,6 +105,16 @@ export RUNLINE_SDK_MCP_PROFILES='[
 - `GET /agents/:agentId/runs/:runId/events`
 
 Requests may pass a Cursor API key with bearer authentication. If omitted, the service uses `CURSOR_API_KEY`. Do not put user keys in logs or long-lived storage.
+
+## Environment
+
+Safe placeholders live in [.env.example](.env.example). Do not commit `.env`.
+
+```bash
+cp .env.example .env
+```
+
+Load the values using your shell or process manager. The bridge does not require dotenv loading by default.
 
 ## Package Checks
 
