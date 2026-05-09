@@ -1,0 +1,19 @@
+Runline/Features/CursorSDKOnboardingView.swift
+  s_1fab33d1220fd9::t_edd01533fea7c3 187-200,202-204,207,232,256-258,319,321,339,767,769,787
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "ddd232d0105ff8fed889f1cfd61e780e2e84a77c",
+  "prompts": {},
+  "sessions": {
+    "s_1fab33d1220fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019df38a-3d51-7141-9df9-d0f56769bf8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
