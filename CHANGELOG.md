@@ -21,6 +21,19 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Added `runline-bridge up --keep-awake`, backed by macOS `caffeinate`.
 - Added bridge health metadata for whether Keep Awake is active.
 
+## TestFlight Build 1.0 (16)
+
+- Prepared the next TestFlight build with the unified Cursor SDK onboarding layout.
+- Made the SDK onboarding pages and footer controls behave as one continuous native sheet instead of a separate bottom inset.
+- Kept the page dots and button styling while reducing the overlap/scroll feeling on the initial Cursor SDK page.
+- Preserved text sizing and tightened only spacing and card padding.
+
+## TestFlight Build 1.0 (15)
+
+- Uploaded the API-key-aware Cursor SDK onboarding refinement to TestFlight.
+- Added Cursor API Key status directly inside SDK setup so users can see Keychain state or connect a missing key.
+- Kept Cloud Agent mode as the default and Cursor SDK mode as an optional bridge-powered flow.
+
 ## TestFlight Build 1.0 (14)
 
 - Uploaded the refined Cursor SDK onboarding and Keep Awake build to TestFlight.
