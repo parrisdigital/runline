@@ -184,25 +184,27 @@ struct CursorSDKOnboardingView: View {
 
     var body: some View {
         NavigationStack {
-            TabView(selection: $selectedStep) {
-                ForEach(RunlineBridgeOnboardingStep.allCases) { step in
-                    CursorSDKOnboardingPage(
-                        step: step,
-                        copiedStepID: $copiedStepID,
-                        keepMacAwake: $keepMacAwake,
-                        isSDKBridgeEnabled: $isSDKBridgeEnabled,
-                        sdkBridgeBaseURL: $sdkBridgeBaseURL,
-                        pairingCode: $pairingCode,
-                        openSettings: openSettings
-                    )
-                    .tag(step)
+            VStack(spacing: 0) {
+                TabView(selection: $selectedStep) {
+                    ForEach(RunlineBridgeOnboardingStep.allCases) { step in
+                        CursorSDKOnboardingPage(
+                            step: step,
+                            copiedStepID: $copiedStepID,
+                            keepMacAwake: $keepMacAwake,
+                            isSDKBridgeEnabled: $isSDKBridgeEnabled,
+                            sdkBridgeBaseURL: $sdkBridgeBaseURL,
+                            pairingCode: $pairingCode,
+                            openSettings: openSettings
+                        )
+                        .tag(step)
+                    }
                 }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .background(Color(uiColor: .systemGroupedBackground))
-            .safeAreaInset(edge: .bottom) {
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(maxHeight: .infinity)
+
                 bottomActionBar
             }
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Cursor SDK")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -227,7 +229,7 @@ struct CursorSDKOnboardingView: View {
     }
 
     private var bottomActionBar: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             RunlineBridgePageIndicator(selectedStep: selectedStep)
 
             Button {
@@ -251,8 +253,9 @@ struct CursorSDKOnboardingView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 28)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
+        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     private var primaryButtonTitle: String {
@@ -313,9 +316,9 @@ private struct CursorSDKOnboardingPage: View {
 
     private var fixedContent: some View {
         VStack {
-            Spacer(minLength: 12)
+            Spacer(minLength: 10)
             pageContent
-            Spacer(minLength: 18)
+            Spacer(minLength: 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 24)
@@ -333,7 +336,7 @@ private struct CursorSDKOnboardingPage: View {
     }
 
     private var pageContent: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: step == .overview ? 12 : 14) {
             CursorSDKOnboardingHeader(step: step)
 
             switch step {
@@ -761,9 +764,9 @@ private struct CursorSDKBridgeSetupPanel: View {
 
 private struct CursorSDKBenefitsList: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 9) {
             ForEach(RunlineBridgeBenefit.all) { benefit in
-                HStack(alignment: .top, spacing: 11) {
+                HStack(alignment: .top, spacing: 10) {
                     Image(systemName: benefit.symbolName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.tint)
@@ -781,7 +784,7 @@ private struct CursorSDKBenefitsList: View {
                 }
             }
         }
-        .padding(16)
+        .padding(14)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
