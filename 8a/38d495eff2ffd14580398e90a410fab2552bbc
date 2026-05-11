@@ -1,0 +1,74 @@
+Runline/Features/CursorSDKOnboardingView.swift
+  s_1fab33d1220fd9::t_1bbbc8e4e57ae4 174-177,181-187,190-193,386,391-401,407-411
+Runline/App/AppTab.swift
+  s_1fab33d1220fd9::t_abe68ff62078a8 5,15-16,28-29
+orchestrator/README.md
+  s_1fab33d1220fd9::t_6654bcbf921e2f 7,29-30,36,76-81,84-86,168,172
+docs/RELEASES.md
+  s_1fab33d1220fd9::t_51423f5f7babc2 15,111,114,157
+docs/self-hosting.md
+  s_1fab33d1220fd9::t_d3547c7a3d08b2 51,104-108,127-128,140,142-143,154,157,159,163
+RunlineTests/RunlineTests.swift
+  s_1fab33d1220fd9::t_ebda7756a2fc2e 274,285
+  s_1fab33d1220fd9::t_86b7acb6acb0c8 81,84-108,110
+  s_1fab33d1220fd9::t_4a9aca2a016f11 32-34
+RunlineTests/SDKBridgeClientTests.swift
+  s_1fab33d1220fd9::t_48e10324d450f0 276-295
+Runline/Features/SDKWorkspaceView.swift
+  s_1fab33d1220fd9::t_df271ac0196ed2 1-195,197-261
+  s_1fab33d1220fd9::t_11e7af18eed417 196
+Runline/Core/NotificationPreferences.swift
+  s_1fab33d1220fd9::t_effa448d6ae7ee 15,25-29,47-51
+Runline/Networking/SDKBridgeClient.swift
+  s_1fab33d1220fd9::t_6abd1f2abc104c 138,224
+  s_1fab33d1220fd9::t_3b022cba7422ed 260-266
+orchestrator/src/server.ts
+  s_1fab33d1220fd9::t_a82acef6ba3335 164-172,192-194,431-454,575,591
+  s_1fab33d1220fd9::t_5555ecb0cc1c5b 4-5,7,92,102,232-239,290
+  s_1fab33d1220fd9::t_1a7aa2cc32b591 2,725
+  s_1fab33d1220fd9::t_01e6ad54cdb734 662-724,726-739
+orchestrator/src/qrcode-terminal.d.ts
+  s_1fab33d1220fd9::t_704dd48c9fd60c 1-7
+Runline/App/AppState.swift
+  s_1fab33d1220fd9::t_94318a027e6c52 1178
+  s_1fab33d1220fd9::t_9ce27c138c9cb4 984-988,1002-1014
+  s_1fab33d1220fd9::t_bdfa154a81cc6a 861
+  s_1fab33d1220fd9::t_088305be25c33d 1159-1160,1182-1195
+  s_1fab33d1220fd9::t_b0f254717e49c0 472-475
+Runline/App/RootView.swift
+  s_1fab33d1220fd9::t_0ddecf4be51a11 460-464
+  s_1fab33d1220fd9::t_7a4275ed177f50 255-259,300-302,341-355,399-408,431-444
+README.md
+  s_1fab33d1220fd9::t_c77b614bb00119 24,38,74-76,98-99,172
+orchestrator/.env.example
+  s_1fab33d1220fd9::t_13d380eda62ac1 12-15,19-21
+Runline.xcodeproj/project.pbxproj
+  s_1fab33d1220fd9::t_19f2b43604624a 11,88,250,413
+CHANGELOG.md
+  s_1fab33d1220fd9::t_37172294ca7e70 17-28
+orchestrator/package.json
+  s_1fab33d1220fd9::t_0a8fc69cf099a5 3
+orchestrator/npm-shrinkwrap.json
+  s_1fab33d1220fd9::t_0a8fc69cf099a5 3,9
+orchestrator/bin/runline-bridge.js
+  s_1fab33d1220fd9::t_fd5ef938f726a3 34,42-44,47,93,100,105,110-112,119-120,122,140,173-189
+  s_1fab33d1220fd9::t_453df5fd5a41b7 121,125-127
+SELF_HOSTING_MODEL.md
+  s_1fab33d1220fd9::t_8786377fe9a680 63,79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "8a38d495eff2ffd14580398e90a410fab2552bbc",
+  "prompts": {},
+  "sessions": {
+    "s_1fab33d1220fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019df38a-3d51-7141-9df9-d0f56769bf8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
