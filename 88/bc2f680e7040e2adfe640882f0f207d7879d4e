@@ -1,0 +1,60 @@
+project.yml
+  s_1fab33d1220fd9::t_bb1842941c8027 31-35
+  s_1fab33d1220fd9::t_e725d1ad6e14b6 13
+orchestrator/bin/runline-bridge.js
+  s_1fab33d1220fd9::t_4d6c1027538125 9,33,36,39-40,43,89,95,100-106,112,115-117,127-131,133-138,151-159
+CHANGELOG.md
+  s_1fab33d1220fd9::t_2e0d2197bdc698 18-24
+  s_1fab33d1220fd9::t_699f427ffac85a 25-31
+  s_1fab33d1220fd9::t_77100f10de116d 17
+docs/RELEASES.md
+  s_1fab33d1220fd9::t_4ba48f73c5defd 15
+  s_1fab33d1220fd9::t_4c2e22ae806d15 13-14,17
+orchestrator/npm-shrinkwrap.json
+  s_1fab33d1220fd9::t_d03ccef79d75d7 3,9
+  s_1fab33d1220fd9::t_56cb31aa6c4230 12
+  s_1fab33d1220fd9::t_d498e438073a7b 13,1117-1122
+README.md
+  s_1fab33d1220fd9::t_ba6e16904eb591 169
+  s_1fab33d1220fd9::t_8496064d040100 24,168
+  s_1fab33d1220fd9::t_dd6fc177512b35 74-75
+docs/self-hosting.md
+  s_1fab33d1220fd9::t_49540207de60a1 52-53,74
+Runline/Networking/SDKBridgeClient.swift
+  s_1fab33d1220fd9::t_3bd025a7340e6c 66-69
+Runline/Core/NotificationPreferences.swift
+  s_1fab33d1220fd9::t_bd35d922595f0e 14,20-26
+orchestrator/package.json
+  s_1fab33d1220fd9::t_d03ccef79d75d7 3
+  s_1fab33d1220fd9::t_56cb31aa6c4230 43
+  s_1fab33d1220fd9::t_d498e438073a7b 44
+orchestrator/src/server.ts
+  s_1fab33d1220fd9::t_32933a51517855 6,188-189
+RunlineTests/RunlineTests.swift
+  s_1fab33d1220fd9::t_71dd070b0a25a7 239-257
+Runline.xcodeproj/project.pbxproj
+  s_1fab33d1220fd9::t_e725d1ad6e14b6 478,599
+Runline/Resources/Info.plist
+  s_1fab33d1220fd9::t_060ac0d1976b8d 38-48
+Runline/App/AppState.swift
+  s_1fab33d1220fd9::t_b7d019f414140b 1129-1130,1134-1149
+orchestrator/README.md
+  s_1fab33d1220fd9::t_abb9e8a9803d48 30-37
+  s_1fab33d1220fd9::t_6fa0aff92b7f9d 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "88bc2f680e7040e2adfe640882f0f207d7879d4e",
+  "prompts": {},
+  "sessions": {
+    "s_1fab33d1220fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019df38a-3d51-7141-9df9-d0f56769bf8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
