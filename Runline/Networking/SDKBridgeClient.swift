@@ -63,6 +63,10 @@ enum SDKBridgePreferences {
         defaults.set(isEnabled, forKey: isEnabledKey)
     }
 
+    static func setBaseURLString(_ value: String, defaults: UserDefaults = .standard) {
+        defaults.set(value.trimmingCharacters(in: .whitespacesAndNewlines), forKey: baseURLKey)
+    }
+
     static func baseURLString(defaults: UserDefaults = .standard) -> String {
         defaults.string(forKey: baseURLKey) ?? defaultBaseURLString
     }

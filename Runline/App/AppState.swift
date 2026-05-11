@@ -1126,7 +1126,27 @@ final class AppState {
         case .run(let agentID, _):
             focusedAgentID = agentID
             selectedTab = .chats
+        case .bridge(let baseURL):
+            applySDKBridgeURLFromDeepLink(baseURL)
         }
+    }
+
+    private func applySDKBridgeURLFromDeepLink(_ baseURL: URL) {
+        SDKBridgePreferences.setEnabled(true)
+        SDKBridgePreferences.setBaseURLString(baseURL.absoluteString)
+
+        do {
+            try sdkBridgeTokenStore.deleteAPIKey()
+        } catch {
+            errorMessage = "Runline could not reset the previous bridge pairing token."
+        }
+
+        sdkBridgeToken = nil
+        sdkBridgeProfiles = []
+        sdkBridgePairingState = .idle
+        syncSDKBridgeConfiguration(resetConnection: true)
+        selectedTab = .settings
+        statusMessage = "Runline Bridge URL set to \(baseURL.absoluteString). Start pairing to connect Cursor SDK."
     }
 
     func updateDeviceToken(_ deviceToken: Data) {

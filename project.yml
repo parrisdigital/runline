@@ -10,7 +10,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "16"
+    CURRENT_PROJECT_VERSION: "17"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
 targets:
@@ -28,6 +28,11 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.developer-tools
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSBonjourServices:
+          - _runline-bridge._tcp
+        NSLocalNetworkUsageDescription: Runline connects to Runline Bridge on your Mac for optional Cursor SDK mode.
         UILaunchStoryboardName: LaunchScreen
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

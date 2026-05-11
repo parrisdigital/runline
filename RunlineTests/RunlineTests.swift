@@ -236,6 +236,25 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(appState.focusedAgentID, "bc-0002")
     }
 
+    @MainActor
+    func testBridgeDeepLinkSetsSDKBridgeURLAndFocusesSettings() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: SDKBridgePreferences.isEnabledKey)
+        defaults.removeObject(forKey: SDKBridgePreferences.baseURLKey)
+        let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
+        appState.selectedTab = .chats
+
+        appState.handleDeepLink(URL(string: "runline://bridge?url=http%3A%2F%2F192.168.68.55%3A8787")!)
+
+        XCTAssertTrue(SDKBridgePreferences.isEnabled(defaults: defaults))
+        XCTAssertEqual(SDKBridgePreferences.baseURLString(defaults: defaults), "http://192.168.68.55:8787")
+        XCTAssertEqual(appState.selectedTab, .settings)
+        XCTAssertFalse(appState.isSDKBridgePaired)
+
+        defaults.removeObject(forKey: SDKBridgePreferences.isEnabledKey)
+        defaults.removeObject(forKey: SDKBridgePreferences.baseURLKey)
+    }
+
     func testAppearanceModesMapToPreferredColorSchemes() {
         XCTAssertNil(AppAppearanceMode.system.colorScheme)
         XCTAssertEqual(AppAppearanceMode.light.colorScheme, .light)

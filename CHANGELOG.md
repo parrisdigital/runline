@@ -14,6 +14,21 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Refined post-API-key onboarding with an inline Cursor SDK bridge setup, pairing, and connection check flow.
 - Added a native SDK Tools experience for inspecting bridge-published MCP servers, tools, skills, hooks, and subagents from Settings, New Chat, and SDK chats.
 
+## runline-bridge 0.1.5 Pending npm Publish
+
+- Made the bridge bind to `0.0.0.0` by default for physical iPhone and iPad LAN access.
+- Added clearer terminal output with `Local URL`, `Listening`, `iPhone URL`, and a `runline://bridge` setup link.
+- Added terminal QR setup support so users can scan from iPhone to set the bridge URL in Runline.
+- Added iOS local-network and local HTTP transport permissions for trusted LAN bridge connections.
+- Added Runline deep-link handling for bridge setup links.
+
+## TestFlight Build 1.0 (17)
+
+- Prepared the iOS bridge connection fix for physical iPhone and iPad testing.
+- Added local-network permission text and local HTTP networking support for trusted LAN bridge URLs.
+- Added `runline://bridge?url=...` deep links so terminal setup links can set the bridge URL in Runline.
+- Kept Cloud Agent mode unchanged and independent of Runline Bridge.
+
 ## runline-bridge 0.1.4
 
 - Published `runline-bridge@0.1.4` to npm.

@@ -49,6 +49,8 @@ export CURSOR_API_KEY="replace-with-your-cursor-key"
 runline-bridge up
 ```
 
+The bridge binds to `0.0.0.0` by default so it is reachable from a trusted iPhone or iPad on the same network. The terminal prints a `Local URL`, an `iPhone URL`, and a `Runline setup link`. When your terminal supports it, it also prints a QR code that opens Runline and sets the bridge URL automatically.
+
 For Mac-assisted Cursor SDK sessions that should continue while you are away from the keyboard, start the bridge with Keep Awake:
 
 ```bash
@@ -69,7 +71,7 @@ If that returns `192.168.1.10`, enter this bridge URL in Runline Settings:
 http://192.168.1.10:8787
 ```
 
-Do not use `localhost` on a physical iPhone. On device, `localhost` points to the phone, not your Mac.
+Do not use `localhost` on a physical iPhone. On device, `localhost` points to the phone, not your Mac. Scan the setup QR or use the `iPhone URL` printed by `runline-bridge up`.
 
 ## Option 3: Tailscale or Private Network
 

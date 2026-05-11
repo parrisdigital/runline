@@ -1,6 +1,6 @@
 {
   "name": "runline-bridge",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Local Mac bridge for Runline Cursor SDK sessions.",
   "license": "MIT",
   "type": "module",
@@ -40,7 +40,8 @@
     "tag": "beta"
   },
   "dependencies": {
-    "@cursor/sdk": "^1.0.12"
+    "@cursor/sdk": "^1.0.12",
+    "qrcode-terminal": "^0.12.0"
   },
   "overrides": {
     "sqlite3": "^6.0.1",

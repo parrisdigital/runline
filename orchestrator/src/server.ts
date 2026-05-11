@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { Agent, type McpServerConfig } from "@cursor/sdk";
 
 const port = Number(process.env.PORT ?? 8787);
+const host = process.env.RUNLINE_BRIDGE_HOST ?? process.env.HOST ?? "0.0.0.0";
 const serviceName = "runline-bridge";
 const sdkName = "@cursor/sdk";
 const pairingTTLMs = Number(process.env.RUNLINE_BRIDGE_PAIRING_TTL_MS ?? 5 * 60 * 1000);
@@ -184,8 +185,8 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`Runline Bridge listening on http://localhost:${port}`);
+server.listen(port, host, () => {
+  console.log(`Runline Bridge listening on http://${host}:${port}`);
   if (isBridgeAuthRequired()) {
     console.log("Pairing is enabled. Start pairing from Runline Settings to print a one-time code here.");
   }
