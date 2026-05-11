@@ -13,6 +13,7 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Added public self-hosting, bridge setup, trademark, environment example, and coding-agent guidance.
 - Refined post-API-key onboarding with an inline Cursor SDK bridge setup, pairing, and connection check flow.
 - Added a native SDK Tools experience for inspecting bridge-published MCP servers, tools, skills, hooks, and subagents from Settings, New Chat, and SDK chats.
+- Refined Cursor SDK onboarding so the pairing step mirrors the terminal flow: copy `runline-bridge up`, scan the setup QR, then pair with the terminal code.
 
 ## runline-bridge 0.1.5
 

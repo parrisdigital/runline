@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -110,7 +111,7 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .start:
             "Start the bridge"
         case .connect:
-            "Pair and verify"
+            "Start Pairing"
         }
     }
 
@@ -123,7 +124,7 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .start:
             "Run the bridge on your Mac, then connect from iPhone using the Mac LAN address."
         case .connect:
-            "Enter the bridge URL, pair with the code printed in your Mac terminal, then verify the connection."
+            "Run this on your computer. A QR code will appear in your terminal - scan it next."
         }
     }
 
@@ -146,11 +147,11 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
 
     func command(keepAwake: Bool) -> String? {
         switch self {
-        case .overview, .connect:
+        case .overview:
             nil
         case .bridge:
             "npm install -g runline-bridge"
-        case .start:
+        case .start, .connect:
             RunlineBridgeStartMode.resolve(keepAwake: keepAwake).command
         }
     }
@@ -164,8 +165,21 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
         case .start:
             "Simulator can use localhost. A physical iPhone needs a reachable Mac LAN URL such as http://192.168.1.10:8787."
         case .connect:
-            "Cloud Agent remains available even when Cursor SDK is unavailable."
+            "The bridge and Mac must stay reachable for Cursor SDK sessions. Keep Awake is optional and only prevents Mac sleep while the bridge runs."
         }
+    }
+}
+
+enum RunlineBridgeScannedPayload {
+    static func bridgeURL(from rawValue: String) -> URL? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let scannedURL = URL(string: trimmed) else { return nil }
+
+        if case .bridge(let bridgeURL) = RunlineDeepLink(url: scannedURL) {
+            return bridgeURL
+        }
+
+        return SDKBridgePreferences.baseURL(from: trimmed)
     }
 }
 
@@ -181,6 +195,9 @@ struct CursorSDKOnboardingView: View {
     @State private var selectedStep: RunlineBridgeOnboardingStep = .overview
     @State private var copiedStepID: RunlineBridgeOnboardingStep.ID?
     @State private var pairingCode = ""
+    @State private var isShowingQRScanner = false
+    @State private var isShowingPairingCodeEntry = false
+    @State private var scanErrorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -193,7 +210,6 @@ struct CursorSDKOnboardingView: View {
                             keepMacAwake: $keepMacAwake,
                             isSDKBridgeEnabled: $isSDKBridgeEnabled,
                             sdkBridgeBaseURL: $sdkBridgeBaseURL,
-                            pairingCode: $pairingCode,
                             openSettings: openSettings
                         )
                         .tag(step)
@@ -215,6 +231,27 @@ struct CursorSDKOnboardingView: View {
                 }
             }
         }
+        .sheet(isPresented: $isShowingQRScanner) {
+            RunlineBridgeQRScannerSheet(
+                errorMessage: scanErrorMessage,
+                onCancel: {
+                    isShowingQRScanner = false
+                },
+                onScan: handleScannedBridgeCode
+            )
+        }
+        .sheet(isPresented: $isShowingPairingCodeEntry) {
+            PairingCodeEntrySheet(
+                pairingCode: $pairingCode,
+                pairingState: appState.sdkBridgePairingState,
+                completePairing: {
+                    await completePairing()
+                    if appState.isSDKBridgePaired {
+                        isShowingPairingCodeEntry = false
+                    }
+                }
+            )
+        }
         .onChange(of: isSDKBridgeEnabled) { _, _ in
             appState.syncSDKBridgeConfiguration(resetConnection: true)
         }
@@ -232,17 +269,20 @@ struct CursorSDKOnboardingView: View {
         VStack(spacing: 10) {
             RunlineBridgePageIndicator(selectedStep: selectedStep)
 
-            Button {
-                handlePrimaryAction()
-            } label: {
-                Text(primaryButtonTitle)
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 48)
+            if selectedStep == .connect {
+                connectActionButtons
+            } else {
+                Button {
+                    advance()
+                } label: {
+                    Text("Continue")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .frame(maxWidth: 540)
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .frame(maxWidth: 540)
-            .disabled(isPrimaryButtonDisabled)
 
             Button("Use Cloud Agent for Now") {
                 onUseCloud?()
@@ -258,22 +298,44 @@ struct CursorSDKOnboardingView: View {
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
-    private var primaryButtonTitle: String {
-        selectedStep == .connect ? "Use Cursor SDK" : "Continue"
-    }
+    private var connectActionButtons: some View {
+        VStack(spacing: 10) {
+            if appState.isSDKBridgeReadyForLaunch {
+                Button {
+                    onUseSDK?()
+                    dismiss()
+                } label: {
+                    Text("Use Cursor SDK")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+            } else {
+                Button {
+                    scanErrorMessage = nil
+                    isShowingQRScanner = true
+                } label: {
+                    Label("Scan with QR Code", systemImage: "qrcode.viewfinder")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
 
-    private var isPrimaryButtonDisabled: Bool {
-        selectedStep == .connect && !appState.isSDKBridgeReadyForLaunch
-    }
-
-    private func handlePrimaryAction() {
-        guard selectedStep == .connect else {
-            advance()
-            return
+                Button {
+                    startPairingAndShowCodeEntry()
+                } label: {
+                    Label(pairWithCodeTitle, systemImage: "keyboard")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .disabled(!isSDKBridgeEnabled || appState.sdkBridgePairingState == .starting || appState.sdkBridgePairingState == .completing)
+            }
         }
-        guard appState.isSDKBridgeReadyForLaunch else { return }
-        onUseSDK?()
-        dismiss()
+        .frame(maxWidth: 540)
     }
 
     private func advance() {
@@ -295,6 +357,58 @@ struct CursorSDKOnboardingView: View {
         onOpenSettings?()
         dismiss()
     }
+
+    private var pairWithCodeTitle: String {
+        switch appState.sdkBridgePairingState {
+        case .starting:
+            "Starting Pairing"
+        case .waiting:
+            "Enter Pairing Code"
+        case .completing:
+            "Completing Pairing"
+        default:
+            "Pair with Code"
+        }
+    }
+
+    private func handleScannedBridgeCode(_ rawValue: String) {
+        guard let bridgeURL = RunlineBridgeScannedPayload.bridgeURL(from: rawValue) else {
+            scanErrorMessage = "Scan the Runline setup QR code printed by runline-bridge up."
+            return
+        }
+
+        isSDKBridgeEnabled = true
+        sdkBridgeBaseURL = bridgeURL.absoluteString
+        scanErrorMessage = nil
+        isShowingQRScanner = false
+        appState.syncSDKBridgeConfiguration(resetConnection: true)
+    }
+
+    private func startPairingAndShowCodeEntry() {
+        if case .waiting = appState.sdkBridgePairingState {
+            isShowingPairingCodeEntry = true
+            return
+        }
+
+        Task {
+            await startPairing()
+            if case .waiting = appState.sdkBridgePairingState {
+                isShowingPairingCodeEntry = true
+            }
+        }
+    }
+
+    private func startPairing() async {
+        if !isSDKBridgeEnabled {
+            isSDKBridgeEnabled = true
+        }
+        pairingCode = ""
+        await appState.startSDKBridgePairing()
+    }
+
+    private func completePairing() async {
+        await appState.completeSDKBridgePairing(code: pairingCode)
+    }
 }
 
 private struct CursorSDKOnboardingPage: View {
@@ -303,7 +417,6 @@ private struct CursorSDKOnboardingPage: View {
     @Binding var keepMacAwake: Bool
     @Binding var isSDKBridgeEnabled: Bool
     @Binding var sdkBridgeBaseURL: String
-    @Binding var pairingCode: String
     var openSettings: () -> Void
 
     var body: some View {
@@ -339,6 +452,18 @@ private struct CursorSDKOnboardingPage: View {
         VStack(spacing: step == .overview ? 12 : 14) {
             CursorSDKOnboardingHeader(step: step)
 
+            if let command = step.command(keepAwake: keepMacAwake) {
+                CommandCopyRow(
+                    command: command,
+                    isCopied: copiedStepID == step.id
+                ) {
+                    UIPasteboard.general.string = command
+                    withAnimation(.snappy(duration: 0.2)) {
+                        copiedStepID = step.id
+                    }
+                }
+            }
+
             switch step {
             case .overview:
                 CursorSDKBenefitsList()
@@ -350,21 +475,8 @@ private struct CursorSDKOnboardingPage: View {
                 CursorSDKBridgeSetupPanel(
                     isSDKBridgeEnabled: $isSDKBridgeEnabled,
                     sdkBridgeBaseURL: $sdkBridgeBaseURL,
-                    pairingCode: $pairingCode,
                     openSettings: openSettings
                 )
-            }
-
-            if let command = step.command(keepAwake: keepMacAwake) {
-                CommandCopyRow(
-                    command: command,
-                    isCopied: copiedStepID == step.id
-                ) {
-                    UIPasteboard.general.string = command
-                    withAnimation(.snappy(duration: 0.2)) {
-                        copiedStepID = step.id
-                    }
-                }
             }
 
             if let footnote = step.footnote {
@@ -517,7 +629,6 @@ private struct CursorSDKBridgeSetupPanel: View {
     @Environment(AppState.self) private var appState
     @Binding var isSDKBridgeEnabled: Bool
     @Binding var sdkBridgeBaseURL: String
-    @Binding var pairingCode: String
     var openSettings: () -> Void
 
     var body: some View {
@@ -526,31 +637,7 @@ private struct CursorSDKBridgeSetupPanel: View {
 
             Divider()
 
-            Toggle("Enable Runline Bridge", isOn: $isSDKBridgeEnabled)
-                .padding(.vertical, 10)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text("Bridge URL")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                TextField("http://192.168.1.10:8787", text: $sdkBridgeBaseURL)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .disabled(!isSDKBridgeEnabled)
-                    .accessibilityIdentifier("sdkOnboarding.bridgeURL")
-
-                if let loopbackHelp = SDKBridgePreferences.deviceLoopbackHelp(for: SDKBridgePreferences.baseURL(from: sdkBridgeBaseURL)) {
-                    Text(loopbackHelp)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.vertical, 10)
+            bridgeURLSummary
 
             Divider()
 
@@ -558,8 +645,11 @@ private struct CursorSDKBridgeSetupPanel: View {
 
             Divider()
 
-            setupActions
-                .padding(.vertical, 10)
+            Button("Open Full Settings") {
+                openSettings()
+            }
+            .buttonStyle(.borderless)
+            .padding(.vertical, 10)
         }
         .padding(.horizontal, 14)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -569,6 +659,36 @@ private struct CursorSDKBridgeSetupPanel: View {
             }
             appState.syncSDKBridgeConfiguration(resetConnection: false)
         }
+    }
+
+    private var bridgeURLSummary: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Enable Runline Bridge", isOn: $isSDKBridgeEnabled)
+
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Bridge URL")
+                    .font(.subheadline)
+                Spacer()
+                Text(displayBridgeURL)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Text("Scan the setup QR printed by the terminal to set the iPhone URL automatically. Use Settings for manual URLs or hosted bridges.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let loopbackHelp = SDKBridgePreferences.deviceLoopbackHelp(for: SDKBridgePreferences.baseURL(from: sdkBridgeBaseURL)) {
+                Text(loopbackHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 10)
     }
 
     private var statusRows: some View {
@@ -601,87 +721,22 @@ private struct CursorSDKBridgeSetupPanel: View {
                     .foregroundStyle(.green)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-        }
-        .font(.subheadline)
-        .padding(.vertical, 10)
-    }
-
-    @ViewBuilder
-    private var setupActions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if appState.isSDKBridgeReadyForLaunch {
-                Button {
-                    Task {
-                        await appState.checkSDKBridgeConnection()
-                    }
-                } label: {
-                    Label("Recheck Connection", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-            } else if appState.isSDKBridgePaired {
-                Button {
-                    Task {
-                        await appState.checkSDKBridgeConnection()
-                    }
-                } label: {
-                    if appState.sdkBridgeConnectionState == .checking {
-                        ProgressView()
-                    } else {
-                        Label("Check Connection", systemImage: "network")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(appState.sdkBridgeConnectionState == .checking)
-            } else {
-                Button {
-                    Task {
-                        await startPairing()
-                    }
-                } label: {
-                    if appState.sdkBridgePairingState == .starting {
-                        ProgressView()
-                    } else {
-                        Label("Start Pairing", systemImage: "link.badge.plus")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!isSDKBridgeEnabled || appState.sdkBridgePairingState == .starting || appState.sdkBridgePairingState == .completing)
-
-                if case .waiting = appState.sdkBridgePairingState {
-                    TextField("Pairing Code", text: $pairingCode)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("sdkOnboarding.pairingCode")
-
-                    Button {
-                        Task {
-                            await completePairing()
-                        }
-                    } label: {
-                        if appState.sdkBridgePairingState == .completing {
-                            ProgressView()
-                        } else {
-                            Label("Complete Pairing", systemImage: "checkmark.circle")
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || appState.sdkBridgePairingState == .completing)
-                }
-            }
 
             if let pairingDetail {
                 Text(pairingDetail)
                     .font(.caption)
                     .foregroundStyle(pairingDetailIsError ? .red : .secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            Button("Open Full Settings") {
-                openSettings()
-            }
-            .buttonStyle(.borderless)
         }
+        .font(.subheadline)
+        .padding(.vertical, 10)
+    }
+
+    private var displayBridgeURL: String {
+        let trimmed = sdkBridgeBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Scan QR" : trimmed
     }
 
     private var bridgeConnectionTitle: String {
@@ -747,18 +802,6 @@ private struct CursorSDKBridgeSetupPanel: View {
             return true
         }
         return false
-    }
-
-    private func startPairing() async {
-        if !isSDKBridgeEnabled {
-            isSDKBridgeEnabled = true
-        }
-        pairingCode = ""
-        await appState.startSDKBridgePairing()
-    }
-
-    private func completePairing() async {
-        await appState.completeSDKBridgePairing(code: pairingCode)
     }
 }
 
@@ -835,6 +878,280 @@ private struct CommandCopyRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isCopied ? "Command copied" : "Copy command")
+    }
+}
+
+private struct RunlineBridgeQRScannerSheet: View {
+    var errorMessage: String?
+    var onCancel: () -> Void
+    var onScan: (String) -> Void
+    @State private var authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                scannerContent
+
+                VStack(spacing: 6) {
+                    Text("Scan the QR code printed by runline-bridge up.")
+                        .font(.callout)
+                        .multilineTextAlignment(.center)
+
+                    Text("Runline will set the bridge URL, then you can pair with the terminal code.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+            }
+            .padding(.bottom)
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("Scan Bridge QR")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        onCancel()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            requestCameraAccessIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private var scannerContent: some View {
+        switch authorizationStatus {
+        case .authorized:
+            QRCodeScannerView(onScan: onScan)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .padding()
+        case .notDetermined:
+            ProgressView("Preparing Camera")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .denied, .restricted:
+            ContentUnavailableView(
+                "Camera Access Needed",
+                systemImage: "camera.viewfinder",
+                description: Text("Allow camera access in Settings or enter the bridge URL manually in Runline Settings.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        @unknown default:
+            ContentUnavailableView(
+                "Camera Unavailable",
+                systemImage: "camera.viewfinder",
+                description: Text("Enter the bridge URL manually in Runline Settings.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func requestCameraAccessIfNeeded() {
+        guard authorizationStatus == .notDetermined else { return }
+        AVCaptureDevice.requestAccess(for: .video) { granted in
+            DispatchQueue.main.async {
+                authorizationStatus = granted ? .authorized : .denied
+            }
+        }
+    }
+}
+
+private struct QRCodeScannerView: UIViewControllerRepresentable {
+    var onScan: (String) -> Void
+
+    func makeUIViewController(context: Context) -> QRCodeScannerViewController {
+        QRCodeScannerViewController(onScan: onScan)
+    }
+
+    func updateUIViewController(_ uiViewController: QRCodeScannerViewController, context: Context) {}
+}
+
+private final class QRCodeScannerViewController: UIViewController, @preconcurrency AVCaptureMetadataOutputObjectsDelegate {
+    private let session = AVCaptureSession()
+    private let onScan: (String) -> Void
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var didScan = false
+
+    init(onScan: @escaping (String) -> Void) {
+        self.onScan = onScan
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        configureSession()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        didScan = false
+        if !session.isRunning {
+            session.startRunning()
+        }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        if session.isRunning {
+            session.stopRunning()
+        }
+    }
+
+    private func configureSession() {
+        guard
+            let videoDevice = AVCaptureDevice.default(for: .video),
+            let videoInput = try? AVCaptureDeviceInput(device: videoDevice),
+            session.canAddInput(videoInput)
+        else {
+            showCameraUnavailable()
+            return
+        }
+
+        session.addInput(videoInput)
+
+        let metadataOutput = AVCaptureMetadataOutput()
+        guard session.canAddOutput(metadataOutput) else {
+            showCameraUnavailable()
+            return
+        }
+
+        session.addOutput(metadataOutput)
+        metadataOutput.setMetadataObjectsDelegate(self, queue: .main)
+        metadataOutput.metadataObjectTypes = [.qr]
+
+        let layer = AVCaptureVideoPreviewLayer(session: session)
+        layer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(layer)
+        previewLayer = layer
+    }
+
+    private func showCameraUnavailable() {
+        let label = UILabel()
+        label.text = "Camera unavailable"
+        label.textColor = .secondaryLabel
+        label.font = .preferredFont(forTextStyle: .body)
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+        ])
+    }
+
+    func metadataOutput(
+        _ output: AVCaptureMetadataOutput,
+        didOutput metadataObjects: [AVMetadataObject],
+        from connection: AVCaptureConnection
+    ) {
+        guard
+            !didScan,
+            let metadataObject = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+            let stringValue = metadataObject.stringValue
+        else { return }
+
+        didScan = true
+        session.stopRunning()
+        onScan(stringValue)
+    }
+}
+
+private struct PairingCodeEntrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var pairingCode: String
+    var pairingState: SDKBridgePairingState
+    var completePairing: () async -> Void
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Pairing Code", text: $pairingCode)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+                        .focused($isFocused)
+                        .accessibilityIdentifier("sdkOnboarding.pairingCode")
+
+                    if let detail {
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(detailIsError ? .red : .secondary)
+                    }
+                } header: {
+                    Text("Runline Bridge")
+                } footer: {
+                    Text("Enter the code printed in the terminal after you tap Pair with Code.")
+                }
+            }
+            .navigationTitle("Pair with Code")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Pair") {
+                        Task {
+                            await completePairing()
+                        }
+                    }
+                    .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pairingState == .completing)
+                }
+            }
+            .onAppear {
+                isFocused = true
+            }
+        }
+    }
+
+    private var detail: String? {
+        switch pairingState {
+        case .waiting(_, let expiresAt, let message):
+            [message, expiresAt.map { "Expires at \($0)." }]
+                .compactMap { $0 }
+                .joined(separator: " ")
+        case .completing:
+            "Completing pairing..."
+        case .paired(let name):
+            "Paired with \(name)."
+        case .failed(let message):
+            message
+        case .idle, .starting:
+            nil
+        }
+    }
+
+    private var detailIsError: Bool {
+        if case .failed = pairingState {
+            return true
+        }
+        return false
     }
 }
 

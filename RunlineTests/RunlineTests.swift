@@ -71,9 +71,22 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "npm install -g runline-bridge")
         XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "runline-bridge up")
         XCTAssertEqual(RunlineBridgeOnboardingStep.start.command(keepAwake: true), "runline-bridge up --keep-awake")
-        XCTAssertEqual(RunlineBridgeOnboardingStep.connect.title, "Pair and verify")
-        XCTAssertTrue(RunlineBridgeOnboardingStep.connect.subtitle.contains("verify"))
-        XCTAssertNil(RunlineBridgeOnboardingStep.connect.command)
+        XCTAssertEqual(RunlineBridgeOnboardingStep.connect.title, "Start Pairing")
+        XCTAssertTrue(RunlineBridgeOnboardingStep.connect.subtitle.contains("QR code"))
+        XCTAssertEqual(RunlineBridgeOnboardingStep.connect.command, "runline-bridge up")
+        XCTAssertEqual(RunlineBridgeOnboardingStep.connect.command(keepAwake: true), "runline-bridge up --keep-awake")
+    }
+
+    func testRunlineBridgeScannedPayloadAcceptsSetupDeepLinksAndBridgeURLs() {
+        let setupURL = RunlineBridgeScannedPayload.bridgeURL(
+            from: "runline://bridge?url=http%3A%2F%2F192.168.68.55%3A8787"
+        )
+        let directURL = RunlineBridgeScannedPayload.bridgeURL(from: " http://192.168.68.55:8787 ")
+        let invalidURL = RunlineBridgeScannedPayload.bridgeURL(from: "not a bridge code")
+
+        XCTAssertEqual(setupURL?.absoluteString, "http://192.168.68.55:8787")
+        XCTAssertEqual(directURL?.absoluteString, "http://192.168.68.55:8787")
+        XCTAssertNil(invalidURL)
     }
 
     func testRunlineBridgeStartModesExposeKeepAwakeCommand() {

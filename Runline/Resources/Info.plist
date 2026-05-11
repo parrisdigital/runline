@@ -46,6 +46,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Runline connects to Runline Bridge on your Mac for optional Cursor SDK mode.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Runline uses the camera to scan Runline Bridge setup QR codes for optional Cursor SDK mode.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UISupportedInterfaceOrientations</key>

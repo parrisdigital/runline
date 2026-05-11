@@ -71,7 +71,7 @@ export CURSOR_API_KEY="replace-with-your-cursor-key"
 runline-bridge up
 ```
 
-The bridge prints a physical-device `iPhone URL` and a Runline setup QR/link. Scan it from iPhone to set the bridge URL automatically, then start pairing in Runline and enter the terminal code.
+The bridge prints a physical-device `iPhone URL` and a Runline setup QR/link. In Runline's Cursor SDK onboarding, tap **Scan with QR Code** to set the bridge URL automatically, then tap **Pair with Code** and enter the terminal code.
 
 To keep your Mac awake while testing Cursor SDK mode:
 
