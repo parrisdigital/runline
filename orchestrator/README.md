@@ -4,7 +4,7 @@ Runline Bridge is the optional Mac-side CLI for Cursor SDK workflows in [Runline
 
 The iOS app does not depend on this service for the core Cloud Agent path. Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
 
-Source package version: `runline-bridge@0.1.5`.
+Source package version: `runline-bridge@0.1.6`.
 Current published npm package: `runline-bridge@0.1.5`.
 
 Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
@@ -21,17 +21,19 @@ Use this service only for work that benefits from `@cursor/sdk`:
 
 ```bash
 npm install -g runline-bridge
-export CURSOR_API_KEY="replace-with-your-cursor-key"
 runline-bridge up
 ```
 
 Only install Runline Bridge if you want Cursor SDK mode. Cloud Agent mode in the iOS app works without this package.
+
+Runline sends the Cursor API key from iOS Keychain as a per-request bearer token. `CURSOR_API_KEY` is optional for command-line testing, single-user local setups, or service-owned deployments.
 
 `runline-bridge up` binds to `0.0.0.0` by default so an iPhone on the same trusted network can reach it. The terminal prints:
 
 - `Local URL`, for the Mac and iOS Simulator.
 - `iPhone URL`, for physical iPhone and iPad.
 - `Runline setup link`, plus a QR code when the terminal supports it.
+- a pairing QR/link after the app starts pairing, so the iPhone can complete setup without typing the code.
 
 On a physical iPhone, do not use `http://localhost:8787`. Scan the setup QR or use the printed `iPhone URL`.
 
@@ -71,9 +73,17 @@ Then set the app's bridge URL to `http://<mac-lan-ip>:8787`. For broader TestFli
 
 The iOS app can also send the user's Cursor API key as a per-request bearer token. Prefer that for user-owned keys; the bridge does not need to store keys server-side.
 
+If you expose the bridge through a tunnel, reverse proxy, Tailscale MagicDNS name, or hosted HTTPS endpoint, pass the externally reachable URL so QR codes contain the address the phone should use:
+
+```bash
+runline-bridge up --public-url https://your-bridge.example.com
+```
+
 ## Pairing
 
-Runline Bridge requires a local pairing token by default. In the iOS app, open Settings, enable Runline Bridge, enter the bridge URL, and tap **Start Pairing**. The bridge prints a six-digit code in the terminal. Enter that code in the app to store a bridge token in the iOS Keychain.
+Runline Bridge requires a local pairing token by default. In the iOS app, open the SDK tab or Settings, enable Runline Bridge, enter or scan the bridge URL, and tap **Start Pairing**. The bridge prints a six-digit code and a `runline://bridge?...` pairing QR/link in the terminal. Scan that QR from Runline to complete pairing, or enter the code manually.
+
+The bridge persists issued pairing tokens in `~/.runline-bridge/tokens.json` with owner-only permissions. Override the location with `RUNLINE_BRIDGE_TOKEN_FILE`, or disable persistence with `RUNLINE_BRIDGE_DISABLE_TOKEN_PERSISTENCE=true` if you want every bridge restart to require re-pairing.
 
 For local development only, you can disable pairing:
 
@@ -155,9 +165,11 @@ Runline does not currently edit bridge profile JSON from iOS. That is intentiona
 - `POST /sdk/sessions/:sessionId/messages`
 - `GET /sdk/sessions/:sessionId/state?runId=:runId`
 - `GET /sdk/sessions/:sessionId/runs/:runId/events`
+- `POST /sdk/sessions/:sessionId/runs/:runId/cancel`
 - `POST /runs/cloud` compatibility alias for `POST /sdk/sessions`
 - `GET /agents/:agentId/runs/:runId/state`
 - `GET /agents/:agentId/runs/:runId/events`
+- `POST /agents/:agentId/runs/:runId/cancel`
 
 Requests may pass a Cursor API key with bearer authentication. If omitted, the service uses `CURSOR_API_KEY`. Do not put user keys in logs or long-lived storage.
 

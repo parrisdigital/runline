@@ -12,6 +12,7 @@ enum RunlineDeepLink: Equatable, Hashable {
     case agent(Agent.ID)
     case run(agentID: Agent.ID, runID: AgentRun.ID)
     case bridge(URL)
+    case bridgePairing(baseURL: URL, pairingID: String, code: String)
 
     init?(url: URL) {
         guard url.scheme == "runline" else { return nil }
@@ -21,6 +22,11 @@ enum RunlineDeepLink: Equatable, Hashable {
            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
            let rawBridgeURL = components.queryItems?.first(where: { $0.name == "url" })?.value,
            let bridgeURL = SDKBridgePreferences.baseURL(from: rawBridgeURL) {
+            if let pairingID = components.queryItems?.first(where: { $0.name == "pairingId" })?.value?.nilIfBlank,
+               let code = components.queryItems?.first(where: { $0.name == "code" })?.value?.nilIfBlank {
+                self = .bridgePairing(baseURL: bridgeURL, pairingID: pairingID, code: code)
+                return
+            }
             self = .bridge(bridgeURL)
             return
         }
@@ -36,5 +42,12 @@ enum RunlineDeepLink: Equatable, Hashable {
         }
 
         return nil
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

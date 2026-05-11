@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		054394F8AE08FCF7A97DD081 /* AppLayoutMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEAB8CAD14E40825A113A0E /* AppLayoutMode.swift */; };
+		05B06C80F690444C3B0C8E0A /* SDKWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7175FB4ECFD1E8E8A1EF7C2F /* SDKWorkspaceView.swift */; };
 		1226E29F0BE789C0E298BA4E /* PromptFileLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41F4236EACE54593670C9607 /* PromptFileLoader.swift */; };
 		1E4F9D4EF45195D9B97C5AC7 /* CursorDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC04A4DC09D10E287BBEE1FB /* CursorDTOs.swift */; };
 		2270ECCFA2503E115DA24F1E /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 5EF704E6C2D73CC02BB38416 /* LaunchScreen.storyboard */; };
@@ -84,6 +85,7 @@
 		5D666CC7B3A7B3DF6E5F6E5D /* MockAgentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAgentProvider.swift; sourceTree = "<group>"; };
 		5EF704E6C2D73CC02BB38416 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		6A242C307188A47C4784661E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7175FB4ECFD1E8E8A1EF7C2F /* SDKWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SDKWorkspaceView.swift; sourceTree = "<group>"; };
 		7453F3DF0B118BE765B7BFCD /* SDKBridgeEventMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SDKBridgeEventMapper.swift; sourceTree = "<group>"; };
 		74A20F0267031C5CA03A66E0 /* ChatTimelineBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTimelineBuilderTests.swift; sourceTree = "<group>"; };
 		7C71972B15BEDC3B7D683D5B /* PromptFileLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptFileLoaderTests.swift; sourceTree = "<group>"; };
@@ -245,6 +247,7 @@
 				41F4236EACE54593670C9607 /* PromptFileLoader.swift */,
 				8D5081AF773B6A39162D98C6 /* RepositoriesView.swift */,
 				E2F07863DB26072DB1A626DA /* SDKToolsView.swift */,
+				7175FB4ECFD1E8E8A1EF7C2F /* SDKWorkspaceView.swift */,
 				13A38A232841921416F16A35 /* SettingsView.swift */,
 				F550F49FA216EFEB9013CA84 /* WelcomeView.swift */,
 			);
@@ -407,6 +410,7 @@
 				4BD8B4809212888E5530C6D0 /* SDKBridgeClient.swift in Sources */,
 				8BA0B952BDD91DE6761BB933 /* SDKBridgeEventMapper.swift in Sources */,
 				81BB2FF039600E7770A6AAE3 /* SDKToolsView.swift in Sources */,
+				05B06C80F690444C3B0C8E0A /* SDKWorkspaceView.swift in Sources */,
 				82298E897BC21FB5BAA2699C /* SettingsView.swift in Sources */,
 				684CDCB246CE9B709744E590 /* WelcomeView.swift in Sources */,
 			);

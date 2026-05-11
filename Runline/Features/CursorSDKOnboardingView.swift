@@ -171,15 +171,26 @@ enum RunlineBridgeOnboardingStep: String, CaseIterable, Identifiable, Equatable 
 }
 
 enum RunlineBridgeScannedPayload {
-    static func bridgeURL(from rawValue: String) -> URL? {
+    case bridge(URL)
+    case pairing(baseURL: URL, pairingID: String, code: String)
+
+    static func payload(from rawValue: String) -> RunlineBridgeScannedPayload? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let scannedURL = URL(string: trimmed) else { return nil }
 
-        if case .bridge(let bridgeURL) = RunlineDeepLink(url: scannedURL) {
-            return bridgeURL
+        switch RunlineDeepLink(url: scannedURL) {
+        case .bridge(let bridgeURL):
+            return .bridge(bridgeURL)
+        case .bridgePairing(let bridgeURL, let pairingID, let code):
+            return .pairing(baseURL: bridgeURL, pairingID: pairingID, code: code)
+        default:
+            break
         }
 
-        return SDKBridgePreferences.baseURL(from: trimmed)
+        if let bridgeURL = SDKBridgePreferences.baseURL(from: trimmed) {
+            return .bridge(bridgeURL)
+        }
+        return nil
     }
 }
 
@@ -372,9 +383,20 @@ struct CursorSDKOnboardingView: View {
     }
 
     private func handleScannedBridgeCode(_ rawValue: String) {
-        guard let bridgeURL = RunlineBridgeScannedPayload.bridgeURL(from: rawValue) else {
+        guard let payload = RunlineBridgeScannedPayload.payload(from: rawValue) else {
             scanErrorMessage = "Scan the Runline setup QR code printed by runline-bridge up."
             return
+        }
+
+        let bridgeURL: URL
+        let pairing: (id: String, code: String)?
+        switch payload {
+        case .bridge(let url):
+            bridgeURL = url
+            pairing = nil
+        case .pairing(let url, let pairingID, let code):
+            bridgeURL = url
+            pairing = (pairingID, code)
         }
 
         isSDKBridgeEnabled = true
@@ -382,6 +404,11 @@ struct CursorSDKOnboardingView: View {
         scanErrorMessage = nil
         isShowingQRScanner = false
         appState.syncSDKBridgeConfiguration(resetConnection: true)
+        if let pairing {
+            Task {
+                await appState.completeSDKBridgePairing(pairingID: pairing.id, code: pairing.code)
+            }
+        }
     }
 
     private func startPairingAndShowCodeEntry() {

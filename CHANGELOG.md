@@ -14,6 +14,18 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Refined post-API-key onboarding with an inline Cursor SDK bridge setup, pairing, and connection check flow.
 - Added a native SDK Tools experience for inspecting bridge-published MCP servers, tools, skills, hooks, and subagents from Settings, New Chat, and SDK chats.
 - Refined Cursor SDK onboarding so the pairing step mirrors the terminal flow: copy `runline-bridge up`, scan the setup QR, then pair with the terminal code.
+- Added a first-class native SDK tab with SDK connection status, recent SDK sessions, model/profile context, files/images, Plan/Execute follow-ups, and setup entry points.
+- Added deep-link pairing QR support so Runline can complete bridge pairing from a terminal QR/link instead of requiring manual code entry.
+- Added bridge token persistence and `--public-url` support for trusted reconnects and tunnel/hosted bridge setup links.
+- Added SDK session run cancellation from the native chat toolbar through the bridge.
+
+## runline-bridge 0.1.6
+
+- Prepared `runline-bridge@0.1.6` source for the next npm publish.
+- Added terminal pairing QR links that include the bridge URL, pairing session, and one-time pairing code.
+- Persisted issued bridge pairing tokens in the user's home directory with owner-only permissions.
+- Added `runline-bridge up --public-url <url>` and `RUNLINE_BRIDGE_PUBLIC_URL` for Tailscale, tunnel, reverse-proxy, and hosted bridge URLs.
+- Added session-scoped SDK run cancellation endpoints.
 
 ## runline-bridge 0.1.5
 

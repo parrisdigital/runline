@@ -31,6 +31,7 @@ if (command !== "up") {
 
 const port = valueAfter("--port") ?? process.env.PORT ?? "8787";
 const host = valueAfter("--host") ?? process.env.RUNLINE_BRIDGE_HOST ?? process.env.HOST ?? "0.0.0.0";
+const publicURL = normalizePublicURL(valueAfter("--public-url") ?? process.env.RUNLINE_BRIDGE_PUBLIC_URL);
 const keepAwakeRequested = hasFlag("--keep-awake") || isTruthy(process.env.RUNLINE_BRIDGE_KEEP_AWAKE);
 const keepAwakeActive = startKeepAwake(keepAwakeRequested);
 const showQR = !hasFlag("--no-qr");
@@ -38,9 +39,12 @@ const showQR = !hasFlag("--no-qr");
 process.env.PORT = port;
 process.env.HOST = host;
 process.env.RUNLINE_BRIDGE_HOST = host;
+if (publicURL) {
+  process.env.RUNLINE_BRIDGE_PUBLIC_URL = publicURL;
+}
 process.env.RUNLINE_BRIDGE_KEEP_AWAKE_ACTIVE = keepAwakeActive ? "true" : "false";
 
-printStartup(port, host, keepAwakeRequested, keepAwakeActive, showQR);
+printStartup(port, host, publicURL, keepAwakeRequested, keepAwakeActive, showQR);
 await import("../dist/server.js");
 
 function hasFlag(name) {
@@ -86,33 +90,41 @@ function printHelp() {
 Runline Bridge
 
 Usage:
-  runline-bridge up [--port 8787] [--host 0.0.0.0] [--keep-awake] [--no-qr]
+  runline-bridge up [--port 8787] [--host 0.0.0.0] [--public-url https://bridge.example.com] [--keep-awake] [--no-qr]
 
 Environment:
   CURSOR_API_KEY                  Cursor API key used when the iOS app does not send one per request.
   RUNLINE_SDK_MCP_PROFILES        JSON array of MCP/subagent profiles exposed to Runline.
   RUNLINE_BRIDGE_DISABLE_PAIRING  Set to true for local development only.
   RUNLINE_BRIDGE_HOST             Host to bind. Defaults to 0.0.0.0 for iPhone LAN access.
+  RUNLINE_BRIDGE_PUBLIC_URL       Public HTTPS/private-network URL advertised to iPhone.
   RUNLINE_BRIDGE_KEEP_AWAKE       Set to true to keep macOS awake while the bridge runs.
 `);
 }
 
-function printStartup(port, host, keepAwakeRequested, keepAwakeActive, showQR) {
+function printStartup(port, host, publicURL, keepAwakeRequested, keepAwakeActive, showQR) {
   const lanAddress = firstLANAddress();
   const lanURL = lanAddress && isLANReachableHost(host)
     ? `http://${lanAddress}:${port}`
     : undefined;
-  const setupURL = lanURL
-    ? `runline://bridge?url=${encodeURIComponent(lanURL)}`
+  const advertisedURL = publicURL ?? lanURL;
+  const setupURL = advertisedURL
+    ? `runline://bridge?url=${encodeURIComponent(advertisedURL)}`
     : undefined;
 
   console.log("Runline Bridge");
   console.log("");
   console.log(`Local URL: http://localhost:${port}`);
   console.log(`Listening: http://${host}:${port}`);
+  if (publicURL) {
+    console.log(`Public URL: ${publicURL}`);
+    console.log(`Runline setup link: ${setupURL}`);
+  }
   if (lanURL) {
     console.log(`iPhone URL: ${lanURL}`);
-    console.log(`Runline setup link: ${setupURL}`);
+    if (!publicURL) {
+      console.log(`Runline setup link: ${setupURL}`);
+    }
   } else {
     console.log("iPhone URL: unavailable because the bridge is bound to a loopback host.");
   }
@@ -125,7 +137,7 @@ function printStartup(port, host, keepAwakeRequested, keepAwakeActive, showQR) {
   console.log("In Runline on iPhone:");
   console.log("  Settings -> Cursor SDK -> Enable Runline Bridge");
   if (setupURL) {
-    console.log("  Scan the setup QR or enter the iPhone URL, tap Start Pairing, then enter the terminal code.");
+    console.log("  Scan the setup QR or enter the advertised URL, tap Start Pairing, then scan the pairing QR or enter the code.");
   } else {
     console.log("  Restart with --host 0.0.0.0, enter the iPhone URL, tap Start Pairing, then enter the terminal code.");
   }
@@ -157,4 +169,22 @@ function isLANReachableHost(host) {
     normalized === "[::]" ||
     normalized === "*" ||
     (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(normalized));
+}
+
+function normalizePublicURL(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      console.warn("Ignoring --public-url because it must start with http:// or https://.");
+      return undefined;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    console.warn("Ignoring --public-url because it is not a valid URL.");
+    return undefined;
+  }
 }

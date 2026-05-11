@@ -29,9 +29,9 @@ final class RunlineTests: XCTestCase {
         XCTAssertFalse(RunStatus.unknown("PAUSED").isTerminal)
     }
 
-    func testPrimaryTabBarUsesThreeExplicitTabs() {
-        XCTAssertEqual(AppTab.allCases, [.chats, .repositories, .settings])
-        XCTAssertEqual(AppTab.allCases.count, 3)
+    func testPrimaryTabBarUsesSDKAsFirstClassTab() {
+        XCTAssertEqual(AppTab.allCases, [.chats, .sdk, .repositories, .settings])
+        XCTAssertEqual(AppTab.allCases.count, 4)
     }
 
     func testLayoutModeUsesSplitViewForRegularWidth() {
@@ -78,15 +78,36 @@ final class RunlineTests: XCTestCase {
     }
 
     func testRunlineBridgeScannedPayloadAcceptsSetupDeepLinksAndBridgeURLs() {
-        let setupURL = RunlineBridgeScannedPayload.bridgeURL(
+        let setupPayload = RunlineBridgeScannedPayload.payload(
             from: "runline://bridge?url=http%3A%2F%2F192.168.68.55%3A8787"
         )
-        let directURL = RunlineBridgeScannedPayload.bridgeURL(from: " http://192.168.68.55:8787 ")
-        let invalidURL = RunlineBridgeScannedPayload.bridgeURL(from: "not a bridge code")
+        let directPayload = RunlineBridgeScannedPayload.payload(from: " http://192.168.68.55:8787 ")
+        let pairingPayload = RunlineBridgeScannedPayload.payload(
+            from: "runline://bridge?url=http%3A%2F%2F192.168.68.55%3A8787&pairingId=pair-123&code=123456"
+        )
+        let invalidPayload = RunlineBridgeScannedPayload.payload(from: "not a bridge code")
 
-        XCTAssertEqual(setupURL?.absoluteString, "http://192.168.68.55:8787")
-        XCTAssertEqual(directURL?.absoluteString, "http://192.168.68.55:8787")
-        XCTAssertNil(invalidURL)
+        if case .bridge(let setupURL) = setupPayload {
+            XCTAssertEqual(setupURL.absoluteString, "http://192.168.68.55:8787")
+        } else {
+            XCTFail("Expected setup bridge payload.")
+        }
+
+        if case .bridge(let directURL) = directPayload {
+            XCTAssertEqual(directURL.absoluteString, "http://192.168.68.55:8787")
+        } else {
+            XCTFail("Expected direct bridge URL payload.")
+        }
+
+        if case .pairing(let baseURL, let pairingID, let code) = pairingPayload {
+            XCTAssertEqual(baseURL.absoluteString, "http://192.168.68.55:8787")
+            XCTAssertEqual(pairingID, "pair-123")
+            XCTAssertEqual(code, "123456")
+        } else {
+            XCTFail("Expected pairing bridge payload.")
+        }
+
+        XCTAssertNil(invalidPayload)
     }
 
     func testRunlineBridgeStartModesExposeKeepAwakeCommand() {
@@ -250,7 +271,7 @@ final class RunlineTests: XCTestCase {
     }
 
     @MainActor
-    func testBridgeDeepLinkSetsSDKBridgeURLAndFocusesSettings() {
+    func testBridgeDeepLinkSetsSDKBridgeURLAndFocusesSDKTab() {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: SDKBridgePreferences.isEnabledKey)
         defaults.removeObject(forKey: SDKBridgePreferences.baseURLKey)
@@ -261,7 +282,7 @@ final class RunlineTests: XCTestCase {
 
         XCTAssertTrue(SDKBridgePreferences.isEnabled(defaults: defaults))
         XCTAssertEqual(SDKBridgePreferences.baseURLString(defaults: defaults), "http://192.168.68.55:8787")
-        XCTAssertEqual(appState.selectedTab, .settings)
+        XCTAssertEqual(appState.selectedTab, .sdk)
         XCTAssertFalse(appState.isSDKBridgePaired)
 
         defaults.removeObject(forKey: SDKBridgePreferences.isEnabledKey)

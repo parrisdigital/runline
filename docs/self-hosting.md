@@ -45,11 +45,10 @@ Install and start the bridge:
 
 ```bash
 npm install -g runline-bridge
-export CURSOR_API_KEY="replace-with-your-cursor-key"
 runline-bridge up
 ```
 
-The bridge binds to `0.0.0.0` by default so it is reachable from a trusted iPhone or iPad on the same network. The terminal prints a `Local URL`, an `iPhone URL`, and a `Runline setup link`. When your terminal supports it, it also prints a QR code that opens Runline and sets the bridge URL automatically. In Runline's Cursor SDK onboarding, use **Scan with QR Code** for the setup QR and **Pair with Code** for the terminal pairing code.
+The bridge binds to `0.0.0.0` by default so it is reachable from a trusted iPhone or iPad on the same network. The terminal prints a `Local URL`, an `iPhone URL`, and a `Runline setup link`. When your terminal supports it, it also prints a QR code that opens Runline and sets the bridge URL automatically. In Runline's Cursor SDK onboarding, use **Scan with QR Code** for the setup QR. When you tap **Start Pairing**, scan the pairing QR printed in the terminal or enter the pairing code manually.
 
 For Mac-assisted Cursor SDK sessions that should continue while you are away from the keyboard, start the bridge with Keep Awake:
 
@@ -102,7 +101,11 @@ Example with Cloudflare Tunnel:
 cloudflared tunnel --url http://127.0.0.1:8787
 ```
 
-Use the generated `https://...trycloudflare.com` URL in Runline Settings.
+Use the generated `https://...trycloudflare.com` URL in Runline Settings, or advertise it directly from the bridge so setup and pairing QR codes contain the reachable URL:
+
+```bash
+runline-bridge up --public-url https://your-tunnel.trycloudflare.com
+```
 
 Treat temporary tunnel URLs as short-lived. Re-pair or update the bridge URL when the tunnel changes.
 
@@ -121,6 +124,8 @@ Recommended properties:
 
 Runline Bridge currently exposes HTTP endpoints. Put a trusted reverse proxy such as Caddy, Nginx, Traefik, or a managed platform in front of it if you need TLS.
 
+When the bridge sits behind a reverse proxy or hosted URL, start it with `--public-url` or set `RUNLINE_BRIDGE_PUBLIC_URL` so the terminal setup and pairing QR codes point at the public HTTPS address instead of the local LAN address.
+
 ## Environment Variables
 
 See [orchestrator/.env.example](../orchestrator/.env.example) for safe placeholders.
@@ -132,7 +137,10 @@ Common local variables:
 | `CURSOR_API_KEY` | Optional local Cursor key used when the app does not send a bearer token |
 | `RUNLINE_BRIDGE_PORT` | Optional bridge port if supported by the current bridge version |
 | `RUNLINE_BRIDGE_HOST` | Optional bind host if supported by the current bridge version |
+| `RUNLINE_BRIDGE_PUBLIC_URL` | Optional externally reachable URL for setup and pairing QR codes |
 | `RUNLINE_BRIDGE_DISABLE_PAIRING` | Local development only; disables pairing requirement |
+| `RUNLINE_BRIDGE_TOKEN_FILE` | Optional path for persisted pairing tokens |
+| `RUNLINE_BRIDGE_DISABLE_TOKEN_PERSISTENCE` | Set to `true` to require re-pairing after bridge restart |
 | `RUNLINE_SDK_MCP_PROFILES` | JSON array of public MCP profile metadata and private bridge-side tool config |
 
 Do not commit real values.
@@ -143,14 +151,16 @@ By default, Runline Bridge requires pairing.
 
 In Runline:
 
-1. Open Settings.
+1. Open the SDK tab or Settings.
 2. Choose Cursor SDK Setup if needed.
 3. Enable Runline Bridge.
-4. Enter the bridge URL.
+4. Scan the setup QR or enter the bridge URL.
 5. Tap Start Pairing.
-6. Enter the code printed by the bridge terminal.
+6. Scan the pairing QR printed by the bridge terminal, or enter the code manually.
 
 The iOS app stores the bridge token in Keychain.
+
+The bridge stores trusted device tokens in `~/.runline-bridge/tokens.json` by default so reconnects survive bridge restarts. Keep that file private and delete it if you want to revoke local bridge trust.
 
 ## MCP Profiles
 

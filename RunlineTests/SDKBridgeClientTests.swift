@@ -273,6 +273,26 @@ final class SDKBridgeClientTests: XCTestCase {
         XCTAssertEqual(request.url?.query, "runId=run%26value")
     }
 
+    func testCancelSessionRunUsesSessionScopedCancelRoute() async throws {
+        MockBridgeURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "agentId": "bc-session",
+                "runId": "run-session",
+                "status": "cancelled"
+            ])
+        }
+
+        let client = makeClient(apiKey: "cursor-test-key", bridgeToken: "bridge-token")
+        let state = try await client.cancelSessionRun(sessionID: "bc-session", runID: "run-session")
+
+        XCTAssertEqual(state.status, "cancelled")
+        let request = try XCTUnwrap(MockBridgeURLProtocol.capturedRequests.first)
+        XCTAssertEqual(request.method, "POST")
+        XCTAssertEqual(request.url?.path, "/sdk/sessions/bc-session/runs/run-session/cancel")
+        XCTAssertEqual(request.header("Authorization"), "Bearer cursor-test-key")
+        XCTAssertEqual(request.header("X-Runline-Bridge-Token"), "bridge-token")
+    }
+
     func testStreamEventsUsesRunEventRouteAndParsesSSE() async throws {
         MockBridgeURLProtocol.handler = { request in
             let payload = """

@@ -12,7 +12,7 @@ This document is the maintainer checklist for GitHub, npm, and TestFlight releas
 | iOS marketing version | `1.0` |
 | Local project build number | `18` in `project.yml` |
 | TestFlight | Runline `1.0 (18)` is in internal and external beta testing |
-| npm package | `runline-bridge@0.1.5` published |
+| npm package | `runline-bridge@0.1.5` published; source prepared for `0.1.6` |
 | npm dist-tags | `latest` -> `0.1.5`, `beta` -> `0.1.5` |
 | GitHub releases | Source beta `v1.0.0-beta.1`; latest TestFlight marker `testflight-1.0-18`; historical TestFlight release `testflight-1.0-6` |
 
@@ -108,9 +108,10 @@ After publish:
 npm view runline-bridge version dist-tags versions repository.url homepage bugs.url license description --json
 npm install -g runline-bridge@latest
 runline-bridge --version
+runline-bridge up --help
 ```
 
-Commit the package version, shrinkwrap, and documentation updates after a successful publish.
+Commit the package version, shrinkwrap, and documentation updates after a successful publish. If source is prepared before publishing, clearly document that npm `latest` still points to the previous published version.
 
 ## TestFlight Release
 
@@ -153,6 +154,7 @@ Runline <version> (<build>)
 - Cursor SDK mode remains optional through Runline Bridge.
 - Tested on iPhone and iPad layouts.
 - Bridge package: runline-bridge@<version>.
+- SDK mode requires a reachable Runline Bridge; Cloud Agent mode remains direct from iOS.
 - Security checks: npm audit and gitleaks passed.
 ```
 

@@ -469,6 +469,10 @@ final class AppState {
             sdkBridgePairingState = .failed("Start pairing before entering a code.")
             return
         }
+        await completeSDKBridgePairing(pairingID: pairingID, code: code)
+    }
+
+    func completeSDKBridgePairing(pairingID: String, code: String) async {
         guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
             sdkBridgePairingState = .failed("Enter a valid Runline Bridge URL before pairing.")
             return
@@ -854,7 +858,7 @@ final class AppState {
                 )
             ] : []
             focusedAgentID = result.agent.id
-            selectedTab = .chats
+            selectedTab = launchDraft.runMode == .sdkBridge ? .sdk : .chats
             saveCachedState()
         } catch {
             handleError(error)
@@ -977,6 +981,11 @@ final class AppState {
     }
 
     func cancel(agent: Agent, run: AgentRun) async {
+        if sdkBridgeRunIDs.contains(run.id) {
+            await cancelSDKBridgeRun(agent: agent, run: run)
+            return
+        }
+
         guard let provider else {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
@@ -984,6 +993,25 @@ final class AppState {
         do {
             try await provider.cancelRun(agentID: agent.id, runID: run.id)
             runsByAgentID[agent.id] = try await provider.listRuns(agentID: agent.id)
+            saveCachedState()
+        } catch {
+            handleError(error)
+        }
+    }
+
+    private func cancelSDKBridgeRun(agent: Agent, run: AgentRun) async {
+        do {
+            let client = try makeSDKBridgeClient()
+            let state = try await client.cancelSessionRun(sessionID: agent.id, runID: run.id)
+            let cancelledRun = AgentRun(
+                id: state.runId,
+                agentID: state.agentId ?? agent.id,
+                status: RunStatus(cursorValue: state.status),
+                createdAtDescription: run.createdAtDescription,
+                updatedAtDescription: "now"
+            )
+            updateRun(cancelledRun, agentID: agent.id)
+            streamExpiredRunIDs.remove(run.id)
             saveCachedState()
         } catch {
             handleError(error)
@@ -1128,6 +1156,8 @@ final class AppState {
             selectedTab = .chats
         case .bridge(let baseURL):
             applySDKBridgeURLFromDeepLink(baseURL)
+        case .bridgePairing(let baseURL, let pairingID, let code):
+            applySDKBridgePairingDeepLink(baseURL: baseURL, pairingID: pairingID, code: code)
         }
     }
 
@@ -1145,8 +1175,24 @@ final class AppState {
         sdkBridgeProfiles = []
         sdkBridgePairingState = .idle
         syncSDKBridgeConfiguration(resetConnection: true)
-        selectedTab = .settings
+        selectedTab = .sdk
         statusMessage = "Runline Bridge URL set to \(baseURL.absoluteString). Start pairing to connect Cursor SDK."
+    }
+
+    private func applySDKBridgePairingDeepLink(baseURL: URL, pairingID: String, code: String) {
+        SDKBridgePreferences.setEnabled(true)
+        SDKBridgePreferences.setBaseURLString(baseURL.absoluteString)
+        sdkBridgeProfiles = []
+        sdkBridgePairingState = .waiting(
+            pairingID: pairingID,
+            expiresAt: nil,
+            message: "Pairing QR scanned. Completing Runline Bridge pairing."
+        )
+        syncSDKBridgeConfiguration(resetConnection: true)
+        selectedTab = .sdk
+        Task {
+            await completeSDKBridgePairing(pairingID: pairingID, code: code)
+        }
     }
 
     func updateDeviceToken(_ deviceToken: Data) {

@@ -21,7 +21,7 @@ Runline is in public beta.
 - Cloud Agent mode: default, fully on-device direct integration with Cursor's Cloud Agents API.
 - Cursor SDK mode: optional, powered by `runline-bridge` on the user's Mac or a trusted HTTPS bridge.
 - TestFlight/App Store Connect releases: maintainer-managed.
-- npm package: `runline-bridge@0.1.5` is published on both `latest` and `beta`.
+- npm package: `runline-bridge@0.1.5` is published on both `latest` and `beta`; source is prepared for `0.1.6`.
 
 ## What Runline Does
 
@@ -35,6 +35,7 @@ Runline is in public beta.
 - Adapts the same SwiftUI experience to iPhone and iPad, including portrait and landscape.
 - Supports system appearance, light mode, dark mode, and user-selected appearance preferences.
 - Provides an optional Cursor SDK bridge path for users who want SDK sessions from their Mac.
+- Adds a dedicated native SDK tab for bridge status, SDK sessions, models, MCP profiles, files/images, Plan/Execute follow-ups, and setup.
 
 ## Runtime Modes
 
@@ -67,11 +68,12 @@ Install the bridge only if you want Cursor SDK mode:
 
 ```bash
 npm install -g runline-bridge
-export CURSOR_API_KEY="replace-with-your-cursor-key"
 runline-bridge up
 ```
 
-The bridge prints a physical-device `iPhone URL` and a Runline setup QR/link. In Runline's Cursor SDK onboarding, tap **Scan with QR Code** to set the bridge URL automatically, then tap **Pair with Code** and enter the terminal code.
+Runline sends the Keychain-stored Cursor API key as a per-request bearer token, so the bridge does not need to store it. `CURSOR_API_KEY` is still supported for local curl tests or bridge-owned service setups.
+
+The bridge prints a physical-device `iPhone URL` and a Runline setup QR/link. In Runline's Cursor SDK onboarding, tap **Scan with QR Code** to set the bridge URL automatically. When you tap **Start Pairing**, the bridge prints a one-time pairing QR/link and code; scanning that QR can complete pairing without typing the code. Code entry remains available as a fallback.
 
 To keep your Mac awake while testing Cursor SDK mode:
 
@@ -92,6 +94,8 @@ ipconfig getifaddr en0
 Then enter `http://<mac-lan-ip>:8787` in Runline Settings and pair with the one-time code printed by the bridge.
 
 The bridge does not need to store Cursor API keys. It can accept a per-request bearer token from the iOS app, or use `CURSOR_API_KEY` from the user's local shell environment.
+
+Bridge pairing tokens are stored in iOS Keychain and persisted by the bridge in the user's home directory so trusted devices can reconnect after a bridge restart.
 
 For LAN, Tailscale, temporary tunnel, and hosted HTTPS bridge setups, see [docs/self-hosting.md](docs/self-hosting.md).
 
@@ -165,7 +169,7 @@ gitleaks detect --source . --no-git --redact --verbose
 | Channel | Current state | Notes |
 | --- | --- | --- |
 | GitHub | Public repository at `parrisdigital/runline` | Source, docs, issues, releases |
-| npm | `runline-bridge@0.1.5` on `latest` and `beta` | Optional bridge for Cursor SDK mode |
+| npm | `runline-bridge@0.1.5` on `latest` and `beta`; source `0.1.6` prepared | Optional bridge for Cursor SDK mode |
 | TestFlight | Runline `1.0 (18)` in internal and external beta testing | Requires App Store Connect access |
 
 See [docs/RELEASES.md](docs/RELEASES.md) for the maintainer release checklist, [CHANGELOG.md](CHANGELOG.md) for public release notes, and [docs/ROADMAP.md](docs/ROADMAP.md) for the beta roadmap.

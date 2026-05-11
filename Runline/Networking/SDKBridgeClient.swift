@@ -135,6 +135,7 @@ struct SDKBridgeMCPProfilesResponse: Decodable, Equatable {
 
 struct SDKBridgePairingStartRequest: Encodable, Equatable {
     var deviceName: String
+    var bridgeURL: String?
 }
 
 struct SDKBridgePairingStartResponse: Decodable, Equatable {
@@ -220,7 +221,7 @@ final class SDKBridgeClient: @unchecked Sendable {
         try await request(
             "/pair/start",
             method: .post,
-            body: SDKBridgePairingStartRequest(deviceName: deviceName)
+            body: SDKBridgePairingStartRequest(deviceName: deviceName, bridgeURL: baseURL.absoluteString)
         )
     }
 
@@ -254,6 +255,13 @@ final class SDKBridgeClient: @unchecked Sendable {
             path += "?runId=\(runID.urlQueryValueEncoded)"
         }
         return try await request(path)
+    }
+
+    func cancelSessionRun(sessionID: String, runID: String) async throws -> SDKBridgeRunStateResponse {
+        try await request(
+            "/sdk/sessions/\(sessionID.urlPathComponentEncoded)/runs/\(runID.urlPathComponentEncoded)/cancel",
+            method: .post
+        )
     }
 
     func runState(agentID: String, runID: String) async throws -> SDKBridgeRunStateResponse {

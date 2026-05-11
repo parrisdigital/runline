@@ -1,6 +1,6 @@
 {
   "name": "runline-bridge",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Local Mac bridge for Runline Cursor SDK sessions.",
   "license": "MIT",
   "type": "module",

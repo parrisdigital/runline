@@ -252,6 +252,11 @@ private struct CompactAppShellView: View {
                 .tag(AppTab.chats)
                 .accessibilityIdentifier("tab.chats")
 
+            SDKWorkspaceView()
+                .tabItem { Label(AppTab.sdk.title, systemImage: AppTab.sdk.symbolName) }
+                .tag(AppTab.sdk)
+                .accessibilityIdentifier("tab.sdk")
+
             RepositoriesView()
                 .tabItem { Label(AppTab.repositories.title, systemImage: AppTab.repositories.symbolName) }
                 .tag(AppTab.repositories)
@@ -292,6 +297,9 @@ private struct RegularAppShellView: View {
             if tab == .settings {
                 isComposing = false
             }
+            if tab == .sdk {
+                isComposing = false
+            }
         }
         .onChange(of: appState.focusedAgentID) { _, agentID in
             focusAgent(agentID)
@@ -330,6 +338,21 @@ private struct RegularAppShellView: View {
                         .accessibilityLabel("New Chat")
                     }
                 }
+        case .sdk:
+            SDKWorkspaceContent(
+                selectAgent: selectSDKAgent,
+                newSDKChat: startNewSDKChat,
+                openSetup: openSDKSetup
+            )
+            .navigationTitle("Cursor SDK")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: startNewSDKChat) {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .accessibilityLabel("New SDK Chat")
+                }
+            }
         case .repositories:
             RepositoryListContent(
                 query: $repositoryQuery,
@@ -373,6 +396,16 @@ private struct RegularAppShellView: View {
                 )
                 .navigationTitle("Chat")
             }
+        case .sdk:
+            if isComposing {
+                NewChatForm(presentation: .detail)
+            } else if let selectedAgentID,
+                      let agent = appState.agent(id: selectedAgentID),
+                      appState.isSDKBridgeAgent(agent) {
+                ChatDetailView(agent: agent)
+            } else {
+                SDKToolsView()
+            }
         case .repositories:
             if isComposing {
                 NewChatForm(presentation: .detail)
@@ -395,6 +428,22 @@ private struct RegularAppShellView: View {
         isComposing = true
     }
 
+    private func startNewSDKChat() {
+        selectedAgentID = nil
+        appState.launchDraft.runMode = .sdkBridge
+        isComposing = true
+    }
+
+    private func selectSDKAgent(_ agent: Agent) {
+        selectedAgentID = agent.id
+        isComposing = false
+    }
+
+    private func openSDKSetup() {
+        appState.selectedTab = .settings
+        isComposing = false
+    }
+
     private func selectRepository(_ repository: Repository) {
         selectedRepositoryURL = repository.url
         appState.launchDraft.source = .repository(
@@ -408,7 +457,11 @@ private struct RegularAppShellView: View {
         guard let agentID else { return }
         selectedAgentID = agentID
         isComposing = false
-        appState.selectedTab = .chats
+        if let agent = appState.agent(id: agentID), appState.isSDKBridgeAgent(agent) {
+            appState.selectedTab = .sdk
+        } else {
+            appState.selectedTab = .chats
+        }
         appState.focusedAgentID = nil
     }
 }

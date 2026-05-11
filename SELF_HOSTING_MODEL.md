@@ -60,6 +60,7 @@ In this mode:
 - the user installs `runline-bridge`
 - the bridge runs on the user's Mac or trusted server
 - the iOS app pairs with that bridge
+- trusted pairing can survive bridge restarts through a local bridge token file
 - SDK sessions, MCP profile metadata, and SDK event streams flow through the bridge
 - the user's Cursor API key can be passed per request or provided locally to the bridge
 
@@ -74,6 +75,8 @@ Supported public-repo paths:
 3. Private-network setup through Tailscale or a similar tool.
 4. Temporary HTTPS testing through a tunnel such as Cloudflare Tunnel.
 5. A trusted HTTPS bridge or reverse proxy that the user operates.
+
+When a bridge is exposed through a tunnel, reverse proxy, or hosted endpoint, `runline-bridge up --public-url <https-url>` should be used so the setup and pairing QR codes point at the reachable address.
 
 For details, see [docs/self-hosting.md](docs/self-hosting.md).
 

@@ -1,6 +1,10 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { Agent, type McpServerConfig } from "@cursor/sdk";
+import qrcode from "qrcode-terminal";
 
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.RUNLINE_BRIDGE_HOST ?? process.env.HOST ?? "0.0.0.0";
@@ -85,6 +89,7 @@ type PairingSession = {
 
 type PairingStartRequest = {
   deviceName?: string;
+  bridgeURL?: string;
 };
 
 type PairingCompleteRequest = {
@@ -94,11 +99,7 @@ type PairingCompleteRequest = {
 };
 
 const pairingSessions = new Map<string, PairingSession>();
-const issuedBridgeTokens = new Set<string>(
-  emptyToUndefined(process.env.RUNLINE_BRIDGE_TOKEN)
-    ? [process.env.RUNLINE_BRIDGE_TOKEN!.trim()]
-    : []
-);
+const issuedBridgeTokens = loadIssuedBridgeTokens();
 
 const server = createServer(async (request, response) => {
   try {
@@ -160,6 +161,15 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (sessionParams && request.method === "POST" && sessionParams.runId && url.pathname.endsWith("/cancel")) {
+      if (!requireBridgeAuth(request, response)) { return; }
+      await cancelRun(request, response, {
+        agentId: sessionParams.sessionId,
+        runId: sessionParams.runId,
+      });
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/runs/cloud") {
       if (!requireBridgeAuth(request, response)) { return; }
       await createSDKSession(request, response);
@@ -176,6 +186,12 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && runParams && url.pathname.endsWith("/events")) {
       if (!requireBridgeAuth(request, response)) { return; }
       await streamRunEvents(request, response, runParams);
+      return;
+    }
+
+    if (request.method === "POST" && runParams && url.pathname.endsWith("/cancel")) {
+      if (!requireBridgeAuth(request, response)) { return; }
+      await cancelRun(request, response, runParams);
       return;
     }
 
@@ -213,6 +229,14 @@ async function startPairing(request: IncomingMessage, response: ServerResponse) 
 
   const device = session.deviceName ? ` for ${session.deviceName}` : "";
   console.log(`\nRunline pairing code${device}: ${session.code}`);
+  const pairingSetupURL = bridgePairingSetupURL(body.bridgeURL, session);
+  if (pairingSetupURL) {
+    console.log("Scan this QR in Runline to complete pairing without typing the code:");
+    if (process.stdout.isTTY) {
+      qrcode.generate(pairingSetupURL, { small: true });
+    }
+    console.log(pairingSetupURL);
+  }
   console.log(`This code expires at ${new Date(session.expiresAt).toLocaleTimeString()}.\n`);
 
   sendJSON(response, 202, {
@@ -263,6 +287,7 @@ async function completePairing(request: IncomingMessage, response: ServerRespons
 
   const token = randomBytes(32).toString("base64url");
   issuedBridgeTokens.add(token);
+  persistIssuedBridgeTokens(issuedBridgeTokens);
   pairingSessions.delete(pairingId);
 
   const deviceName = emptyToUndefined(body.deviceName) ?? session.deviceName ?? "Runline device";
@@ -403,6 +428,30 @@ async function getRunState(request: IncomingMessage, response: ServerResponse, p
   });
 }
 
+async function cancelRun(request: IncomingMessage, response: ServerResponse, params: RouteParams) {
+  const apiKey = apiKeyFrom(request);
+  if (!apiKey) {
+    sendJSON(response, 401, { error: "missing_cursor_api_key" });
+    return;
+  }
+
+  const run = await Agent.getRun(params.runId, {
+    runtime: "cloud",
+    agentId: params.agentId,
+    apiKey,
+  });
+  await run.cancel();
+
+  sendJSON(response, 200, {
+    agentId: run.agentId,
+    runId: run.id,
+    status: run.status,
+    result: run.result,
+    durationMs: run.durationMs,
+    git: run.git,
+  });
+}
+
 async function streamRunEvents(request: IncomingMessage, response: ServerResponse, params: RouteParams) {
   const apiKey = apiKeyFrom(request);
   if (!apiKey) {
@@ -523,7 +572,7 @@ function publicRun(run: any) {
 }
 
 function matchRunRoute(pathname: string): RouteParams | undefined {
-  const match = pathname.match(/^\/agents\/([^/]+)\/runs\/([^/]+)\/(?:state|events)$/);
+  const match = pathname.match(/^\/agents\/([^/]+)\/runs\/([^/]+)\/(?:state|events|cancel)$/);
   if (!match) {
     return undefined;
   }
@@ -539,7 +588,7 @@ function matchSessionRoute(pathname: string): SessionRouteParams | undefined {
     return { sessionId: decodeURIComponent(match[1]!) };
   }
 
-  match = pathname.match(/^\/sdk\/sessions\/([^/]+)\/runs\/([^/]+)\/events$/);
+  match = pathname.match(/^\/sdk\/sessions\/([^/]+)\/runs\/([^/]+)\/(?:events|cancel)$/);
   if (!match) {
     return undefined;
   }
@@ -608,6 +657,84 @@ function cleanupExpiredPairings() {
       pairingSessions.delete(id);
     }
   }
+}
+
+function bridgePairingSetupURL(rawBridgeURL: string | undefined, session: PairingSession) {
+  const bridgeURL = emptyToUndefined(rawBridgeURL) ?? emptyToUndefined(process.env.RUNLINE_BRIDGE_PUBLIC_URL);
+  if (!bridgeURL) {
+    return undefined;
+  }
+
+  try {
+    const parsedBridgeURL = new URL(bridgeURL);
+    if (parsedBridgeURL.protocol !== "http:" && parsedBridgeURL.protocol !== "https:") {
+      return undefined;
+    }
+    const setupURL = new URL("runline://bridge");
+    setupURL.searchParams.set("url", parsedBridgeURL.toString());
+    setupURL.searchParams.set("pairingId", session.id);
+    setupURL.searchParams.set("code", session.code);
+    return setupURL.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function loadIssuedBridgeTokens() {
+  const tokens = new Set<string>();
+  const envToken = emptyToUndefined(process.env.RUNLINE_BRIDGE_TOKEN);
+  if (envToken) {
+    tokens.add(envToken);
+  }
+
+  const tokenFile = bridgeTokenFilePath();
+  if (!tokenFile || !existsSync(tokenFile)) {
+    return tokens;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(tokenFile, "utf8"));
+    if (Array.isArray(parsed.tokens)) {
+      for (const token of parsed.tokens) {
+        const normalizedToken = typeof token === "string" ? emptyToUndefined(token) : undefined;
+        if (normalizedToken) {
+          tokens.add(normalizedToken);
+        }
+      }
+    }
+  } catch {
+    console.warn("Runline Bridge could not read saved pairing tokens. Pairing will still work for this process.");
+  }
+
+  return tokens;
+}
+
+function persistIssuedBridgeTokens(tokens: Set<string>) {
+  const tokenFile = bridgeTokenFilePath();
+  if (!tokenFile) {
+    return;
+  }
+
+  try {
+    mkdirSync(dirname(tokenFile), { recursive: true });
+    writeFileSync(
+      tokenFile,
+      JSON.stringify({ version: 1, tokens: Array.from(tokens) }, null, 2),
+      { mode: 0o600 }
+    );
+    chmodSync(tokenFile, 0o600);
+  } catch {
+    console.warn("Runline Bridge could not save pairing tokens. Existing sessions may need to pair again after restart.");
+  }
+}
+
+function bridgeTokenFilePath() {
+  const disabled = isTruthy(process.env.RUNLINE_BRIDGE_DISABLE_TOKEN_PERSISTENCE);
+  if (disabled) {
+    return undefined;
+  }
+  return emptyToUndefined(process.env.RUNLINE_BRIDGE_TOKEN_FILE)
+    ?? join(homedir(), ".runline-bridge", "tokens.json");
 }
 
 function mcpProfile(id: string | undefined): SDKMCPProfile | undefined {
