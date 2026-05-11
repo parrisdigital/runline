@@ -5,7 +5,7 @@ Runline Bridge is the optional Mac-side CLI for Cursor SDK workflows in [Runline
 The iOS app does not depend on this service for the core Cloud Agent path. Runline keeps using Cursor's v1 REST API directly for account, repository, model, agent, run, stream, lifecycle, and artifact basics.
 
 Source package version: `runline-bridge@0.1.5`.
-Current published npm package: `runline-bridge@0.1.4`.
+Current published npm package: `runline-bridge@0.1.5`.
 
 Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 

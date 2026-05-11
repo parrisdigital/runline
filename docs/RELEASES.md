@@ -12,8 +12,8 @@ This document is the maintainer checklist for GitHub, npm, and TestFlight releas
 | iOS marketing version | `1.0` |
 | Local project build number | `17` in `project.yml` |
 | TestFlight | Runline `1.0 (17)` is in internal and external beta testing |
-| npm package | `runline-bridge@0.1.4` published; `0.1.5` source prepared |
-| npm dist-tags | `latest` -> `0.1.4`, `beta` -> `0.1.4` |
+| npm package | `runline-bridge@0.1.5` published |
+| npm dist-tags | `latest` -> `0.1.5`, `beta` -> `0.1.5` |
 | GitHub releases | Source beta `v1.0.0-beta.1`; latest TestFlight marker `testflight-1.0-17`; historical TestFlight release `testflight-1.0-6` |
 
 The stale draft GitHub release for build 24 was removed. Use explicit build numbers for every TestFlight upload so App Store Connect, GitHub notes, and the local project stay aligned.
@@ -93,6 +93,13 @@ cd orchestrator
 npm version patch --no-git-tag-version
 npm publish --tag beta
 npm dist-tag add runline-bridge@<version> latest
+```
+
+If npm reports `EOTP` for an account that uses a passkey or security key instead of authenticator codes, rerun the protected write with browser authentication:
+
+```bash
+npm publish --tag beta --auth-type=web
+npm dist-tag add runline-bridge@<version> latest --auth-type=web
 ```
 
 After publish:
