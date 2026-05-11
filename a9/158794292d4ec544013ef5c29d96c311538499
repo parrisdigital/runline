@@ -1,0 +1,27 @@
+docs/RELEASES.md
+  s_1fab33d1220fd9::t_42c02a9ca899f3 13,19
+CHANGELOG.md
+  s_1fab33d1220fd9::t_df804e311f1dcb 30-35
+README.md
+  s_1fab33d1220fd9::t_dcb876c2a411fc 173
+project.yml
+  s_1fab33d1220fd9::t_9e11c7aa57c7db 13
+Runline.xcodeproj/project.pbxproj
+  s_1fab33d1220fd9::t_0679926c7ceae7 482,603
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "a9158794292d4ec544013ef5c29d96c311538499",
+  "prompts": {},
+  "sessions": {
+    "s_1fab33d1220fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019df38a-3d51-7141-9df9-d0f56769bf8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
