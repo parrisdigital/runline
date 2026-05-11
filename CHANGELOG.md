@@ -25,6 +25,12 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Added iOS local-network and local HTTP transport permissions for trusted LAN bridge connections.
 - Added Runline deep-link handling for bridge setup links.
 
+## TestFlight Build 1.0 (18)
+
+- Uploaded the refined Cursor SDK QR onboarding flow to TestFlight.
+- Added native camera-based scanning for terminal setup QR codes.
+- Kept Cloud Agent mode unchanged and independent of Runline Bridge.
+
 ## TestFlight Build 1.0 (17)
 
 - Prepared the iOS bridge connection fix for physical iPhone and iPad testing.
