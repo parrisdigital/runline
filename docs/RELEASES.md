@@ -11,12 +11,12 @@ This document is the maintainer checklist for GitHub, npm, and TestFlight releas
 | iOS bundle ID | `com.matthewparris.runline` |
 | iOS marketing version | `1.0` |
 | Local project build number | `19` in `project.yml` |
-| TestFlight | Runline `1.0 (18)` is in internal and external beta testing |
-| npm package | `runline-bridge@0.1.5` published; source prepared for `0.1.6` |
-| npm dist-tags | `latest` -> `0.1.5`, `beta` -> `0.1.5` |
-| GitHub releases | Source beta `v1.0.0-beta.1`; latest TestFlight marker `testflight-1.0-18`; historical TestFlight release `testflight-1.0-6` |
+| TestFlight | Runline `1.0 (19)` is in internal and external beta testing |
+| npm package | `runline-bridge@0.1.6` published |
+| npm dist-tags | `latest` -> `0.1.6`, `beta` -> `0.1.6` |
+| GitHub releases | Source beta `v1.0.0-beta.1`; latest TestFlight marker `testflight-1.0-19`; historical TestFlight release `testflight-1.0-6` |
 
-Next intended TestFlight upload: Runline `1.0 (19)`.
+Next intended TestFlight upload: Runline `1.0 (20)`.
 
 The stale draft GitHub release for build 24 was removed. Use explicit build numbers for every TestFlight upload so App Store Connect, GitHub notes, and the local project stay aligned.
 
