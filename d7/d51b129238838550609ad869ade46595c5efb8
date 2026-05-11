@@ -1,0 +1,35 @@
+project.yml
+  s_1fab33d1220fd9::t_eb26623c13c9bc 36
+RunlineTests/RunlineTests.swift
+  s_1fab33d1220fd9::t_35c8183029a684 74-89
+docs/self-hosting.md
+  s_1fab33d1220fd9::t_fb6bd4e05e853a 52,74
+Runline/Resources/Info.plist
+  s_1fab33d1220fd9::t_101441fa35f611 49-50
+Runline/Features/CursorSDKOnboardingView.swift
+  s_1fab33d1220fd9::t_fd02570b03948e 1,114,127,150,154,168-179,181-182,198-200,234-254,272-284,301-324,326-336,338,360-411,455-465
+  s_1fab33d1220fd9::t_a688835e3e8f6a 729
+  s_1fab33d1220fd9::t_52a06099f81d23 884-979,981-1157
+  s_1fab33d1220fd9::t_89cc810cdafd71 640,648-652,664-671,673-691
+  s_1fab33d1220fd9::t_e955201759bbab 672,737-739,980
+CHANGELOG.md
+  s_1fab33d1220fd9::t_efcdab0536f917 16
+README.md
+  s_1fab33d1220fd9::t_71768b82a92d3c 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "d7d51b129238838550609ad869ade46595c5efb8",
+  "prompts": {},
+  "sessions": {
+    "s_1fab33d1220fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019df38a-3d51-7141-9df9-d0f56769bf8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
