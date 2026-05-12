@@ -224,14 +224,17 @@ private struct SDKWorkspaceStatusCard: View {
 
             HStack(spacing: 10) {
                 Button(action: newSDKChat) {
-                    Label("New SDK Session", systemImage: "square.and.pencil")
+                    Label("New Session", systemImage: "square.and.pencil")
+                        .lineLimit(1)
                 }
                 .buttonStyle(.borderedProminent)
                 .foregroundStyle(.white)
                 .disabled(!appState.isSDKBridgeReadyForLaunch)
+                .accessibilityLabel("New SDK Session")
 
                 Button(action: openSetup) {
                     Label(appState.isSDKBridgeReadyForLaunch ? "Manage" : "Set Up", systemImage: "slider.horizontal.3")
+                        .lineLimit(1)
                 }
                 .buttonStyle(.bordered)
             }
