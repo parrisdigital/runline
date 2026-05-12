@@ -29,6 +29,13 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Added `runline-bridge up --public-url <url>` and `RUNLINE_BRIDGE_PUBLIC_URL` for Tailscale, tunnel, reverse-proxy, and hosted bridge URLs.
 - Added session-scoped SDK run cancellation endpoints.
 
+## TestFlight Build 1.0 (20)
+
+- Uploaded the first-class native Cursor SDK workspace to TestFlight.
+- Added the dedicated SDK tab, SDK session composer, Plan/Execute launch intent, and SDK coding-chat detail view.
+- Rendered SDK sessions as chat-first workspaces with user/assistant bubbles and collapsible thinking, tool, status, and result traces.
+- Kept Cloud Agent mode direct from iOS and independent of Runline Bridge.
+
 ## TestFlight Build 1.0 (19)
 
 - Prepared the next TestFlight build number for the native Cursor SDK workspace update.
