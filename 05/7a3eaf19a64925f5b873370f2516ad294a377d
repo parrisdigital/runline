@@ -1,0 +1,48 @@
+Runline/Features/NativeRows.swift
+  s_1fab33d1220fd9::t_ea1d599f10c277 259
+Runline/Features/SDKNewSessionView.swift
+  s_1fab33d1220fd9::t_a9538823b9dde9 639,641-644,660-672
+  s_1fab33d1220fd9::t_c7351411c70bc8 1-638,640,645-659,673-756
+RunlineTests/RunlineTests.swift
+  s_1fab33d1220fd9::t_9c99519911efaa 241,255-277
+Runline/Features/ChatsView.swift
+  s_1fab33d1220fd9::t_e4b6b0adac2c81 75,79,83,89-99,102
+Runline/Features/ChatDetailView.swift
+  s_1fab33d1220fd9::t_745e8161ab46a8 567
+Runline/Features/SDKWorkspaceView.swift
+  s_1fab33d1220fd9::t_2fea8ad9a2f1e9 69-76,80,84,90-96,116
+  s_1fab33d1220fd9::t_cc3ffef6220065 6,19,22,27,37-38,56,58,162,227,230
+  s_1fab33d1220fd9::t_d40f3429f20d37 13
+Runline/App/AppState.swift
+  s_1fab33d1220fd9::t_ceb1e9bcf9092f 1222
+Runline/App/RootView.swift
+  s_1fab33d1220fd9::t_1659965e678587 353,401,405
+Runline/Features/SDKSessionDetailView.swift
+  s_1fab33d1220fd9::t_cf0871d1f2f29f 1-789
+CHANGELOG.md
+  s_1fab33d1220fd9::t_2e0a9c88e6ea9d 21-22
+README.md
+  s_1fab33d1220fd9::t_bb4997cc57217c 38-39,50
+Runline.xcodeproj/project.pbxproj
+  s_1fab33d1220fd9::t_b40fc167337206 23,27,90,115,253-254,418-419
+orchestrator/README.md
+  s_1fab33d1220fd9::t_4dca26c2523b89 8
+Runline/Core/DomainModels.swift
+  s_1fab33d1220fd9::t_e12da8bb674427 379,391,402,416
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "057a3eaf19a64925f5b873370f2516ad294a377d",
+  "prompts": {},
+  "sessions": {
+    "s_1fab33d1220fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019df38a-3d51-7141-9df9-d0f56769bf8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
