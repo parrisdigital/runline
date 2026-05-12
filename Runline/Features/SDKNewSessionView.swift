@@ -50,7 +50,7 @@ struct SDKNewSessionView: View {
         @Bindable var appState = appState
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 SDKNewSessionReadinessCard(
                     isReady: appState.isSDKBridgeReadyForLaunch,
                     issue: appState.sdkBridgeReadinessIssue,
@@ -59,47 +59,11 @@ struct SDKNewSessionView: View {
 
                 SDKSessionCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("Session prompt", systemImage: "bubble.left.and.bubble.right")
-                                .font(.headline)
-
-                            Text("Start a Cursor SDK session with the intent, model, tools, and context you want attached from the first turn.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Picker("Intent", selection: $appState.launchDraft.sdkMessageIntent) {
-                            ForEach(SDKMessageIntent.allCases) { intent in
-                                Label(intent.title, systemImage: intent.symbolName)
-                                    .tag(intent)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-
-                        TextEditor(text: $appState.launchDraft.prompt.text)
-                            .frame(minHeight: 150)
-                            .focused($focusedField, equals: .prompt)
-                            .scrollContentBackground(.hidden)
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .fill(Color(uiColor: .tertiarySystemBackground))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .stroke(Color(uiColor: .separator).opacity(0.2), lineWidth: 0.5)
-                            )
-                            .accessibilityIdentifier("sdk.newsession.prompt")
-
-                        sdkAttachmentControls
-                    }
-                }
-
-                SDKSessionCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("Workspace", systemImage: "folder")
-                            .font(.headline)
+                        SDKSectionHeader(
+                            title: "Workspace",
+                            detail: "Choose where Cursor SDK should work before you send the first message.",
+                            systemImage: "folder"
+                        )
 
                         Picker("Source", selection: $sourceMode) {
                             ForEach(SourceMode.allCases) { mode in
@@ -116,55 +80,12 @@ struct SDKNewSessionView: View {
                 }
 
                 SDKSessionCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("Cursor SDK tools", systemImage: "wrench.and.screwdriver")
-                            .font(.headline)
-
-                        SDKSelectionMenuRow(
-                            title: "Model",
-                            value: selectedModelTitle,
-                            systemImage: "cpu"
-                        ) {
-                            Button("Default") {
-                                appState.launchDraft.modelID = nil
-                            }
-                            ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models)) { model in
-                                Button(model.displayName) {
-                                    appState.launchDraft.modelID = NewChatModelPickerOptions.modelID(from: model.id)
-                                }
-                            }
-                        }
-
-                        SDKSelectionMenuRow(
-                            title: "MCP Profile",
-                            value: selectedProfileTitle,
-                            systemImage: "point.3.connected.trianglepath.dotted"
-                        ) {
-                            Button("None") {
-                                appState.launchDraft.sdkMCPProfileID = nil
-                            }
-                            ForEach(appState.sdkBridgeProfiles) { profile in
-                                Button(profile.name) {
-                                    appState.launchDraft.sdkMCPProfileID = profile.id
-                                }
-                            }
-                        }
-
-                        if let selectedProfile {
-                            SDKProfileSummaryStrip(profile: selectedProfile)
-                        } else {
-                            Text(appState.sdkBridgeProfiles.isEmpty ? "No bridge profiles are published yet. Publish MCP, skill, hook, or subagent profiles from Runline Bridge to select them here." : "Select a profile to attach bridge-side MCP, skills, hooks, and subagent metadata to this SDK session.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-
-                SDKSessionCard {
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("Output", systemImage: "arrow.triangle.branch")
-                            .font(.headline)
+                        SDKSectionHeader(
+                            title: "Output",
+                            detail: "Decide whether Cursor should open a PR and how the branch should be named.",
+                            systemImage: "arrow.triangle.branch"
+                        )
 
                         Toggle("Open pull request", isOn: autoCreatePRBinding)
 
@@ -185,7 +106,7 @@ struct SDKNewSessionView: View {
             }
             .padding(.horizontal)
             .padding(.top, 16)
-            .padding(.bottom, 110)
+            .padding(.bottom, 20)
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .scrollDismissesKeyboard(.interactively)
@@ -201,7 +122,7 @@ struct SDKNewSessionView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            launchBar
+            sdkLaunchComposer
         }
         .task {
             appState.launchDraft.runMode = .sdkBridge
@@ -240,8 +161,8 @@ struct SDKNewSessionView: View {
         }
     }
 
-    private var launchBar: some View {
-        VStack(spacing: 8) {
+    private var sdkLaunchComposer: some View {
+        VStack(spacing: 10) {
             if let issue = appState.sdkBridgeLaunchIssue {
                 Text(issue)
                     .font(.footnote)
@@ -250,63 +171,136 @@ struct SDKNewSessionView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button {
-                launch()
-            } label: {
-                if appState.isLaunching {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Label("Launch SDK Session", systemImage: "arrow.up.circle.fill")
-                        .frame(maxWidth: .infinity)
+            if shouldShowComposerContext {
+                sdkComposerContextStrip
+            }
+
+            Picker("Intent", selection: sdkMessageIntentBinding) {
+                ForEach(SDKMessageIntent.allCases) { intent in
+                    Label(intent.title, systemImage: intent.symbolName)
+                        .tag(intent)
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
-            .disabled(!appState.canLaunchAgent || appState.isLaunching)
-            .accessibilityIdentifier("sdk.newsession.launch")
-        }
-        .padding(.horizontal)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
-        .background(.bar)
-    }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("SDK message intent")
 
-    @ViewBuilder
-    private var sdkAttachmentControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                PhotosPicker(
-                    selection: $selectedPhotoItems,
-                    maxSelectionCount: 5,
-                    matching: .images
-                ) {
-                    Label("Images", systemImage: "photo.badge.plus")
+            sdkComposerToolRow
+
+            HStack(alignment: .bottom, spacing: 8) {
+                Menu {
+                    PhotosPicker(
+                        selection: $selectedPhotoItems,
+                        maxSelectionCount: 5,
+                        matching: .images
+                    ) {
+                        Label("Images", systemImage: "photo")
+                    }
+                    .disabled(isLoadingPromptImages)
+
+                    Button {
+                        isPromptFileImporterPresented = true
+                    } label: {
+                        Label("Files", systemImage: "doc")
+                    }
+                    .disabled(isLoadingPromptFiles)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title3)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(Color(uiColor: .secondarySystemBackground)))
                 }
-                .buttonStyle(.bordered)
-                .disabled(isLoadingPromptImages)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Attach context")
                 .onChange(of: selectedPhotoItems) { _, items in
                     Task {
                         await loadPromptImages(from: items)
                     }
                 }
 
-                Button {
-                    isPromptFileImporterPresented = true
-                } label: {
-                    Label("Files", systemImage: "doc.badge.plus")
-                }
-                .buttonStyle(.bordered)
-                .disabled(isLoadingPromptFiles)
+                TextField("Ask Cursor SDK...", text: sdkPromptTextBinding, axis: .vertical)
+                    .lineLimit(1...5)
+                    .textInputAutocapitalization(.sentences)
+                    .autocorrectionDisabled(false)
+                    .focused($focusedField, equals: .prompt)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 21, style: .continuous)
+                            .fill(Color(uiColor: .secondarySystemBackground))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 21, style: .continuous)
+                            .stroke(Color(uiColor: .separator).opacity(0.25), lineWidth: 0.5)
+                    )
+                    .accessibilityIdentifier("sdk.newsession.prompt")
 
-                Spacer()
+                Button {
+                    launch()
+                } label: {
+                    if appState.isLaunching {
+                        ProgressView()
+                            .frame(width: 38, height: 38)
+                    } else {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 34))
+                            .symbolRenderingMode(.hierarchical)
+                            .frame(width: 38, height: 38)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(!appState.canLaunchAgent || appState.isLaunching)
+                .accessibilityLabel("Launch SDK Session")
+                .accessibilityIdentifier("sdk.newsession.launch")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.bar)
+    }
+
+    private var sdkComposerToolRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Menu {
+                    Button("Default") {
+                        appState.launchDraft.modelID = nil
+                    }
+                    ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models)) { model in
+                        Button(model.displayName) {
+                            appState.launchDraft.modelID = NewChatModelPickerOptions.modelID(from: model.id)
+                        }
+                    }
+                } label: {
+                    SDKComposerChip(title: selectedModelTitle, systemImage: "cpu")
+                }
+                .buttonStyle(.plain)
+
+                Menu {
+                    Button("None") {
+                        appState.launchDraft.sdkMCPProfileID = nil
+                    }
+                    ForEach(appState.sdkBridgeProfiles) { profile in
+                        Button(profile.name) {
+                            appState.launchDraft.sdkMCPProfileID = profile.id
+                        }
+                    }
+                } label: {
+                    SDKComposerChip(title: selectedProfileTitle, systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                .buttonStyle(.plain)
 
                 Text("\(appState.launchDraft.prompt.text.count) chars")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 4)
             }
+        }
+    }
 
+    @ViewBuilder
+    private var sdkComposerContextStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
             if isLoadingPromptImages || isLoadingPromptFiles {
                 ProgressView("Loading context")
                     .font(.footnote)
@@ -341,6 +335,26 @@ struct SDKNewSessionView: View {
                     .padding(.vertical, 2)
                 }
             }
+        }
+    }
+
+    private var shouldShowComposerContext: Bool {
+        isLoadingPromptImages || isLoadingPromptFiles || promptFileImportMessage != nil || !appState.launchDraft.prompt.images.isEmpty || !appState.launchDraft.prompt.files.isEmpty
+    }
+
+    private var sdkMessageIntentBinding: Binding<SDKMessageIntent> {
+        Binding {
+            appState.launchDraft.sdkMessageIntent
+        } set: { intent in
+            appState.launchDraft.sdkMessageIntent = intent
+        }
+    }
+
+    private var sdkPromptTextBinding: Binding<String> {
+        Binding {
+            appState.launchDraft.prompt.text
+        } set: { text in
+            appState.launchDraft.prompt.text = text
         }
     }
 
@@ -650,6 +664,51 @@ private struct SDKSessionCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(Color(uiColor: .secondarySystemGroupedBackground))
             )
+    }
+}
+
+private struct SDKSectionHeader: View {
+    var title: String
+    var detail: String
+    var systemImage: String
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundStyle(.tint)
+        }
+    }
+}
+
+private struct SDKComposerChip: View {
+    var title: String
+    var systemImage: String
+
+    var body: some View {
+        Label {
+            Text(title)
+                .lineLimit(1)
+        } icon: {
+            Image(systemName: systemImage)
+        }
+        .font(.caption.weight(.medium))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(Capsule().fill(Color(uiColor: .secondarySystemBackground)))
+        .overlay(
+            Capsule()
+                .stroke(Color(uiColor: .separator).opacity(0.25), lineWidth: 0.5)
+        )
     }
 }
 

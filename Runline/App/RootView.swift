@@ -79,6 +79,7 @@ struct RootView: View {
         defaultRunModeRawValue = mode.rawValue
         didChooseDefaultRunMode = true
         appState.applyDefaultRunMode(mode)
+        appState.selectedTab = mode == .sdkBridge && appState.isSDKBridgeReadyForLaunch ? .sdk : .chats
     }
 }
 

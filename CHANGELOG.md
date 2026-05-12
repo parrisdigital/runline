@@ -19,6 +19,7 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Added bridge token persistence and `--public-url` support for trusted reconnects and tunnel/hosted bridge setup links.
 - Added SDK session run cancellation from the native chat toolbar through the bridge.
 - Split Cursor SDK mode away from the Cloud Agent launch form with a dedicated native SDK session composer, Plan/Execute launch intent, and coding-chat detail view.
+- Moved New SDK Session into a chat-style bottom composer with model, MCP/profile, Plan, Continue, Execute, files, and images attached next to the prompt.
 - Render SDK sessions as chat-first workspaces with user/assistant bubbles and collapsible thinking, tool, status, and result traces.
 
 ## runline-bridge 0.1.6
