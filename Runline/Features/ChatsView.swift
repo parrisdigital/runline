@@ -72,23 +72,34 @@ struct ChatListContent: View {
     }
 
     private var runningAgents: [Agent] {
-        appState.activeAgents.filter { appState.runs(for: $0).first?.status == .running }
+        cloudActiveAgents.filter { appState.runs(for: $0).first?.status == .running }
     }
 
     private var recentAgents: [Agent] {
-        appState.activeAgents.filter { appState.runs(for: $0).first?.status != .running }
+        cloudActiveAgents.filter { appState.runs(for: $0).first?.status != .running }
     }
 
     private var archivedAgents: [Agent] {
-        appState.agents.filter { agent in
+        cloudAgents.filter { agent in
             if case .archived = agent.status { return true }
+            return false
+        }
+    }
+
+    private var cloudAgents: [Agent] {
+        appState.agents.filter { !appState.isSDKBridgeAgent($0) }
+    }
+
+    private var cloudActiveAgents: [Agent] {
+        cloudAgents.filter { agent in
+            guard case .archived = agent.status else { return true }
             return false
         }
     }
 
     @ViewBuilder
     private var listContent: some View {
-        if appState.agents.isEmpty {
+        if cloudAgents.isEmpty {
             ContentUnavailableView(
                 "No Chats",
                 systemImage: "message",

@@ -238,6 +238,7 @@ final class RunlineTests: XCTestCase {
             modelID: "composer-2",
             source: .repository(url: URL(string: "https://github.com/acme/app")!, startingRef: "main"),
             runMode: .sdkBridge,
+            sdkMessageIntent: .plan,
             branchName: nil,
             autoGenerateBranch: true,
             autoCreatePullRequest: true,
@@ -251,6 +252,29 @@ final class RunlineTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AgentLaunchDraft.self, from: legacyData)
 
         XCTAssertEqual(decoded.runMode, .cloudAgent)
+        XCTAssertEqual(decoded.sdkMessageIntent, .plan)
+    }
+
+    func testLaunchDraftDecodesLegacyCacheWithDefaultSDKMessageIntent() throws {
+        let draft = AgentLaunchDraft(
+            prompt: AgentPrompt(text: "Build settings"),
+            modelID: "composer-2",
+            source: .repository(url: URL(string: "https://github.com/acme/app")!, startingRef: "main"),
+            runMode: .sdkBridge,
+            sdkMessageIntent: .execute,
+            branchName: nil,
+            autoGenerateBranch: true,
+            autoCreatePullRequest: true,
+            skipReviewerRequest: false
+        )
+        let data = try JSONEncoder().encode(draft)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "sdkMessageIntent")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(AgentLaunchDraft.self, from: legacyData)
+
+        XCTAssertEqual(decoded.sdkMessageIntent, .continueConversation)
     }
 
     @MainActor

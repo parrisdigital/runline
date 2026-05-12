@@ -35,7 +35,8 @@ Runline is in public beta.
 - Adapts the same SwiftUI experience to iPhone and iPad, including portrait and landscape.
 - Supports system appearance, light mode, dark mode, and user-selected appearance preferences.
 - Provides an optional Cursor SDK bridge path for users who want SDK sessions from their Mac.
-- Adds a dedicated native SDK tab for bridge status, SDK sessions, models, MCP profiles, files/images, Plan/Execute follow-ups, and setup.
+- Adds a dedicated native SDK tab for bridge status, SDK sessions, models, MCP profiles, files/images, Plan/Execute controls, and setup.
+- Gives Cursor SDK mode its own native session composer and coding-chat workspace instead of reusing the Cloud Agent launch form.
 
 ## Runtime Modes
 
@@ -46,7 +47,7 @@ Runline is in public beta.
 
 Cloud Agent mode does not require Node, a Mac bridge, a hosted backend, or any Runline server.
 
-Cursor SDK mode is intentionally opt-in. It should be treated as a power-user path until the bridge and pairing flow are hardened further.
+Cursor SDK mode is intentionally opt-in. It now opens a separate SDK workspace with a composer-first session launcher, Plan/Execute intent controls, model and MCP profile menus, native attachments, collapsible thinking/tool traces, and chat-style follow-ups. It still requires a reachable bridge while the user controls or streams SDK sessions.
 
 For the public-source boundary between direct Cloud Agent usage, optional bridge usage, and private release/deployment configuration, see [SELF_HOSTING_MODEL.md](SELF_HOSTING_MODEL.md).
 

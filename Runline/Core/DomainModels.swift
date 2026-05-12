@@ -376,6 +376,7 @@ struct AgentLaunchDraft: Hashable, Codable {
     var modelID: String?
     var source: AgentSource
     var runMode: AgentRunMode
+    var sdkMessageIntent: SDKMessageIntent
     var sdkMCPProfileID: String?
     var branchName: String?
     var autoGenerateBranch: Bool
@@ -387,6 +388,7 @@ struct AgentLaunchDraft: Hashable, Codable {
         modelID: String?,
         source: AgentSource,
         runMode: AgentRunMode = .cloudAgent,
+        sdkMessageIntent: SDKMessageIntent = .continueConversation,
         sdkMCPProfileID: String? = nil,
         branchName: String?,
         autoGenerateBranch: Bool,
@@ -397,6 +399,7 @@ struct AgentLaunchDraft: Hashable, Codable {
         self.modelID = modelID
         self.source = source
         self.runMode = runMode
+        self.sdkMessageIntent = sdkMessageIntent
         self.sdkMCPProfileID = sdkMCPProfileID
         self.branchName = branchName
         self.autoGenerateBranch = autoGenerateBranch
@@ -410,6 +413,7 @@ struct AgentLaunchDraft: Hashable, Codable {
         modelID = try container.decodeIfPresent(String.self, forKey: .modelID)
         source = try container.decode(AgentSource.self, forKey: .source)
         runMode = try container.decodeIfPresent(AgentRunMode.self, forKey: .runMode) ?? .cloudAgent
+        sdkMessageIntent = try container.decodeIfPresent(SDKMessageIntent.self, forKey: .sdkMessageIntent) ?? .continueConversation
         sdkMCPProfileID = try container.decodeIfPresent(String.self, forKey: .sdkMCPProfileID)
         branchName = try container.decodeIfPresent(String.self, forKey: .branchName)
         autoGenerateBranch = try container.decode(Bool.self, forKey: .autoGenerateBranch)

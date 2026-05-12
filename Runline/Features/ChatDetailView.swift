@@ -564,7 +564,7 @@ struct ChatDetailView: View {
     }
 }
 
-private struct ArtifactsSheet: View {
+struct ArtifactsSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     var agent: Agent

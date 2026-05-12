@@ -3,28 +3,28 @@ import SwiftUI
 struct SDKWorkspaceView: View {
     @Environment(AppState.self) private var appState
     @State private var path: [Agent.ID] = []
-    @State private var isNewSDKChatPresented = false
+    @State private var isNewSDKSessionPresented = false
     @State private var cursorSDKOnboardingSheet: CursorSDKOnboardingSheet?
 
     var body: some View {
         NavigationStack(path: $path) {
             SDKWorkspaceContent(
                 selectAgent: { path = [$0.id] },
-                newSDKChat: startNewSDKChat,
+                newSDKChat: startNewSDKSession,
                 openSetup: { cursorSDKOnboardingSheet = .setup }
             )
             .navigationTitle("Cursor SDK")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: startNewSDKChat) {
+                    Button(action: startNewSDKSession) {
                         Image(systemName: "square.and.pencil")
                     }
-                    .accessibilityLabel("New SDK Chat")
+                    .accessibilityLabel("New SDK Session")
                 }
             }
             .navigationDestination(for: Agent.ID.self) { agentID in
                 if let agent = appState.agent(id: agentID) {
-                    ChatDetailView(agent: agent)
+                    SDKSessionDetailView(agent: agent)
                 } else {
                     ContentUnavailableView(
                         "Session Unavailable",
@@ -34,8 +34,8 @@ struct SDKWorkspaceView: View {
                     .navigationTitle("Cursor SDK")
                 }
             }
-            .sheet(isPresented: $isNewSDKChatPresented) {
-                NewChatSheet()
+            .sheet(isPresented: $isNewSDKSessionPresented) {
+                SDKNewSessionSheet()
             }
             .sheet(item: $cursorSDKOnboardingSheet) { _ in
                 CursorSDKOnboardingView(
@@ -53,9 +53,9 @@ struct SDKWorkspaceView: View {
         }
     }
 
-    private func startNewSDKChat() {
+    private func startNewSDKSession() {
         appState.launchDraft.runMode = .sdkBridge
-        isNewSDKChatPresented = true
+        isNewSDKSessionPresented = true
     }
 }
 
@@ -66,17 +66,31 @@ struct SDKWorkspaceContent: View {
     var openSetup: () -> Void
 
     private var sdkAgents: [Agent] {
-        appState.activeAgents.filter(appState.isSDKBridgeAgent)
+        appState.agents.filter(appState.isSDKBridgeAgent)
+    }
+
+    private var activeSDKAgents: [Agent] {
+        sdkAgents.filter { agent in
+            guard case .archived = agent.status else { return true }
+            return false
+        }
     }
 
     private var runningSDKAgents: [Agent] {
-        sdkAgents.filter { appState.runs(for: $0).first?.status == .running || appState.runs(for: $0).first?.status == .creating }
+        activeSDKAgents.filter { appState.runs(for: $0).first?.status == .running || appState.runs(for: $0).first?.status == .creating }
     }
 
     private var recentSDKAgents: [Agent] {
-        sdkAgents.filter { agent in
+        activeSDKAgents.filter { agent in
             guard let status = appState.runs(for: agent).first?.status else { return true }
             return status != .running && status != .creating
+        }
+    }
+
+    private var archivedSDKAgents: [Agent] {
+        sdkAgents.filter { agent in
+            if case .archived = agent.status { return true }
+            return false
         }
     }
 
@@ -99,6 +113,7 @@ struct SDKWorkspaceContent: View {
                 } else {
                     sdkAgentRows("Running", agents: runningSDKAgents)
                     sdkAgentRows("Recent", agents: recentSDKAgents)
+                    sdkAgentRows("Archived", agents: archivedSDKAgents)
                 }
             }
 
@@ -144,6 +159,7 @@ struct SDKWorkspaceContent: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .safeAreaPadding(.bottom, 24)
         .refreshable {
             await appState.checkSDKBridgeConnection()
             await appState.reloadSDKBridgeProfiles()
@@ -208,9 +224,10 @@ private struct SDKWorkspaceStatusCard: View {
 
             HStack(spacing: 10) {
                 Button(action: newSDKChat) {
-                    Label("New SDK Chat", systemImage: "square.and.pencil")
+                    Label("New SDK Session", systemImage: "square.and.pencil")
                 }
                 .buttonStyle(.borderedProminent)
+                .foregroundStyle(.white)
                 .disabled(!appState.isSDKBridgeReadyForLaunch)
 
                 Button(action: openSetup) {

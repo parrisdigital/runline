@@ -350,7 +350,7 @@ private struct RegularAppShellView: View {
                     Button(action: startNewSDKChat) {
                         Image(systemName: "square.and.pencil")
                     }
-                    .accessibilityLabel("New SDK Chat")
+                    .accessibilityLabel("New SDK Session")
                 }
             }
         case .repositories:
@@ -398,11 +398,11 @@ private struct RegularAppShellView: View {
             }
         case .sdk:
             if isComposing {
-                NewChatForm(presentation: .detail)
+                SDKNewSessionView(presentation: .detail)
             } else if let selectedAgentID,
                       let agent = appState.agent(id: selectedAgentID),
                       appState.isSDKBridgeAgent(agent) {
-                ChatDetailView(agent: agent)
+                SDKSessionDetailView(agent: agent)
             } else {
                 SDKToolsView()
             }

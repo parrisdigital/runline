@@ -1219,7 +1219,7 @@ final class AppState {
         let request = SDKBridgeCloudRunRequest(
             prompt: launchDraft.prompt.textWithFileContext,
             images: sdkPromptImages(from: launchDraft.prompt),
-            intent: nil,
+            intent: launchDraft.sdkMessageIntent == .continueConversation ? nil : launchDraft.sdkMessageIntent.bridgeValue,
             repositoryUrl: sdkBridgeRepositoryURL(from: launchDraft.source)?.absoluteString,
             startingRef: sdkBridgeStartingRef(from: launchDraft.source),
             prUrl: sdkBridgePullRequestURL(from: launchDraft.source)?.absoluteString,

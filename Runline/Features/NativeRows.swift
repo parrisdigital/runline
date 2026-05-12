@@ -256,7 +256,7 @@ struct StreamEventListRow: View {
     }
 }
 
-private struct TimelineMessageText: View {
+struct TimelineMessageText: View {
     var message: String
     var isTechnical: Bool
     var rendersMarkdown: Bool
