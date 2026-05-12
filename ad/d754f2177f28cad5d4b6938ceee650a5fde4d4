@@ -1,0 +1,19 @@
+Runline/Features/SDKWorkspaceView.swift
+  s_1fab33d1220fd9::t_7deefaffb53197 227-228,233,237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "add754f2177f28cad5d4b6938ceee650a5fde4d4",
+  "prompts": {},
+  "sessions": {
+    "s_1fab33d1220fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019df38a-3d51-7141-9df9-d0f56769bf8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
