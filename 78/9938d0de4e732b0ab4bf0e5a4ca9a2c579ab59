@@ -1,0 +1,27 @@
+Runline.xcodeproj/project.pbxproj
+  s_d248ce3e94eb45::t_24bbda90f90703 450,571
+project.yml
+  s_d248ce3e94eb45::t_24bbda90f90703 13
+.asc/workflow.example.json
+  s_d248ce3e94eb45::t_790cd9f7b0f7ae 13
+CHANGELOG.md
+  s_d248ce3e94eb45::t_790cd9f7b0f7ae 5,14
+docs/RELEASES.md
+  s_d248ce3e94eb45::t_790cd9f7b0f7ae 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "789938d0de4e732b0ab4bf0e5a4ca9a2c579ab59",
+  "prompts": {},
+  "sessions": {
+    "s_d248ce3e94eb45": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e4d13-bc66-7bc2-8d3f-c1c0f21ec167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
