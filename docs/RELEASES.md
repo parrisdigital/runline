@@ -8,7 +8,7 @@ Runline is a Cursor Cloud-only iOS app. Release work should not introduce requir
 
 | Area | State |
 | --- | --- |
-| iOS app | Runline `1.0 (21)` in beta sequence |
+| iOS app | Runline `1.0 (25)` in beta sequence |
 | Runtime | Direct Cursor Cloud Agents API |
 | Public source | Safe to build without maintainer credentials |
 | ASC config | Live `.asc/workflow.json` remains local and ignored |

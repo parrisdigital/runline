@@ -10,7 +10,7 @@
     "TESTFLIGHT_GROUP_ID": "replace-with-external-testflight-group-id",
     "INTERNAL_TESTFLIGHT_GROUP_ID": "replace-with-internal-testflight-group-id",
     "LOCALE": "en-US",
-    "TEST_NOTES": "Verify Cloud Agent and Cursor SDK workflows, iPhone and iPad layouts, chat composer, attachments, model and MCP controls, Settings, light mode, and dark mode."
+    "TEST_NOTES": "Verify the Cloud-only Runline flow: API key setup, Chats, Repositories, Settings, chat composer, model selection, attachments, run updates, artifacts, iPhone and iPad layouts, light mode, and dark mode."
   },
   "before_all": "asc --profile $ASC_PROFILE auth status --validate --output json >/dev/null",
   "after_all": "echo workflow_done >&2",
