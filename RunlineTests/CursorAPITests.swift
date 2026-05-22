@@ -329,6 +329,34 @@ final class CursorAPITests: XCTestCase {
     }
 
     @MainActor
+    func testCreateRunCanSelectCloudModel() async throws {
+        MockURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "run": [
+                    "id": "run-model",
+                    "agentId": "bc-123",
+                    "status": "CREATING",
+                    "createdAt": "2026-04-27T12:00:00Z",
+                    "updatedAt": "2026-04-27T12:00:01Z"
+                ]
+            ])
+        }
+        let provider = try makeProvider()
+
+        _ = try await provider.createRun(
+            AgentFollowUpDraft(
+                agentID: "agent_123",
+                prompt: AgentPrompt(text: "Continue with Composer."),
+                modelID: "composer-2"
+            )
+        )
+
+        let body = try XCTUnwrap(MockURLProtocol.capturedRequests.first?.jsonBody)
+        let model = try XCTUnwrap(body["model"] as? [String: Any])
+        XCTAssertEqual(model["id"] as? String, "composer-2")
+    }
+
+    @MainActor
     func testCreateRunIncludesTextFileContextInPromptText() async throws {
         MockURLProtocol.handler = { request in
             try Self.jsonResponse(for: request, body: [
@@ -542,7 +570,7 @@ final class CursorAPITests: XCTestCase {
     }
 
     @MainActor
-    func testStreamEventsNormalizeSDKMessages() async throws {
+    func testStreamEventsNormalizeStructuredMessages() async throws {
         MockURLProtocol.handler = { request in
             let payload = [
                 "id: evt-assistant",

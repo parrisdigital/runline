@@ -2,34 +2,20 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
-    @AppStorage(RunlineWorkflowPreferences.didChooseDefaultRunModeKey) private var didChooseDefaultRunMode = false
-    @AppStorage(RunlineWorkflowPreferences.defaultRunModeKey) private var defaultRunModeRawValue = RunlineWorkflowPreferences.defaultRunMode.rawValue
 
     var body: some View {
         Group {
             if appState.isConnected {
                 AppShellView()
             } else {
-                WelcomeView {
-                    didChooseDefaultRunMode = false
-                }
+                WelcomeView()
             }
         }
         .task {
             await appState.restoreConnectionIfAvailable()
-            if appState.isConnected, didChooseDefaultRunMode {
-                appState.applyDefaultRunMode(defaultRunMode)
-            }
         }
         .onOpenURL { url in
             appState.handleDeepLink(url)
-        }
-        .sheet(isPresented: workflowChooserBinding) {
-            WorkflowModeChooserSheet(
-                selectedMode: defaultRunMode,
-                choose: chooseDefaultRunMode
-            )
-            .interactiveDismissDisabled()
         }
         .alert("Runline", isPresented: isShowingError) {
             Button("OK") {
@@ -51,20 +37,6 @@ struct RootView: View {
         .animation(.snappy(duration: 0.2), value: appState.statusMessage)
     }
 
-    private var defaultRunMode: AgentRunMode {
-        RunlineWorkflowPreferences.runMode(from: defaultRunModeRawValue)
-    }
-
-    private var workflowChooserBinding: Binding<Bool> {
-        Binding {
-            appState.isConnected && !didChooseDefaultRunMode
-        } set: { isPresented in
-            if !isPresented, appState.isConnected, !didChooseDefaultRunMode {
-                chooseDefaultRunMode(.cloudAgent)
-            }
-        }
-    }
-
     private var isShowingError: Binding<Bool> {
         Binding {
             appState.errorMessage != nil
@@ -73,131 +45,6 @@ struct RootView: View {
                 appState.errorMessage = nil
             }
         }
-    }
-
-    private func chooseDefaultRunMode(_ mode: AgentRunMode) {
-        defaultRunModeRawValue = mode.rawValue
-        didChooseDefaultRunMode = true
-        appState.applyDefaultRunMode(mode)
-        appState.selectedTab = mode == .sdkBridge && appState.isSDKBridgeReadyForLaunch ? .sdk : .chats
-    }
-}
-
-private struct WorkflowModeChooserSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(AppState.self) private var appState
-    let selectedMode: AgentRunMode
-    let choose: (AgentRunMode) -> Void
-    @State private var cursorSDKOnboardingSheet: CursorSDKOnboardingSheet?
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    WorkflowModeButton(
-                        mode: .cloudAgent,
-                        isSelected: effectiveSelectedMode == .cloudAgent,
-                        symbolName: "icloud",
-                        detail: "Start a cloud run, monitor progress, preview artifacts, and follow up after completion.",
-                        choose: select
-                    )
-
-                    WorkflowModeButton(
-                        mode: .sdkBridge,
-                        isSelected: effectiveSelectedMode == .sdkBridge,
-                        symbolName: "point.3.connected.trianglepath.dotted",
-                        detail: sdkAgentDetail,
-                        choose: select
-                    )
-                } footer: {
-                    Text("Cloud Agent is ready now. Choose Cursor SDK to walk through Runline Bridge setup. You can change this later in Settings.")
-                }
-            }
-            .navigationTitle("Choose Runtime")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .sheet(item: $cursorSDKOnboardingSheet) { _ in
-            CursorSDKOnboardingView(
-                onUseCloud: {
-                    choose(.cloudAgent)
-                    dismiss()
-                },
-                onUseSDK: {
-                    choose(.sdkBridge)
-                    dismiss()
-                },
-                onOpenSettings: {
-                    SDKBridgePreferences.setEnabled(true)
-                    appState.syncSDKBridgeConfiguration(resetConnection: true)
-                    choose(.cloudAgent)
-                    appState.selectedTab = .settings
-                    dismiss()
-                }
-            )
-        }
-    }
-
-    private var sdkAgentDetail: String {
-        appState.isSDKBridgeReadyForLaunch
-            ? "Use Runline Bridge for Cursor SDK chat, MCP profiles, files, images, planning, and execution."
-            : "Pair a Mac with Runline Bridge to unlock Cursor SDK sessions, MCP profiles, and git-aware remote work."
-    }
-
-    private var effectiveSelectedMode: AgentRunMode {
-        selectedMode == .sdkBridge && !appState.isSDKBridgeReadyForLaunch ? .cloudAgent : selectedMode
-    }
-
-    private func select(_ mode: AgentRunMode) {
-        if mode == .sdkBridge, !appState.isSDKBridgeReadyForLaunch {
-            cursorSDKOnboardingSheet = .setup
-            return
-        }
-        choose(mode)
-        dismiss()
-    }
-}
-
-private struct WorkflowModeButton: View {
-    let mode: AgentRunMode
-    let isSelected: Bool
-    var isEnabled = true
-    let symbolName: String
-    let detail: String
-    let choose: (AgentRunMode) -> Void
-
-    var body: some View {
-        Button {
-            choose(mode)
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: symbolName)
-                    .font(.title3)
-                    .frame(width: 28)
-                    .foregroundStyle(.tint)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(mode.title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Text(detail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 8)
-
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.tint)
-                }
-            }
-            .padding(.vertical, 4)
-            .opacity(isEnabled ? 1 : 0.55)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
     }
 }
 
@@ -253,11 +100,6 @@ private struct CompactAppShellView: View {
                 .tag(AppTab.chats)
                 .accessibilityIdentifier("tab.chats")
 
-            SDKWorkspaceView()
-                .tabItem { Label(AppTab.sdk.title, systemImage: AppTab.sdk.symbolName) }
-                .tag(AppTab.sdk)
-                .accessibilityIdentifier("tab.sdk")
-
             RepositoriesView()
                 .tabItem { Label(AppTab.repositories.title, systemImage: AppTab.repositories.symbolName) }
                 .tag(AppTab.repositories)
@@ -276,6 +118,7 @@ private struct RegularAppShellView: View {
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var selectedAgentID: Agent.ID?
     @State private var selectedRepositoryURL: URL?
+    @State private var chatQuery = ""
     @State private var repositoryQuery = ""
     @State private var isComposing = false
 
@@ -296,9 +139,6 @@ private struct RegularAppShellView: View {
         .navigationSplitViewStyle(.balanced)
         .onChange(of: appState.selectedTab) { _, tab in
             if tab == .settings {
-                isComposing = false
-            }
-            if tab == .sdk {
                 isComposing = false
             }
         }
@@ -329,7 +169,7 @@ private struct RegularAppShellView: View {
     private var contentColumn: some View {
         switch appState.selectedTab {
         case .chats:
-            ChatListContent(presentation: .selection($selectedAgentID))
+            ChatListContent(query: $chatQuery, presentation: .selection($selectedAgentID))
                 .navigationTitle("Chats")
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -339,21 +179,6 @@ private struct RegularAppShellView: View {
                         .accessibilityLabel("New Chat")
                     }
                 }
-        case .sdk:
-            SDKWorkspaceContent(
-                selectAgent: selectSDKAgent,
-                newSDKChat: startNewSDKChat,
-                openSetup: openSDKSetup
-            )
-            .navigationTitle("Cursor SDK")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: startNewSDKChat) {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .accessibilityLabel("New SDK Session")
-                }
-            }
         case .repositories:
             RepositoryListContent(
                 query: $repositoryQuery,
@@ -393,19 +218,9 @@ private struct RegularAppShellView: View {
                 ContentUnavailableView(
                     "Select a Chat",
                     systemImage: "message",
-                    description: Text("Choose a cloud-agent run from the Chats column.")
+                    description: Text("Choose a Cloud Agent conversation from the Chats column.")
                 )
                 .navigationTitle("Chat")
-            }
-        case .sdk:
-            if isComposing {
-                SDKNewSessionView(presentation: .detail)
-            } else if let selectedAgentID,
-                      let agent = appState.agent(id: selectedAgentID),
-                      appState.isSDKBridgeAgent(agent) {
-                SDKSessionDetailView(agent: agent)
-            } else {
-                SDKToolsView()
             }
         case .repositories:
             if isComposing {
@@ -414,7 +229,7 @@ private struct RegularAppShellView: View {
                 ContentUnavailableView(
                     "Select a Repository",
                     systemImage: "folder",
-                    description: Text("Choose a repository to configure a new cloud-agent run.")
+                    description: Text("Choose a repository to start a Cloud Agent chat.")
                 )
                 .navigationTitle("New Chat")
             }
@@ -427,22 +242,6 @@ private struct RegularAppShellView: View {
     private func startNewChat() {
         selectedAgentID = nil
         isComposing = true
-    }
-
-    private func startNewSDKChat() {
-        selectedAgentID = nil
-        appState.launchDraft.runMode = .sdkBridge
-        isComposing = true
-    }
-
-    private func selectSDKAgent(_ agent: Agent) {
-        selectedAgentID = agent.id
-        isComposing = false
-    }
-
-    private func openSDKSetup() {
-        appState.selectedTab = .settings
-        isComposing = false
     }
 
     private func selectRepository(_ repository: Repository) {
@@ -458,11 +257,7 @@ private struct RegularAppShellView: View {
         guard let agentID else { return }
         selectedAgentID = agentID
         isComposing = false
-        if let agent = appState.agent(id: agentID), appState.isSDKBridgeAgent(agent) {
-            appState.selectedTab = .sdk
-        } else {
-            appState.selectedTab = .chats
-        }
+        appState.selectedTab = .chats
         appState.focusedAgentID = nil
     }
 }
@@ -474,7 +269,7 @@ private struct SettingsColumnSummary: View {
                 Label("Account", systemImage: "person.crop.circle")
                 Label("Appearance", systemImage: "circle.lefthalf.filled")
                 Label("Notifications", systemImage: "bell")
-                Label("Cursor SDK", systemImage: "point.3.connected.trianglepath.dotted")
+                Label("Advanced API", systemImage: "terminal")
             }
 
             Section {

@@ -133,7 +133,12 @@ final class CursorAgentProvider: AgentProvider, EnterpriseDataProvider {
     }
 
     func createRun(_ draft: AgentFollowUpDraft) async throws -> AgentRun {
-        let request = CursorCreateRunRequest(prompt: makePromptRequest(from: draft.prompt))
+        let modelID = draft.modelID?.nilIfBlank
+        let model = modelID?.isCursorDefaultModelIdentifier == true ? nil : modelID.map { CursorModelObjectDTO(id: $0) }
+        let request = CursorCreateRunRequest(
+            prompt: makePromptRequest(from: draft.prompt),
+            model: model
+        )
         let response: CursorCreateRunResponse = try await client.request(
             "/v1/agents/\(draft.agentID)/runs",
             method: .post,

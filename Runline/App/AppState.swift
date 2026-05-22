@@ -10,15 +10,11 @@ final class AppState {
     private var enterpriseProvider: EnterpriseDataProvider?
     private let apiKeyStore: APIKeyStore
     private let enterpriseAPIKeyStore: APIKeyStore
-    private let sdkBridgeTokenStore: APIKeyStore
     private let appCache: LocalAppCache
     private let providerFactory: @MainActor (String) throws -> AgentProvider
     private var hasRestoredConnection = false
     private var observingRunIDs: Set<AgentRun.ID> = []
     private var streamExpiredRunIDs: Set<AgentRun.ID> = []
-    private var sdkBridgeRunIDs: Set<AgentRun.ID> = []
-    private var sdkBridgeMCPProfileIDsByAgentID: [Agent.ID: SDKBridgeMCPProfile.ID] = [:]
-    private var sdkBridgeToken: String?
     private var artifactDownloadsByKey: [String: ArtifactDownload] = [:]
 
     var selectedTab: AppTab = .chats
@@ -33,9 +29,6 @@ final class AppState {
     var endpointResults: [CursorAPIEndpoint.ID: CursorAPIEndpointResult] = [:]
     var loadingEndpointIDs: Set<CursorAPIEndpoint.ID> = []
     var endpointPageOverrides: [CursorAPIEndpoint.ID: Int] = [:]
-    var sdkBridgeProfiles: [SDKBridgeMCPProfile] = []
-    var sdkBridgeConnectionState: SDKBridgeConnectionState = SDKBridgePreferences.isEnabled() ? .unchecked : .disabled
-    var sdkBridgePairingState: SDKBridgePairingState = .idle
     var focusedAgentID: Agent.ID?
     var notificationPreferences = NotificationPreferences()
     var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
@@ -48,29 +41,19 @@ final class AppState {
     var statusMessage: String?
     var launchDraft: AgentLaunchDraft
 
-    private let sdkBridgeClientFactory: @MainActor (URL, String?, String?) -> SDKBridgeClient
-
     init(
         provider: AgentProvider? = nil,
         apiKeyStore: APIKeyStore = KeychainAPIKeyStore(),
         enterpriseAPIKeyStore: APIKeyStore = KeychainAPIKeyStore(account: .cursorEnterpriseAdmin),
-        sdkBridgeTokenStore: APIKeyStore = KeychainAPIKeyStore(account: .runlineBridgeToken),
         appCache: LocalAppCache = LocalAppCache(),
-        providerFactory: @escaping @MainActor (String) throws -> AgentProvider = { try CursorAgentProvider(apiKey: $0) },
-        sdkBridgeClientFactory: @escaping @MainActor (URL, String?, String?) -> SDKBridgeClient = { baseURL, apiKey, bridgeToken in
-            SDKBridgeClient(baseURL: baseURL, apiKey: apiKey, bridgeToken: bridgeToken)
-        }
+        providerFactory: @escaping @MainActor (String) throws -> AgentProvider = { try CursorAgentProvider(apiKey: $0) }
     ) {
         self.provider = provider
         enterpriseProvider = provider as? EnterpriseDataProvider
         self.apiKeyStore = apiKeyStore
         self.enterpriseAPIKeyStore = enterpriseAPIKeyStore
-        self.sdkBridgeTokenStore = sdkBridgeTokenStore
         self.appCache = appCache
         self.providerFactory = providerFactory
-        self.sdkBridgeClientFactory = sdkBridgeClientFactory
-        let storedBridgeToken = try? sdkBridgeTokenStore.loadAPIKey()?.nilIfBlank
-        sdkBridgeToken = storedBridgeToken
         launchDraft = AgentLaunchDraft(
             prompt: AgentPrompt(text: ""),
             modelID: nil,
@@ -80,9 +63,6 @@ final class AppState {
             autoCreatePullRequest: true,
             skipReviewerRequest: false
         )
-        if storedBridgeToken != nil {
-            sdkBridgePairingState = .paired("Runline Bridge")
-        }
     }
 
     var capabilities: ProviderCapabilities {
@@ -125,51 +105,7 @@ final class AppState {
         case .pullRequest(let url):
             guard Self.isUsablePullRequestURL(url) else { return false }
         }
-
-        if launchDraft.runMode == .sdkBridge {
-            return sdkBridgeLaunchIssue == nil
-        }
         return true
-    }
-
-    var isSDKBridgeReadyForLaunch: Bool {
-        sdkBridgeReadinessIssue == nil
-    }
-
-    var isSDKBridgePaired: Bool {
-        sdkBridgeToken?.nilIfBlank != nil
-    }
-
-    var sdkBridgeReadinessIssue: String? {
-        guard account != nil else {
-            return "Connect a Cursor API key before using Cursor SDK."
-        }
-        guard SDKBridgePreferences.isEnabled() else {
-            return "Enable Runline Bridge in Settings before using Cursor SDK."
-        }
-        guard SDKBridgePreferences.configuredBaseURL() != nil else {
-            return "Enter a valid Runline Bridge URL in Settings."
-        }
-        guard isSDKBridgePaired else {
-            return "Pair Runline Bridge in Settings before using Cursor SDK."
-        }
-        switch sdkBridgeConnectionState {
-        case .connected:
-            return nil
-        case .disabled:
-            return "Enable Runline Bridge in Settings before using Cursor SDK."
-        case .unchecked:
-            return "Check the Runline Bridge connection in Settings before using Cursor SDK."
-        case .checking:
-            return "Runline is checking the bridge connection."
-        case .failed(let message):
-            return "Runline Bridge is unavailable. \(message)"
-        }
-    }
-
-    var sdkBridgeLaunchIssue: String? {
-        guard launchDraft.runMode == .sdkBridge else { return nil }
-        return sdkBridgeReadinessIssue
     }
 
     func restoreConnectionIfAvailable() async {
@@ -208,7 +144,6 @@ final class AppState {
             provider = cursorProvider
             enterpriseProvider = cursorProvider as? EnterpriseDataProvider
             account = validatedAccount
-            syncSDKBridgeConfiguration()
         } catch {
             provider = nil
             enterpriseProvider = nil
@@ -230,7 +165,6 @@ final class AppState {
         do {
             try apiKeyStore.deleteAPIKey()
             try enterpriseAPIKeyStore.deleteAPIKey()
-            try sdkBridgeTokenStore.deleteAPIKey()
         } catch {
             errorMessage = "Could not remove the local Cursor API key."
         }
@@ -245,12 +179,6 @@ final class AppState {
         runsByAgentID = [:]
         eventsByRunID = [:]
         artifactsByAgentID = [:]
-        sdkBridgeRunIDs = []
-        sdkBridgeMCPProfileIDsByAgentID = [:]
-        sdkBridgeToken = nil
-        sdkBridgeProfiles = []
-        sdkBridgePairingState = .idle
-        sdkBridgeConnectionState = SDKBridgePreferences.isEnabled() ? .unchecked : .disabled
         endpointResults = [:]
         loadingEndpointIDs = []
         endpointPageOverrides = [:]
@@ -378,213 +306,7 @@ final class AppState {
         streamExpiredRunIDs.contains(runID)
     }
 
-    func applyDefaultRunMode(_ mode: AgentRunMode) {
-        if mode == .sdkBridge, !isSDKBridgeReadyForLaunch {
-            launchDraft.runMode = .cloudAgent
-            saveCachedState()
-            return
-        }
-        launchDraft.runMode = mode
-        saveCachedState()
-    }
-
-    func ensureLaunchRunModeIsAvailable() {
-        if launchDraft.runMode == .sdkBridge, !isSDKBridgeReadyForLaunch {
-            launchDraft.runMode = .cloudAgent
-            saveCachedState()
-        }
-    }
-
-    func isSDKBridgeRun(runID: AgentRun.ID) -> Bool {
-        sdkBridgeRunIDs.contains(runID)
-    }
-
-    func isSDKBridgeAgent(_ agent: Agent) -> Bool {
-        runsByAgentID[agent.id, default: []].contains { sdkBridgeRunIDs.contains($0.id) }
-    }
-
-    func sdkBridgeProfile(for agent: Agent) -> SDKBridgeMCPProfile? {
-        guard let profileID = sdkBridgeMCPProfileIDsByAgentID[agent.id] else { return nil }
-        return sdkBridgeProfiles.first { $0.id == profileID }
-    }
-
-    func sdkBridgeProfileID(for agent: Agent) -> SDKBridgeMCPProfile.ID? {
-        sdkBridgeMCPProfileIDsByAgentID[agent.id]
-    }
-
-    func syncSDKBridgeConfiguration(resetConnection: Bool = false) {
-        guard SDKBridgePreferences.isEnabled() else {
-            sdkBridgeConnectionState = .disabled
-            sdkBridgeProfiles = []
-            ensureLaunchRunModeIsAvailable()
-            return
-        }
-        guard SDKBridgePreferences.configuredBaseURL() != nil else {
-            sdkBridgeConnectionState = .failed("The bridge URL is invalid.")
-            sdkBridgeProfiles = []
-            ensureLaunchRunModeIsAvailable()
-            return
-        }
-        if resetConnection || !sdkBridgeConnectionState.isConnected {
-            sdkBridgeConnectionState = .unchecked
-            sdkBridgeProfiles = []
-            ensureLaunchRunModeIsAvailable()
-        }
-    }
-
-    func startSDKBridgePairing() async {
-        guard SDKBridgePreferences.isEnabled() else {
-            sdkBridgePairingState = .failed("Enable Runline Bridge before pairing.")
-            return
-        }
-        guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
-            sdkBridgePairingState = .failed("Enter a valid Runline Bridge URL before pairing.")
-            return
-        }
-
-        sdkBridgePairingState = .starting
-        do {
-            let response = try await sdkBridgeClientFactory(baseURL, nil, nil).startPairing(deviceName: UIDevice.current.name)
-            if response.pairingRequired == false {
-                sdkBridgePairingState = .paired("Runline Bridge")
-                sdkBridgeConnectionState = .unchecked
-                return
-            }
-            guard let pairingID = response.pairingId?.nilIfBlank else {
-                sdkBridgePairingState = .failed("Runline Bridge did not return a pairing session.")
-                return
-            }
-            sdkBridgePairingState = .waiting(
-                pairingID: pairingID,
-                expiresAt: response.expiresAt,
-                message: response.message
-            )
-        } catch {
-            sdkBridgePairingState = .failed(sdkBridgeConnectionFailureMessage(for: error, baseURL: baseURL))
-        }
-    }
-
-    func completeSDKBridgePairing(code: String) async {
-        guard case .waiting(let pairingID, _, _) = sdkBridgePairingState else {
-            sdkBridgePairingState = .failed("Start pairing before entering a code.")
-            return
-        }
-        await completeSDKBridgePairing(pairingID: pairingID, code: code)
-    }
-
-    func completeSDKBridgePairing(pairingID: String, code: String) async {
-        guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
-            sdkBridgePairingState = .failed("Enter a valid Runline Bridge URL before pairing.")
-            return
-        }
-        let pairingCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !pairingCode.isEmpty else {
-            sdkBridgePairingState = .failed("Enter the pairing code shown in the bridge terminal.")
-            return
-        }
-
-        sdkBridgePairingState = .completing
-        do {
-            let response = try await sdkBridgeClientFactory(baseURL, nil, nil).completePairing(
-                pairingID: pairingID,
-                code: pairingCode,
-                deviceName: UIDevice.current.name
-            )
-            guard let token = response.bridgeToken?.nilIfBlank else {
-                sdkBridgePairingState = .failed("Runline Bridge did not return a bridge token.")
-                return
-            }
-            try sdkBridgeTokenStore.saveAPIKey(token)
-            sdkBridgeToken = token
-            sdkBridgePairingState = .paired(response.bridgeName?.nilIfBlank ?? response.service?.nilIfBlank ?? "Runline Bridge")
-            sdkBridgeConnectionState = .unchecked
-            await checkSDKBridgeConnection()
-        } catch {
-            sdkBridgePairingState = .failed(sdkBridgeConnectionFailureMessage(for: error, baseURL: baseURL))
-        }
-    }
-
-    func forgetSDKBridgePairing() {
-        do {
-            try sdkBridgeTokenStore.deleteAPIKey()
-        } catch {
-            errorMessage = "Could not remove the Runline Bridge pairing token."
-        }
-        sdkBridgeToken = nil
-        sdkBridgeProfiles = []
-        sdkBridgePairingState = .idle
-        sdkBridgeConnectionState = SDKBridgePreferences.isEnabled() ? .unchecked : .disabled
-        ensureLaunchRunModeIsAvailable()
-    }
-
-    func checkSDKBridgeConnection() async {
-        guard SDKBridgePreferences.isEnabled() else {
-            sdkBridgeConnectionState = .disabled
-            sdkBridgeProfiles = []
-            ensureLaunchRunModeIsAvailable()
-            return
-        }
-        guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
-            sdkBridgeConnectionState = .failed("The bridge URL is invalid.")
-            sdkBridgeProfiles = []
-            ensureLaunchRunModeIsAvailable()
-            return
-        }
-        guard isSDKBridgePaired else {
-            sdkBridgeConnectionState = .failed("Pair Runline Bridge before checking Cursor SDK.")
-            sdkBridgeProfiles = []
-            ensureLaunchRunModeIsAvailable()
-            return
-        }
-
-        sdkBridgeConnectionState = .checking
-        do {
-            let health = try await sdkBridgeClientFactory(baseURL, nil, sdkBridgeToken).health()
-            if health.ok, health.paired != false {
-                let keepAwakeDetail = health.keepAwake == true ? " - Keep Awake" : ""
-                sdkBridgeConnectionState = .connected("\(health.service) - \(health.sdk)\(keepAwakeDetail)")
-                await reloadSDKBridgeProfiles()
-            } else {
-                sdkBridgeConnectionState = .failed("The bridge responded but did not accept this pairing token.")
-                sdkBridgeProfiles = []
-                ensureLaunchRunModeIsAvailable()
-            }
-        } catch {
-            sdkBridgeConnectionState = .failed(sdkBridgeConnectionFailureMessage(for: error, baseURL: baseURL))
-            sdkBridgeProfiles = []
-            ensureLaunchRunModeIsAvailable()
-        }
-    }
-
-    func reloadSDKBridgeProfiles() async {
-        guard SDKBridgePreferences.isEnabled(),
-              let baseURL = SDKBridgePreferences.configuredBaseURL() else {
-            sdkBridgeProfiles = []
-            return
-        }
-        guard isSDKBridgePaired else {
-            sdkBridgeProfiles = []
-            return
-        }
-        do {
-            let apiKey = try apiKeyStore.loadAPIKey()?.nilIfBlank
-            sdkBridgeProfiles = try await sdkBridgeClientFactory(baseURL, apiKey, sdkBridgeToken).listMCPProfiles()
-            if let profileID = launchDraft.sdkMCPProfileID,
-               !sdkBridgeProfiles.contains(where: { $0.id == profileID }) {
-                launchDraft.sdkMCPProfileID = nil
-            }
-        } catch {
-            sdkBridgeProfiles = []
-            if shouldReport(error) {
-                handleNonBlockingError(error)
-            }
-        }
-    }
-
     func refreshAgentDetail(agentID: Agent.ID) async {
-        if runsByAgentID[agentID, default: []].contains(where: { sdkBridgeRunIDs.contains($0.id) }) {
-            return
-        }
         guard let provider else {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
@@ -611,11 +333,6 @@ final class AppState {
     }
 
     func loadEvents(for agent: Agent, run: AgentRun) async {
-        if sdkBridgeRunIDs.contains(run.id) {
-            await loadSDKBridgeEvents(for: agent, run: run)
-            return
-        }
-
         guard let provider else {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
@@ -641,11 +358,6 @@ final class AppState {
         observingRunIDs.insert(run.id)
         streamExpiredRunIDs.remove(run.id)
         defer { observingRunIDs.remove(run.id) }
-
-        if sdkBridgeRunIDs.contains(run.id) {
-            await observeSDKBridgeRun(agent: agent, run: run)
-            return
-        }
 
         guard let provider else {
             errorMessage = CursorAPIError.missingProvider.userMessage
@@ -715,73 +427,6 @@ final class AppState {
         }
     }
 
-    private func loadSDKBridgeEvents(for agent: Agent, run: AgentRun) async {
-        do {
-            let client = try makeSDKBridgeClient()
-            let rawEvents = try await client.streamSessionEvents(sessionID: agent.id, runID: run.id)
-            mergeEvents(SDKBridgeEventMapper.events(from: rawEvents, runID: run.id), runID: run.id)
-            saveCachedState()
-        } catch {
-            if shouldReport(error) {
-                handleNonBlockingError(error)
-            }
-        }
-    }
-
-    private func observeSDKBridgeRun(agent: Agent, run: AgentRun) async {
-        var emptyRefreshCount = 0
-        var currentRun = run
-
-        while !Task.isCancelled {
-            do {
-                let client = try makeSDKBridgeClient()
-                let rawEvents = try await client.streamSessionEvents(sessionID: agent.id, runID: currentRun.id)
-                let mappedEvents = SDKBridgeEventMapper.events(from: rawEvents, runID: currentRun.id)
-                if mappedEvents.isEmpty {
-                    emptyRefreshCount += 1
-                } else {
-                    emptyRefreshCount = 0
-                    mergeEvents(mappedEvents, runID: currentRun.id)
-                }
-
-                let state = try await client.sessionState(sessionID: agent.id, runID: currentRun.id)
-                let latestRun = state.latestRun
-                currentRun = AgentRun(
-                    id: latestRun?.runId ?? currentRun.id,
-                    agentID: latestRun?.agentId ?? agent.id,
-                    status: latestRun.map { RunStatus(cursorValue: $0.status) } ?? currentRun.status,
-                    createdAtDescription: currentRun.createdAtDescription,
-                    updatedAtDescription: "now"
-                )
-                updateRun(currentRun, agentID: agent.id)
-
-                if currentRun.status.isTerminal {
-                    streamExpiredRunIDs.remove(currentRun.id)
-                    _ = await artifacts(for: agent, forceRefresh: true)
-                    saveCachedState()
-                    return
-                }
-
-                if emptyRefreshCount >= 3 {
-                    streamExpiredRunIDs.insert(currentRun.id)
-                    saveCachedState()
-                    return
-                }
-
-                saveCachedState()
-                try await Task.sleep(nanoseconds: 3_000_000_000)
-            } catch {
-                if isCancellation(error) {
-                    return
-                }
-                streamExpiredRunIDs.insert(currentRun.id)
-                handleNonBlockingError(error)
-                saveCachedState()
-                return
-            }
-        }
-    }
-
     func artifacts(for agent: Agent, forceRefresh: Bool = false) async -> [Artifact] {
         if !forceRefresh, let cached = artifactsByAgentID[agent.id] {
             return cached
@@ -827,38 +472,22 @@ final class AppState {
 
     func launchAgent() async {
         guard canLaunchAgent else {
-            errorMessage = sdkBridgeLaunchIssue ?? "Select a repository and add instructions before launching an agent."
+            errorMessage = "Select a repository and add instructions before launching an agent."
             return
         }
 
         isLaunching = true
         errorMessage = nil
         do {
-            let result: AgentLaunchResult
-            switch launchDraft.runMode {
-            case .cloudAgent:
-                guard let provider else {
-                    throw CursorAPIError.missingProvider
-                }
-                result = try await provider.createAgent(launchDraft)
-            case .sdkBridge:
-                result = try await launchSDKBridgeAgent()
-                sdkBridgeRunIDs.insert(result.run.id)
+            guard let provider else {
+                throw CursorAPIError.missingProvider
             }
+            let result = try await provider.createAgent(launchDraft)
             agents.insert(result.agent, at: 0)
             runsByAgentID[result.agent.id] = [result.run]
-            eventsByRunID[result.run.id] = launchDraft.runMode == .sdkBridge ? [
-                AgentStreamEvent(
-                    id: "\(result.run.id)-sdk-started",
-                    runID: result.run.id,
-                    kind: .status,
-                    title: "Cursor SDK",
-                    message: "Session started through Runline Bridge.",
-                    timestamp: "now"
-                )
-            ] : []
+            eventsByRunID[result.run.id] = []
             focusedAgentID = result.agent.id
-            selectedTab = launchDraft.runMode == .sdkBridge ? .sdk : .chats
+            selectedTab = .chats
             saveCachedState()
         } catch {
             handleError(error)
@@ -873,21 +502,8 @@ final class AppState {
     func createFollowUp(
         agent: Agent,
         prompt: AgentPrompt,
-        intent: SDKMessageIntent = .continueConversation,
-        sdkModelID: String? = nil,
-        sdkMCPProfileID: String? = nil
+        modelID: String? = nil
     ) async {
-        if isSDKBridgeAgent(agent) {
-            await createSDKBridgeFollowUp(
-                agent: agent,
-                prompt: prompt,
-                intent: intent,
-                modelID: sdkModelID,
-                mcpProfileID: sdkMCPProfileID
-            )
-            return
-        }
-
         guard let provider else {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
@@ -900,7 +516,13 @@ final class AppState {
 
         let followUpPrompt = AgentPrompt(text: promptText, images: prompt.images, files: prompt.files)
         do {
-            let run = try await provider.createRun(AgentFollowUpDraft(agentID: agent.id, prompt: followUpPrompt))
+            let run = try await provider.createRun(
+                AgentFollowUpDraft(
+                    agentID: agent.id,
+                    prompt: followUpPrompt,
+                    modelID: modelID
+                )
+            )
             let refreshedRuns = (try? await provider.listRuns(agentID: agent.id)) ?? [run] + runsByAgentID[agent.id, default: []]
             runsByAgentID[agent.id] = refreshedRuns
             eventsByRunID[run.id] = []
@@ -910,82 +532,7 @@ final class AppState {
         }
     }
 
-    private func createSDKBridgeFollowUp(
-        agent: Agent,
-        prompt: AgentPrompt,
-        intent: SDKMessageIntent,
-        modelID: String?,
-        mcpProfileID: String?
-    ) async {
-        let promptText = prompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !promptText.isEmpty else {
-            errorMessage = "Add a follow-up instruction first."
-            return
-        }
-
-        do {
-            let client = try makeSDKBridgeClient()
-            let selectedModelID = modelID?.nilIfBlank
-            let selectedProfileID = mcpProfileID?.nilIfBlank
-            let response = try await client.sendSessionMessage(
-                sessionID: agent.id,
-                body: SDKBridgeSessionMessageRequest(
-                    prompt: AgentPrompt(text: promptText, images: prompt.images, files: prompt.files).textWithFileContext,
-                    images: sdkPromptImages(from: prompt),
-                    intent: intent.bridgeValue,
-                    modelId: selectedModelID?.isCursorDefaultModelIdentifier == true ? nil : selectedModelID,
-                    mcpProfileId: selectedProfileID
-                )
-            )
-            let run = AgentRun(
-                id: response.runId,
-                agentID: response.sessionId ?? response.agentId,
-                status: RunStatus(cursorValue: response.status),
-                createdAtDescription: "now",
-                updatedAtDescription: "now"
-            )
-            sdkBridgeRunIDs.insert(run.id)
-            updateRun(run, agentID: agent.id)
-            updateAgent(agent.id) { agent in
-                agent.latestRunID = run.id
-                agent.updatedAtDescription = "now"
-                agent.modelID = selectedModelID ?? "default"
-            }
-            if let selectedProfileID {
-                sdkBridgeMCPProfileIDsByAgentID[agent.id] = selectedProfileID
-            } else {
-                sdkBridgeMCPProfileIDsByAgentID.removeValue(forKey: agent.id)
-            }
-            eventsByRunID[run.id] = [
-                AgentStreamEvent(
-                    id: "\(run.id)-user-message",
-                    runID: run.id,
-                    kind: .user,
-                    title: "User",
-                    message: promptText,
-                    timestamp: "now"
-                ),
-                AgentStreamEvent(
-                    id: "\(run.id)-sdk-\(intent.rawValue)",
-                    runID: run.id,
-                    kind: .status,
-                    title: "Cursor SDK",
-                    message: "\(intent.title) message sent through Runline Bridge.",
-                    timestamp: "now"
-                ),
-            ]
-            saveCachedState()
-        } catch {
-            handleError(error)
-        }
-    }
-
     func cancel(agent: Agent, run: AgentRun) async {
-        if sdkBridgeRunIDs.contains(run.id) {
-            await cancelSDKBridgeRun(agent: agent, run: run)
-            return
-        }
-
         guard let provider else {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
@@ -993,25 +540,6 @@ final class AppState {
         do {
             try await provider.cancelRun(agentID: agent.id, runID: run.id)
             runsByAgentID[agent.id] = try await provider.listRuns(agentID: agent.id)
-            saveCachedState()
-        } catch {
-            handleError(error)
-        }
-    }
-
-    private func cancelSDKBridgeRun(agent: Agent, run: AgentRun) async {
-        do {
-            let client = try makeSDKBridgeClient()
-            let state = try await client.cancelSessionRun(sessionID: agent.id, runID: run.id)
-            let cancelledRun = AgentRun(
-                id: state.runId,
-                agentID: state.agentId ?? agent.id,
-                status: RunStatus(cursorValue: state.status),
-                createdAtDescription: run.createdAtDescription,
-                updatedAtDescription: "now"
-            )
-            updateRun(cancelledRun, agentID: agent.id)
-            streamExpiredRunIDs.remove(run.id)
             saveCachedState()
         } catch {
             handleError(error)
@@ -1154,44 +682,6 @@ final class AppState {
         case .run(let agentID, _):
             focusedAgentID = agentID
             selectedTab = .chats
-        case .bridge(let baseURL):
-            applySDKBridgeURLFromDeepLink(baseURL)
-        case .bridgePairing(let baseURL, let pairingID, let code):
-            applySDKBridgePairingDeepLink(baseURL: baseURL, pairingID: pairingID, code: code)
-        }
-    }
-
-    private func applySDKBridgeURLFromDeepLink(_ baseURL: URL) {
-        SDKBridgePreferences.setEnabled(true)
-        SDKBridgePreferences.setBaseURLString(baseURL.absoluteString)
-
-        do {
-            try sdkBridgeTokenStore.deleteAPIKey()
-        } catch {
-            errorMessage = "Runline could not reset the previous bridge pairing token."
-        }
-
-        sdkBridgeToken = nil
-        sdkBridgeProfiles = []
-        sdkBridgePairingState = .idle
-        syncSDKBridgeConfiguration(resetConnection: true)
-        selectedTab = .sdk
-        statusMessage = "Runline Bridge URL set to \(baseURL.absoluteString). Start pairing to connect Cursor SDK."
-    }
-
-    private func applySDKBridgePairingDeepLink(baseURL: URL, pairingID: String, code: String) {
-        SDKBridgePreferences.setEnabled(true)
-        SDKBridgePreferences.setBaseURLString(baseURL.absoluteString)
-        sdkBridgeProfiles = []
-        sdkBridgePairingState = .waiting(
-            pairingID: pairingID,
-            expiresAt: nil,
-            message: "Pairing QR scanned. Completing Runline Bridge pairing."
-        )
-        syncSDKBridgeConfiguration(resetConnection: true)
-        selectedTab = .sdk
-        Task {
-            await completeSDKBridgePairing(pairingID: pairingID, code: code)
         }
     }
 
@@ -1212,64 +702,6 @@ final class AppState {
     func updateDeviceTokenRegistrationFailure(_ error: Error) {
         notificationRegistrationError = userMessage(from: error)
         saveCachedState()
-    }
-
-    private func launchSDKBridgeAgent() async throws -> AgentLaunchResult {
-        let client = try makeSDKBridgeClient()
-        let request = SDKBridgeCloudRunRequest(
-            prompt: launchDraft.prompt.textWithFileContext,
-            images: sdkPromptImages(from: launchDraft.prompt),
-            intent: launchDraft.sdkMessageIntent == .continueConversation ? nil : launchDraft.sdkMessageIntent.bridgeValue,
-            repositoryUrl: sdkBridgeRepositoryURL(from: launchDraft.source)?.absoluteString,
-            startingRef: sdkBridgeStartingRef(from: launchDraft.source),
-            prUrl: sdkBridgePullRequestURL(from: launchDraft.source)?.absoluteString,
-            modelId: sdkBridgeModelID,
-            mcpProfileId: launchDraft.sdkMCPProfileID,
-            autoCreatePR: launchDraft.autoCreatePullRequest,
-            skipReviewerRequest: launchDraft.skipReviewerRequest
-        )
-        let response = try await client.createSession(request)
-        let repository = repository(from: launchDraft.source)
-        let agentID = response.sessionId ?? response.agentId
-        let run = AgentRun(
-            id: response.runId,
-            agentID: agentID,
-            status: RunStatus(cursorValue: response.status),
-            createdAtDescription: "now",
-            updatedAtDescription: "now"
-        )
-        let agent = Agent(
-            id: agentID,
-            name: agentName(from: launchDraft.prompt.text),
-            status: .active,
-            repository: repository,
-            branchName: displayBranchName(from: launchDraft),
-            modelID: sdkBridgeModelID ?? "default",
-            latestRunID: response.runId,
-            updatedAtDescription: "now",
-            artifactCount: 0,
-            pullRequestURL: sdkBridgePullRequestURL(from: launchDraft.source)
-        )
-        if let profileID = launchDraft.sdkMCPProfileID?.nilIfBlank {
-            sdkBridgeMCPProfileIDsByAgentID[agent.id] = profileID
-        }
-        return AgentLaunchResult(agent: agent, run: run)
-    }
-
-    private func makeSDKBridgeClient() throws -> SDKBridgeClient {
-        guard SDKBridgePreferences.isEnabled() else {
-            throw SDKBridgeUnavailableError.bridgeDisabled
-        }
-        guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
-            throw SDKBridgeUnavailableError.invalidBridgeURL
-        }
-        guard let bridgeToken = sdkBridgeToken?.nilIfBlank else {
-            throw SDKBridgeUnavailableError.bridgeNotPaired
-        }
-        guard let apiKey = try apiKeyStore.loadAPIKey()?.nilIfBlank else {
-            throw SDKBridgeUnavailableError.missingAPIKey
-        }
-        return sdkBridgeClientFactory(baseURL, apiKey, bridgeToken)
     }
 
     private func updateAgent(_ agentID: Agent.ID, mutate: (inout Agent) -> Void) {
@@ -1306,49 +738,6 @@ final class AppState {
         let knownIDs = Set(existing.map(\.id))
         existing.append(contentsOf: events.filter { knownIDs.contains($0.id) == false })
         eventsByRunID[runID] = existing
-    }
-
-    private var sdkBridgeModelID: String? {
-        let modelID = launchDraft.modelID?.nilIfBlank
-        return modelID?.isCursorDefaultModelIdentifier == true ? nil : modelID
-    }
-
-    private func sdkPromptImages(from prompt: AgentPrompt) -> [SDKBridgePromptImageRequest]? {
-        let images = prompt.images.prefix(5).map { image in
-            SDKBridgePromptImageRequest(
-                data: image.data.base64EncodedString(),
-                mimeType: "image/jpeg",
-                dimension: SDKBridgePromptImageDimensionRequest(width: image.width, height: image.height)
-            )
-        }
-        return images.isEmpty ? nil : images
-    }
-
-    private func sdkBridgeRepositoryURL(from source: AgentSource) -> URL? {
-        switch source {
-        case .repository(let url, _):
-            url
-        case .pullRequest:
-            nil
-        }
-    }
-
-    private func sdkBridgeStartingRef(from source: AgentSource) -> String? {
-        switch source {
-        case .repository(_, let startingRef):
-            startingRef?.nilIfBlank
-        case .pullRequest:
-            nil
-        }
-    }
-
-    private func sdkBridgePullRequestURL(from source: AgentSource) -> URL? {
-        switch source {
-        case .repository:
-            nil
-        case .pullRequest(let url):
-            url
-        }
     }
 
     private func repository(from source: AgentSource) -> Repository {
@@ -1388,49 +777,9 @@ final class AppState {
         return urlComponents.url
     }
 
-    private func displayBranchName(from draft: AgentLaunchDraft) -> String {
-        if !draft.autoGenerateBranch, let branchName = draft.branchName?.nilIfBlank {
-            return branchName
-        }
-        switch draft.source {
-        case .repository(_, let startingRef):
-            return startingRef?.nilIfBlank ?? "SDK Mode"
-        case .pullRequest:
-            return "Pull request"
-        }
-    }
-
-    private func agentName(from prompt: String) -> String {
-        let firstLine = prompt
-            .split(whereSeparator: \.isNewline)
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? "SDK Run"
-        guard firstLine.count > 48 else { return firstLine }
-        return String(firstLine.prefix(45)) + "..."
-    }
-
-    private func sdkBridgeConnectionFailureMessage(for error: Error, baseURL: URL) -> String {
-        if SDKBridgePreferences.isLoopback(baseURL) {
-            return "Runline cannot reach \(baseURL.absoluteString). On a physical iPhone, localhost points to the phone. Use your Mac LAN URL or a hosted HTTPS bridge."
-        }
-        if let urlError = error as? URLError {
-            switch urlError.code {
-            case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .timedOut:
-                return "Runline cannot reach \(baseURL.absoluteString). Start Runline Bridge or update the URL."
-            default:
-                break
-            }
-        }
-        return error.localizedDescription
-    }
-
     private func userMessage(from error: Error) -> String {
         if let apiError = error as? CursorAPIError {
             return apiError.userMessage
-        }
-        if let bridgeError = error as? SDKBridgeUnavailableError {
-            return bridgeError.errorDescription ?? error.localizedDescription
         }
         return error.localizedDescription
     }
@@ -1527,8 +876,6 @@ final class AppState {
         runsByAgentID = snapshot.runsByAgentID
         eventsByRunID = snapshot.eventsByRunID
         artifactsByAgentID = snapshot.artifactsByAgentID
-        sdkBridgeRunIDs = snapshot.sdkBridgeRunIDs
-        sdkBridgeMCPProfileIDsByAgentID = snapshot.sdkBridgeMCPProfileIDsByAgentID
         launchDraft = snapshot.launchDraft
         notificationPreferences = snapshot.notificationPreferences
         deviceTokenRegistration = snapshot.deviceTokenRegistration
@@ -1561,34 +908,12 @@ final class AppState {
             runsByAgentID: runsByAgentID,
             eventsByRunID: eventsByRunID,
             artifactsByAgentID: artifactsByAgentID,
-            sdkBridgeRunIDs: sdkBridgeRunIDs,
-            sdkBridgeMCPProfileIDsByAgentID: sdkBridgeMCPProfileIDsByAgentID,
             launchDraft: launchDraft,
             notificationPreferences: notificationPreferences,
             deviceTokenRegistration: deviceTokenRegistration,
             cachedAt: .now
         )
         try? appCache.save(snapshot)
-    }
-}
-
-private enum SDKBridgeUnavailableError: LocalizedError {
-    case bridgeDisabled
-    case invalidBridgeURL
-    case bridgeNotPaired
-    case missingAPIKey
-
-    var errorDescription: String? {
-        switch self {
-        case .bridgeDisabled:
-            "Enable Runline Bridge in Settings before using Cursor SDK."
-        case .invalidBridgeURL:
-            "Enter a valid Runline Bridge URL in Settings."
-        case .bridgeNotPaired:
-            "Pair Runline Bridge in Settings before using Cursor SDK."
-        case .missingAPIKey:
-            "Reconnect your Cursor API key before using Cursor SDK."
-        }
     }
 }
 

@@ -3,35 +3,65 @@ import SwiftUI
 struct AgentListRow: View {
     var agent: Agent
     var run: AgentRun?
+    var isSelected = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbolName)
-                .foregroundStyle(color)
-                .frame(width: 28)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.12))
+                    Image(systemName: symbolName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(color)
+                }
+                .frame(width: 30, height: 30)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(agent.name)
-                    .font(.body)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(agent.name)
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
 
-                Text("\(agent.repository.displayName) / \(agent.branchName)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+                    Text(agent.repository.displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 4) {
                 if let run {
                     RunStatusBadge(status: run.status)
                 }
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.blue)
+                }
+            }
+
+            HStack(spacing: 8) {
+                AgentMetadataChip(systemName: "arrow.triangle.branch", title: agent.branchName)
+                AgentMetadataChip(systemName: "cpu", title: agent.modelID)
+                if agent.artifactCount > 0 {
+                    AgentMetadataChip(systemName: "tray.full", title: "\(agent.artifactCount)")
+                }
+                Spacer(minLength: 0)
                 Text(agent.updatedAtDescription)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
+            .lineLimit(1)
         }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(isSelected ? Color.blue.opacity(0.45) : Color(uiColor: .separator).opacity(0.12), lineWidth: 0.75)
+        )
         .accessibilityElement(children: .combine)
     }
 
@@ -63,6 +93,24 @@ struct AgentListRow: View {
         default:
             .secondary
         }
+    }
+}
+
+private struct AgentMetadataChip: View {
+    var systemName: String
+    var title: String
+
+    var body: some View {
+        Label(title, systemImage: systemName)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(Color(uiColor: .tertiarySystemGroupedBackground))
+            )
     }
 }
 
@@ -130,6 +178,9 @@ struct RunStatusBadge: View {
         Text(status.title)
             .font(.caption2.weight(.medium))
             .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(color.opacity(0.12)))
     }
 
     private var color: Color {

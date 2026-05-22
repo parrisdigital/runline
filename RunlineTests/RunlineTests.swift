@@ -29,9 +29,9 @@ final class RunlineTests: XCTestCase {
         XCTAssertFalse(RunStatus.unknown("PAUSED").isTerminal)
     }
 
-    func testPrimaryTabBarUsesSDKAsFirstClassTab() {
-        XCTAssertEqual(AppTab.allCases, [.chats, .sdk, .repositories, .settings])
-        XCTAssertEqual(AppTab.allCases.count, 4)
+    func testPrimaryTabBarUsesCloudOnlyNavigation() {
+        XCTAssertEqual(AppTab.allCases, [.chats, .repositories, .settings])
+        XCTAssertEqual(AppTab.allCases.count, 3)
     }
 
     func testLayoutModeUsesSplitViewForRegularWidth() {
@@ -53,230 +53,6 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(NewChatModelPickerOptions.modelID(from: "composer-2"), "composer-2")
     }
 
-    func testWorkflowPreferencesResolveDefaultRunMode() {
-        XCTAssertEqual(RunlineWorkflowPreferences.runMode(from: nil), .cloudAgent)
-        XCTAssertEqual(RunlineWorkflowPreferences.runMode(from: AgentRunMode.sdkBridge.rawValue), .sdkBridge)
-        XCTAssertEqual(RunlineWorkflowPreferences.runMode(from: "unknown"), .cloudAgent)
-    }
-
-    func testRunModesExposeCloudDefaultAndCursorSDKCopy() {
-        XCTAssertEqual(AgentRunMode.cloudAgent.title, "Cloud Agent")
-        XCTAssertEqual(AgentRunMode.sdkBridge.title, "Cursor SDK")
-        XCTAssertTrue(AgentRunMode.sdkBridge.detail.contains("Runline Bridge"))
-    }
-
-    func testCursorSDKOnboardingStepsExposeCurrentBridgeCommands() {
-        XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.first, .overview)
-        XCTAssertEqual(RunlineBridgeOnboardingStep.allCases.last, .connect)
-        XCTAssertEqual(RunlineBridgeOnboardingStep.bridge.command, "npm install -g runline-bridge")
-        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command, "runline-bridge up")
-        XCTAssertEqual(RunlineBridgeOnboardingStep.start.command(keepAwake: true), "runline-bridge up --keep-awake")
-        XCTAssertEqual(RunlineBridgeOnboardingStep.connect.title, "Start Pairing")
-        XCTAssertTrue(RunlineBridgeOnboardingStep.connect.subtitle.contains("QR code"))
-        XCTAssertEqual(RunlineBridgeOnboardingStep.connect.command, "runline-bridge up")
-        XCTAssertEqual(RunlineBridgeOnboardingStep.connect.command(keepAwake: true), "runline-bridge up --keep-awake")
-    }
-
-    func testRunlineBridgeScannedPayloadAcceptsSetupDeepLinksAndBridgeURLs() {
-        let setupPayload = RunlineBridgeScannedPayload.payload(
-            from: "runline://bridge?url=http%3A%2F%2F192.168.68.55%3A8787"
-        )
-        let directPayload = RunlineBridgeScannedPayload.payload(from: " http://192.168.68.55:8787 ")
-        let pairingPayload = RunlineBridgeScannedPayload.payload(
-            from: "runline://bridge?url=http%3A%2F%2F192.168.68.55%3A8787&pairingId=pair-123&code=123456"
-        )
-        let invalidPayload = RunlineBridgeScannedPayload.payload(from: "not a bridge code")
-
-        if case .bridge(let setupURL) = setupPayload {
-            XCTAssertEqual(setupURL.absoluteString, "http://192.168.68.55:8787")
-        } else {
-            XCTFail("Expected setup bridge payload.")
-        }
-
-        if case .bridge(let directURL) = directPayload {
-            XCTAssertEqual(directURL.absoluteString, "http://192.168.68.55:8787")
-        } else {
-            XCTFail("Expected direct bridge URL payload.")
-        }
-
-        if case .pairing(let baseURL, let pairingID, let code) = pairingPayload {
-            XCTAssertEqual(baseURL.absoluteString, "http://192.168.68.55:8787")
-            XCTAssertEqual(pairingID, "pair-123")
-            XCTAssertEqual(code, "123456")
-        } else {
-            XCTFail("Expected pairing bridge payload.")
-        }
-
-        XCTAssertNil(invalidPayload)
-    }
-
-    func testRunlineBridgeStartModesExposeKeepAwakeCommand() {
-        XCTAssertEqual(RunlineBridgeStartMode.standard.command, "runline-bridge up")
-        XCTAssertEqual(RunlineBridgeStartMode.keepAwake.command, "runline-bridge up --keep-awake")
-        XCTAssertEqual(RunlineBridgeStartMode.resolve(keepAwake: false), .standard)
-        XCTAssertEqual(RunlineBridgeStartMode.resolve(keepAwake: true), .keepAwake)
-    }
-
-    func testSDKBridgePreferencesCanEnableBridgeForSetupFlow() {
-        let suiteName = "RunlineTests.SDKBridgePreferences.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        XCTAssertFalse(SDKBridgePreferences.isEnabled(defaults: defaults))
-
-        SDKBridgePreferences.setEnabled(true, defaults: defaults)
-
-        XCTAssertTrue(SDKBridgePreferences.isEnabled(defaults: defaults))
-    }
-
-    func testSDKMessageIntentsExposeBridgeValuesAndSymbols() {
-        XCTAssertEqual(SDKMessageIntent.continueConversation.bridgeValue, "continue")
-        XCTAssertEqual(SDKMessageIntent.plan.bridgeValue, "plan")
-        XCTAssertEqual(SDKMessageIntent.execute.bridgeValue, "execute")
-        XCTAssertFalse(SDKMessageIntent.plan.symbolName.isEmpty)
-    }
-
-    func testSDKBridgeProfileDecodesDetailedToolMetadata() throws {
-        let data = Data("""
-        {
-          "id": "github-tools",
-          "name": "GitHub Tools",
-          "description": "GitHub MCP plus review helpers.",
-          "mcpServerCount": 1,
-          "subagentCount": 1,
-          "mcpServers": [
-            {
-              "id": "github",
-              "name": "github",
-              "transport": "stdio",
-              "command": "npx -y @modelcontextprotocol/server-github",
-              "hasAuth": true,
-              "environmentKeys": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
-              "toolHints": [
-                {
-                  "id": "github-prs",
-                  "name": "Pull requests",
-                  "description": "Review pull request context.",
-                  "server": "github"
-                }
-              ]
-            }
-          ],
-          "subagents": [
-            {
-              "id": "reviewer",
-              "name": "reviewer",
-              "description": "Reviews implementation risk.",
-              "promptPreview": "Review implementation risk and missing tests.",
-              "modelID": "inherit",
-              "mcpServerNames": ["github"]
-            }
-          ],
-          "skills": [
-            {
-              "id": "review-checklist",
-              "name": "Review checklist",
-              "description": "Apply project review criteria.",
-              "source": ".cursor/skills/review-checklist",
-              "enabled": true
-            }
-          ],
-          "hooks": [
-            {
-              "id": "preflight",
-              "name": "Preflight checks",
-              "event": "before_execute",
-              "command": "npm test",
-              "enabled": true
-            }
-          ],
-          "toolHints": [
-            {
-              "id": "github-prs",
-              "name": "Pull requests",
-              "description": "Review pull request context.",
-              "server": "github"
-            }
-          ]
-        }
-        """.utf8)
-
-        let profile = try JSONDecoder().decode(SDKBridgeMCPProfile.self, from: data)
-
-        XCTAssertEqual(profile.summary, "1 MCP / 1 subagent / 1 skill / 1 hook / 1 tool")
-        XCTAssertTrue(profile.hasDetailedMetadata)
-        XCTAssertEqual(profile.mcpServers.first?.name, "github")
-        XCTAssertEqual(profile.mcpServers.first?.environmentKeys, ["GITHUB_PERSONAL_ACCESS_TOKEN"])
-        XCTAssertEqual(profile.subagents.first?.mcpServerNames, ["github"])
-        XCTAssertEqual(profile.skills.first?.source, ".cursor/skills/review-checklist")
-        XCTAssertEqual(profile.hooks.first?.event, "before_execute")
-        XCTAssertEqual(profile.toolHints.first?.server, "github")
-    }
-
-    func testSDKBridgeProfileDecodesLegacyMetadataWithoutDetails() throws {
-        let data = Data("""
-        {
-          "id": "basic",
-          "name": "Basic",
-          "mcpServerCount": 1,
-          "subagentCount": 0
-        }
-        """.utf8)
-
-        let profile = try JSONDecoder().decode(SDKBridgeMCPProfile.self, from: data)
-
-        XCTAssertEqual(profile.summary, "1 MCP")
-        XCTAssertFalse(profile.hasDetailedMetadata)
-        XCTAssertTrue(profile.mcpServers.isEmpty)
-        XCTAssertTrue(profile.skills.isEmpty)
-        XCTAssertTrue(profile.hooks.isEmpty)
-    }
-
-    func testLaunchDraftDecodesLegacyCacheAsCloudAgentRunMode() throws {
-        let draft = AgentLaunchDraft(
-            prompt: AgentPrompt(text: "Build settings"),
-            modelID: "composer-2",
-            source: .repository(url: URL(string: "https://github.com/acme/app")!, startingRef: "main"),
-            runMode: .sdkBridge,
-            sdkMessageIntent: .plan,
-            branchName: nil,
-            autoGenerateBranch: true,
-            autoCreatePullRequest: true,
-            skipReviewerRequest: false
-        )
-        let data = try JSONEncoder().encode(draft)
-        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        object.removeValue(forKey: "runMode")
-        let legacyData = try JSONSerialization.data(withJSONObject: object)
-
-        let decoded = try JSONDecoder().decode(AgentLaunchDraft.self, from: legacyData)
-
-        XCTAssertEqual(decoded.runMode, .cloudAgent)
-        XCTAssertEqual(decoded.sdkMessageIntent, .plan)
-    }
-
-    func testLaunchDraftDecodesLegacyCacheWithDefaultSDKMessageIntent() throws {
-        let draft = AgentLaunchDraft(
-            prompt: AgentPrompt(text: "Build settings"),
-            modelID: "composer-2",
-            source: .repository(url: URL(string: "https://github.com/acme/app")!, startingRef: "main"),
-            runMode: .sdkBridge,
-            sdkMessageIntent: .execute,
-            branchName: nil,
-            autoGenerateBranch: true,
-            autoCreatePullRequest: true,
-            skipReviewerRequest: false
-        )
-        let data = try JSONEncoder().encode(draft)
-        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        object.removeValue(forKey: "sdkMessageIntent")
-        let legacyData = try JSONSerialization.data(withJSONObject: object)
-
-        let decoded = try JSONDecoder().decode(AgentLaunchDraft.self, from: legacyData)
-
-        XCTAssertEqual(decoded.sdkMessageIntent, .continueConversation)
-    }
-
     @MainActor
     func testDeepLinksFocusChatsTabForAdaptiveShells() {
         let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
@@ -292,25 +68,6 @@ final class RunlineTests: XCTestCase {
 
         XCTAssertEqual(appState.selectedTab, .chats)
         XCTAssertEqual(appState.focusedAgentID, "bc-0002")
-    }
-
-    @MainActor
-    func testBridgeDeepLinkSetsSDKBridgeURLAndFocusesSDKTab() {
-        let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: SDKBridgePreferences.isEnabledKey)
-        defaults.removeObject(forKey: SDKBridgePreferences.baseURLKey)
-        let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
-        appState.selectedTab = .chats
-
-        appState.handleDeepLink(URL(string: "runline://bridge?url=http%3A%2F%2F192.168.68.55%3A8787")!)
-
-        XCTAssertTrue(SDKBridgePreferences.isEnabled(defaults: defaults))
-        XCTAssertEqual(SDKBridgePreferences.baseURLString(defaults: defaults), "http://192.168.68.55:8787")
-        XCTAssertEqual(appState.selectedTab, .sdk)
-        XCTAssertFalse(appState.isSDKBridgePaired)
-
-        defaults.removeObject(forKey: SDKBridgePreferences.isEnabledKey)
-        defaults.removeObject(forKey: SDKBridgePreferences.baseURLKey)
     }
 
     func testAppearanceModesMapToPreferredColorSchemes() {
@@ -331,64 +88,6 @@ final class RunlineTests: XCTestCase {
         appState.launchDraft.branchName = "runline/landing-page"
 
         XCTAssertTrue(appState.canLaunchAgent)
-    }
-
-    @MainActor
-    func testSDKLaunchRequiresPairingAndConnectedBridge() {
-        withSDKBridgeDefaults(enabled: true, baseURL: "http://localhost:8787") {
-            let unpairedAppState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"))
-            unpairedAppState.account = ProviderAccount(
-                apiKeyName: "Runline Test Key",
-                userEmail: "test@example.com",
-                createdAt: .now
-            )
-            unpairedAppState.launchDraft.prompt.text = "Plan the settings cleanup"
-            unpairedAppState.launchDraft.runMode = .sdkBridge
-            unpairedAppState.sdkBridgeConnectionState = .connected("runline-bridge - @cursor/sdk")
-
-            XCTAssertFalse(unpairedAppState.canLaunchAgent)
-            XCTAssertEqual(unpairedAppState.sdkBridgeLaunchIssue, "Pair Runline Bridge in Settings before using Cursor SDK.")
-
-            let appState = AppState(
-                provider: MockAgentProvider(),
-                apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"),
-                sdkBridgeTokenStore: InMemoryAPIKeyStore(apiKey: "bridge-token")
-            )
-            appState.account = ProviderAccount(
-                apiKeyName: "Runline Test Key",
-                userEmail: "test@example.com",
-                createdAt: .now
-            )
-            appState.launchDraft.prompt.text = "Plan the settings cleanup"
-            appState.launchDraft.runMode = .sdkBridge
-            appState.sdkBridgeConnectionState = .unchecked
-
-            XCTAssertFalse(appState.canLaunchAgent)
-            XCTAssertEqual(appState.sdkBridgeLaunchIssue, "Check the Runline Bridge connection in Settings before using Cursor SDK.")
-
-            appState.sdkBridgeConnectionState = .connected("runline-orchestrator - @cursor/sdk")
-
-            XCTAssertTrue(appState.canLaunchAgent)
-            XCTAssertNil(appState.sdkBridgeLaunchIssue)
-        }
-    }
-
-    @MainActor
-    func testUnavailableSDKModeFallsBackToCloudAgent() {
-        withSDKBridgeDefaults(enabled: true, baseURL: "http://localhost:8787") {
-            let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"))
-            appState.account = ProviderAccount(
-                apiKeyName: "Runline Test Key",
-                userEmail: "test@example.com",
-                createdAt: .now
-            )
-            appState.launchDraft.runMode = .sdkBridge
-            appState.sdkBridgeConnectionState = .failed("Runline cannot reach the bridge.")
-
-            appState.ensureLaunchRunModeIsAvailable()
-
-            XCTAssertEqual(appState.launchDraft.runMode, .cloudAgent)
-        }
     }
 
     @MainActor
@@ -451,31 +150,6 @@ final class RunlineTests: XCTestCase {
         try await provider.deleteAgent(agentID: agent.id)
         let remaining = try await provider.listAgents()
         XCTAssertFalse(remaining.contains { $0.id == agent.id })
-    }
-
-    @MainActor
-    private func withSDKBridgeDefaults(enabled: Bool, baseURL: String, run test: () -> Void) {
-        let defaults = UserDefaults.standard
-        let previousEnabled = defaults.object(forKey: SDKBridgePreferences.isEnabledKey)
-        let previousBaseURL = defaults.object(forKey: SDKBridgePreferences.baseURLKey)
-
-        defaults.set(enabled, forKey: SDKBridgePreferences.isEnabledKey)
-        defaults.set(baseURL, forKey: SDKBridgePreferences.baseURLKey)
-        defer {
-            if let previousEnabled {
-                defaults.set(previousEnabled, forKey: SDKBridgePreferences.isEnabledKey)
-            } else {
-                defaults.removeObject(forKey: SDKBridgePreferences.isEnabledKey)
-            }
-
-            if let previousBaseURL {
-                defaults.set(previousBaseURL, forKey: SDKBridgePreferences.baseURLKey)
-            } else {
-                defaults.removeObject(forKey: SDKBridgePreferences.baseURLKey)
-            }
-        }
-
-        test()
     }
 }
 

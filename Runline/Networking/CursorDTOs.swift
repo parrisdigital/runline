@@ -598,6 +598,12 @@ struct CursorCreateAgentRequest: Encodable {
 
 struct CursorCreateRunRequest: Encodable {
     let prompt: CursorPromptRequest
+    let model: CursorModelObjectDTO?
+
+    init(prompt: CursorPromptRequest, model: CursorModelObjectDTO? = nil) {
+        self.prompt = prompt
+        self.model = model
+    }
 }
 
 struct CursorLaunchRepositoryRequest: Encodable, Hashable {

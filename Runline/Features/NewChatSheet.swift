@@ -34,8 +34,8 @@ enum NewChatModelPickerOptions {
 
 struct NewChatForm: View {
     private enum SourceMode: String, CaseIterable, Identifiable {
-        case installed = "Installed"
-        case manual = "Manual URL"
+        case installed = "Repository"
+        case manual = "URL"
         case pullRequest = "Pull Request"
 
         var id: String { rawValue }
@@ -52,7 +52,6 @@ struct NewChatForm: View {
     @State private var isPromptFileImporterPresented = false
     @State private var isLoadingPromptFiles = false
     @State private var promptFileImportMessage: String?
-    @State private var cursorSDKOnboardingSheet: CursorSDKOnboardingSheet?
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -64,191 +63,17 @@ struct NewChatForm: View {
     }
 
     var body: some View {
-        @Bindable var appState = appState
-
-        Form {
-            Section("Runtime") {
-                Picker("Runtime", selection: runModeBinding) {
-                    ForEach(availableRunModes) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                LabeledContent("Selected", value: appState.launchDraft.runMode.detail)
-
-                if let issue = appState.sdkBridgeReadinessIssue {
-                    Label(issue, systemImage: "point.3.connected.trianglepath.dotted")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Button {
-                        cursorSDKOnboardingSheet = .setup
-                    } label: {
-                        Label("Set Up Cursor SDK", systemImage: "point.3.connected.trianglepath.dotted")
-                    }
-                }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                targetCard
+                promptComposerCard
+                outputCard
             }
-
-            if appState.launchDraft.runMode == .sdkBridge {
-                Section("Cursor SDK Tools") {
-                    Picker("MCP Profile", selection: sdkMCPProfileBinding) {
-                        Text("None").tag(Optional<String>.none)
-                        ForEach(appState.sdkBridgeProfiles) { profile in
-                            Text(profile.name).tag(Optional(profile.id))
-                        }
-                    }
-
-                    if let selectedProfile = selectedSDKProfile {
-                        LabeledContent("Profile", value: selectedProfile.summary)
-                        LabeledContent("MCP Servers", value: "\(selectedProfile.mcpServers.count)")
-                        LabeledContent("Subagents", value: "\(selectedProfile.subagents.count)")
-                        LabeledContent("Skills", value: "\(selectedProfile.skills.count)")
-                        LabeledContent("Hooks", value: "\(selectedProfile.hooks.count)")
-                        if let description = selectedProfile.description {
-                            Text(description)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        NavigationLink {
-                            SDKBridgeProfileDetailView(profile: selectedProfile)
-                        } label: {
-                            Label("Profile Details", systemImage: "wrench.and.screwdriver")
-                        }
-                    } else if appState.sdkBridgeProfiles.isEmpty {
-                        Text("No bridge profiles are published. Add MCP or subagent profiles on Runline Bridge to make them available here.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        NavigationLink {
-                            SDKToolsView()
-                        } label: {
-                            Label("Browse SDK Tools", systemImage: "wrench.and.screwdriver")
-                        }
-                    }
-                }
-            }
-
-            Section("Source") {
-                Picker("Source", selection: $sourceMode) {
-                    ForEach(SourceMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: sourceMode) { _, mode in
-                    updateSourceMode(mode)
-                }
-
-                sourceControls
-
-                if sourceMode != .pullRequest {
-                    TextField("Base branch or ref", text: startingRefBinding)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focusedField, equals: .startingRef)
-                }
-            }
-
-            Section("Model") {
-                Picker("Model", selection: modelSelectionBinding) {
-                    Text("Default").tag(Optional<String>.none)
-                    ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models)) { model in
-                        Text(model.displayName).tag(Optional(model.id))
-                    }
-                }
-            }
-
-            Section("Prompt") {
-                TextEditor(text: $appState.launchDraft.prompt.text)
-                    .frame(minHeight: 150)
-                    .focused($focusedField, equals: .prompt)
-                    .accessibilityIdentifier("newchat.prompt")
-
-                LabeledContent("Characters", value: "\(appState.launchDraft.prompt.text.count)")
-
-                if appState.capabilities.supportsImagesInPrompt {
-                    PhotosPicker(
-                        selection: $selectedPhotoItems,
-                        maxSelectionCount: 5,
-                        matching: .images
-                    ) {
-                        Label("Attach Images", systemImage: "photo.badge.plus")
-                    }
-                    .onChange(of: selectedPhotoItems) { _, items in
-                        Task {
-                            await loadPromptImages(from: items)
-                        }
-                    }
-
-                    if isLoadingPromptImages {
-                        ProgressView("Loading images")
-                    }
-
-                    if !appState.launchDraft.prompt.images.isEmpty {
-                        ForEach(appState.launchDraft.prompt.images) { image in
-                            HStack {
-                                Label("\(image.width) x \(image.height)", systemImage: "photo")
-                                Spacer()
-                                Button("Remove", role: .destructive) {
-                                    removePromptImage(image)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Button {
-                    isPromptFileImporterPresented = true
-                } label: {
-                    Label("Attach Files", systemImage: "doc.badge.plus")
-                }
-
-                if isLoadingPromptFiles {
-                    ProgressView("Loading files")
-                }
-
-                if let promptFileImportMessage {
-                    Text(promptFileImportMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                if !appState.launchDraft.prompt.files.isEmpty {
-                    ForEach(appState.launchDraft.prompt.files) { file in
-                        HStack {
-                            Label("\(file.filename) - \(file.sizeDescription)", systemImage: "doc.text")
-                            Spacer()
-                            Button("Remove", role: .destructive) {
-                                removePromptFile(file)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Section {
-                Toggle("Open pull request", isOn: autoCreatePRBinding)
-
-                if appState.launchDraft.autoCreatePullRequest {
-                    Toggle("Request reviewers", isOn: requestReviewersBinding)
-                }
-
-                Toggle("Let Cursor name branch", isOn: autoNameBranchBinding)
-
-                if !appState.launchDraft.autoGenerateBranch {
-                    TextField("Working branch name", text: branchNameBinding)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focusedField, equals: .branchName)
-                }
-            } header: {
-                Text("Output")
-            } footer: {
-                Text("Cursor bills this run through your Cursor account. Runline does not include Cursor credits.")
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 96)
         }
+        .background(Color(uiColor: .systemGroupedBackground))
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("New Chat")
         .navigationBarTitleDisplayMode(.inline)
@@ -260,37 +85,12 @@ struct NewChatForm: View {
                     }
                 }
             }
-
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    launch()
-                } label: {
-                    if appState.isLaunching {
-                        ProgressView()
-                    } else {
-                        Text("Launch")
-                    }
-                }
-                .disabled(!appState.canLaunchAgent || appState.isLaunching)
-                .accessibilityIdentifier("newchat.launch")
-            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            launchBar
         }
         .task {
-            appState.syncSDKBridgeConfiguration()
-            appState.ensureLaunchRunModeIsAvailable()
             seedSourceFields()
-            if appState.launchDraft.runMode == .sdkBridge {
-                await appState.reloadSDKBridgeProfiles()
-            }
-        }
-        .onChange(of: appState.sdkBridgeConnectionState) { _, _ in
-            appState.ensureLaunchRunModeIsAvailable()
-        }
-        .onChange(of: appState.launchDraft.runMode) { _, mode in
-            guard mode == .sdkBridge else { return }
-            Task {
-                await appState.reloadSDKBridgeProfiles()
-            }
         }
         .fileImporter(
             isPresented: $isPromptFileImporterPresented,
@@ -301,20 +101,184 @@ struct NewChatForm: View {
                 await loadPromptFiles(from: result)
             }
         }
-        .sheet(item: $cursorSDKOnboardingSheet) { _ in
-            CursorSDKOnboardingView(
-                onUseCloud: {
-                    appState.launchDraft.runMode = .cloudAgent
-                },
-                onUseSDK: {
-                    appState.launchDraft.runMode = .sdkBridge
-                },
-                onOpenSettings: {
-                    appState.launchDraft.runMode = .cloudAgent
-                    appState.selectedTab = .settings
-                    dismiss()
+    }
+
+    private var targetCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            NewChatSectionHeader(title: "Target", systemName: "folder")
+
+            Picker("Source", selection: $sourceMode) {
+                ForEach(SourceMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
                 }
-            )
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: sourceMode) { _, mode in
+                updateSourceMode(mode)
+            }
+
+            sourceControls
+
+            if sourceMode != .pullRequest {
+                inlineTextField(
+                    title: "Base ref",
+                    placeholder: selectedRepository.flatMap { $0.defaultBranch.nilIfBlank } ?? "main",
+                    systemName: "arrow.triangle.branch",
+                    text: startingRefBinding,
+                    focus: .startingRef
+                )
+            }
+        }
+        .padding(14)
+        .newChatGlassSurface(cornerRadius: 22)
+    }
+
+    private var promptComposerCard: some View {
+        VStack(spacing: 0) {
+            promptStarterChips
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+
+            promptEditor
+
+            if shouldShowPromptAttachments {
+                attachmentPreviewStrip
+                    .padding(.top, 2)
+                    .padding(.bottom, 8)
+            }
+
+            Divider()
+                .opacity(0.32)
+
+            HStack(spacing: 10) {
+                attachmentMenuButton
+
+                NewChatInlinePill(systemName: "textformat", title: "\(appState.launchDraft.prompt.text.count)")
+
+                Spacer(minLength: 0)
+
+                modelMenu
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .newChatGlassSurface(cornerRadius: 26)
+    }
+
+    private var outputCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            NewChatSectionHeader(title: "Output", systemName: "arrow.triangle.branch")
+
+            VStack(spacing: 0) {
+                Toggle("Open pull request", isOn: autoCreatePRBinding)
+
+                if appState.launchDraft.autoCreatePullRequest {
+                    Divider().opacity(0.45)
+                    Toggle("Request reviewers", isOn: requestReviewersBinding)
+                }
+
+                Divider().opacity(0.45)
+                Toggle("Let Cursor name branch", isOn: autoNameBranchBinding)
+
+                if !appState.launchDraft.autoGenerateBranch {
+                    Divider().opacity(0.45)
+                    inlineTextField(
+                        title: "Branch",
+                        placeholder: "cursor/task-name",
+                        systemName: "point.topleft.down.curvedto.point.bottomright.up",
+                        text: branchNameBinding,
+                        focus: .branchName
+                    )
+                    .padding(.top, 2)
+                }
+            }
+            .font(.body)
+        }
+        .padding(14)
+        .newChatGlassSurface(cornerRadius: 22)
+    }
+
+    private var launchBar: some View {
+        VStack(spacing: 0) {
+            Button {
+                launch()
+            } label: {
+                HStack(spacing: 8) {
+                    if appState.isLaunching {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.headline.weight(.bold))
+                    }
+
+                    Text(appState.isLaunching ? "Starting" : "Start Cloud Chat")
+                        .font(.headline.weight(.semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(appState.canLaunchAgent ? Color(uiColor: .systemBlue) : Color(uiColor: .systemGray4))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!appState.canLaunchAgent || appState.isLaunching)
+            .accessibilityIdentifier("newchat.launch")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    private var promptEditor: some View {
+        ZStack(alignment: .topLeading) {
+            if appState.launchDraft.prompt.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Ask Cursor to build, fix, review, or prepare a release...")
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 14)
+                    .padding(.leading, 16)
+                    .allowsHitTesting(false)
+            }
+
+            TextEditor(text: promptTextBinding)
+                .frame(minHeight: 170)
+                .focused($focusedField, equals: .prompt)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("newchat.prompt")
+        }
+    }
+
+    private var promptStarterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(PromptStarter.allCases) { starter in
+                    Button {
+                        applyPromptStarter(starter)
+                    } label: {
+                        Label(starter.title, systemImage: starter.symbolName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .newChatGlassSurface(cornerRadius: 15, interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var promptTextBinding: Binding<String> {
+        Binding {
+            appState.launchDraft.prompt.text
+        } set: { value in
+            appState.launchDraft.prompt.text = value
         }
     }
 
@@ -324,32 +288,199 @@ struct NewChatForm: View {
         case .installed:
             if appState.repositories.isEmpty {
                 ContentUnavailableView("No Repositories", systemImage: "folder.badge.questionmark")
+                    .frame(maxWidth: .infinity)
             } else {
-                Picker("Repository", selection: installedRepositoryBinding) {
+                Menu {
                     ForEach(appState.repositories) { repository in
-                        Text(repository.displayName).tag(repository.url)
+                        Button {
+                            selectRepository(repository)
+                        } label: {
+                            Label(repository.displayName, systemImage: selectedRepository?.url == repository.url ? "checkmark" : "folder")
+                        }
                     }
+                } label: {
+                    NewChatSelectorLabel(
+                        systemName: "folder",
+                        title: selectedRepository?.displayName ?? "Select repository",
+                        subtitle: selectedRepository
+                            .flatMap { $0.defaultBranch.nilIfBlank.map { "Default branch \($0)" } }
+                            ?? "Default branch from Cursor"
+                    )
                 }
+                .menuIndicator(.hidden)
+                .tint(.primary)
             }
         case .manual:
-            TextField("https://github.com/owner/repository", text: $manualRepositoryURL)
-                .keyboardType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focusedField, equals: .manualURL)
-                .onChange(of: manualRepositoryURL) { _, value in
-                    updateManualRepository(value)
-                }
+            inlineTextField(
+                title: "Repository URL",
+                placeholder: "https://github.com/owner/repository",
+                systemName: "link",
+                text: $manualRepositoryURL,
+                focus: .manualURL,
+                keyboardType: .URL
+            )
+            .onChange(of: manualRepositoryURL) { _, value in
+                updateManualRepository(value)
+            }
         case .pullRequest:
-            TextField("https://github.com/owner/repository/pull/123", text: $pullRequestURL)
-                .keyboardType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focusedField, equals: .pullRequestURL)
-                .onChange(of: pullRequestURL) { _, value in
-                    updatePullRequest(value)
-                }
+            inlineTextField(
+                title: "Pull request",
+                placeholder: "https://github.com/owner/repository/pull/123",
+                systemName: "arrow.up.right.square",
+                text: $pullRequestURL,
+                focus: .pullRequestURL,
+                keyboardType: .URL
+            )
+            .onChange(of: pullRequestURL) { _, value in
+                updatePullRequest(value)
+            }
         }
+    }
+
+    private var attachmentMenuButton: some View {
+        Menu {
+            if appState.capabilities.supportsImagesInPrompt {
+                PhotosPicker(
+                    selection: $selectedPhotoItems,
+                    maxSelectionCount: 5,
+                    matching: .images
+                ) {
+                    Label("Photos", systemImage: "photo")
+                }
+                .onChange(of: selectedPhotoItems) { _, items in
+                    Task {
+                        await loadPromptImages(from: items)
+                    }
+                }
+                .disabled(isLoadingPromptImages || appState.launchDraft.prompt.images.count >= 5)
+            }
+
+            Button {
+                isPromptFileImporterPresented = true
+            } label: {
+                Label("Files", systemImage: "doc")
+            }
+            .disabled(isLoadingPromptFiles || appState.launchDraft.prompt.files.count >= PromptFileLoader.maxFiles)
+        } label: {
+            Label("Attach", systemImage: "paperclip")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color(uiColor: .systemBlue))
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .newChatGlassSurface(cornerRadius: 17, interactive: true)
+        }
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .accessibilityLabel("Attach files or images")
+    }
+
+    private var shouldShowPromptAttachments: Bool {
+        isLoadingPromptImages
+            || isLoadingPromptFiles
+            || !appState.launchDraft.prompt.images.isEmpty
+            || !appState.launchDraft.prompt.files.isEmpty
+            || promptFileImportMessage != nil
+    }
+
+    private var attachmentPreviewStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                if isLoadingPromptImages || isLoadingPromptFiles {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.horizontal, 10)
+                }
+
+                ForEach(appState.launchDraft.prompt.images) { image in
+                    NewChatAttachmentPill(
+                        systemName: "photo",
+                        title: "\(image.width) x \(image.height)"
+                    ) {
+                        removePromptImage(image)
+                    }
+                }
+
+                ForEach(appState.launchDraft.prompt.files) { file in
+                    NewChatAttachmentPill(
+                        systemName: "doc.text",
+                        title: "\(file.filename) - \(file.sizeDescription)"
+                    ) {
+                        removePromptFile(file)
+                    }
+                }
+
+                if let promptFileImportMessage {
+                    NewChatInlinePill(systemName: "exclamationmark.triangle", title: promptFileImportMessage)
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private var modelMenu: some View {
+        Menu {
+            Button {
+                modelSelectionBinding.wrappedValue = nil
+            } label: {
+                Label("Default", systemImage: modelSelectionBinding.wrappedValue == nil ? "checkmark" : "cpu")
+            }
+
+            ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models)) { model in
+                Button {
+                    modelSelectionBinding.wrappedValue = model.id
+                } label: {
+                    Label(model.displayName, systemImage: modelSelectionBinding.wrappedValue == model.id ? "checkmark" : "cpu")
+                }
+            }
+        } label: {
+            NewChatInlinePill(systemName: "cpu", title: selectedModelTitle, trailingSystemName: "chevron.down")
+        }
+        .menuIndicator(.hidden)
+        .tint(.secondary)
+        .accessibilityLabel("Select model")
+    }
+
+    private var selectedRepository: Repository? {
+        if case .repository(let url, _) = appState.launchDraft.source,
+           let repository = appState.repositories.first(where: { $0.url == url }) {
+            return repository
+        }
+        return appState.selectedRepository ?? appState.repositories.first
+    }
+
+    private var selectedModelTitle: String {
+        guard let selection = modelSelectionBinding.wrappedValue else { return "Default" }
+        return appState.models.first(where: { $0.id == selection })?.displayName ?? selection
+    }
+
+    private func inlineTextField(
+        title: String,
+        placeholder: String,
+        systemName: String,
+        text: Binding<String>,
+        focus: Field,
+        keyboardType: UIKeyboardType = .default
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                TextField(placeholder, text: text)
+                    .keyboardType(keyboardType)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: focus)
+            }
+        }
+        .padding(12)
+        .newChatGlassSurface(cornerRadius: 16, interactive: true)
     }
 
     private var installedRepositoryBinding: Binding<URL> {
@@ -365,42 +496,12 @@ struct NewChatForm: View {
         }
     }
 
-    private var runModeBinding: Binding<AgentRunMode> {
-        Binding {
-            appState.launchDraft.runMode
-        } set: { mode in
-            if mode == .sdkBridge, !appState.isSDKBridgeReadyForLaunch {
-                cursorSDKOnboardingSheet = .setup
-                appState.launchDraft.runMode = .cloudAgent
-                return
-            }
-            appState.launchDraft.runMode = mode
-        }
-    }
-
-    private var availableRunModes: [AgentRunMode] {
-        AgentRunMode.allCases
-    }
-
     private var modelSelectionBinding: Binding<String?> {
         Binding {
             NewChatModelPickerOptions.selection(from: appState.launchDraft.modelID)
         } set: { modelID in
             appState.launchDraft.modelID = NewChatModelPickerOptions.modelID(from: modelID)
         }
-    }
-
-    private var sdkMCPProfileBinding: Binding<String?> {
-        Binding {
-            appState.launchDraft.sdkMCPProfileID
-        } set: { profileID in
-            appState.launchDraft.sdkMCPProfileID = profileID
-        }
-    }
-
-    private var selectedSDKProfile: SDKBridgeMCPProfile? {
-        guard let profileID = appState.launchDraft.sdkMCPProfileID else { return nil }
-        return appState.sdkBridgeProfiles.first { $0.id == profileID }
     }
 
     private var startingRefBinding: Binding<String> {
@@ -576,6 +677,196 @@ struct NewChatForm: View {
     private func fileImportMessage(from result: PromptFileLoadResult) -> String? {
         guard !result.skippedFilenames.isEmpty else { return nil }
         return "Skipped unsupported or large files: \(result.skippedFilenames.joined(separator: ", "))"
+    }
+
+    private func applyPromptStarter(_ starter: PromptStarter) {
+        let current = appState.launchDraft.prompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if current.isEmpty {
+            appState.launchDraft.prompt.text = starter.prompt
+        } else {
+            appState.launchDraft.prompt.text = current + "\n\n" + starter.prompt
+        }
+        focusedField = .prompt
+    }
+}
+
+private struct NewChatSectionHeader: View {
+    var title: String
+    var systemName: String
+
+    var body: some View {
+        Label(title, systemImage: systemName)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+}
+
+private struct NewChatSelectorLabel: View {
+    var systemName: String
+    var title: String
+    var subtitle: String
+
+    var body: some View {
+        HStack(spacing: 11) {
+            Image(systemName: systemName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color(uiColor: .systemBlue))
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.down")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(12)
+        .newChatGlassSurface(cornerRadius: 16, interactive: true)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct NewChatInlinePill: View {
+    var systemName: String
+    var title: String
+    var trailingSystemName: String?
+
+    init(systemName: String, title: String, trailingSystemName: String? = nil) {
+        self.systemName = systemName
+        self.title = title
+        self.trailingSystemName = trailingSystemName
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemName)
+                .font(.caption.weight(.semibold))
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+
+            if let trailingSystemName {
+                Image(systemName: trailingSystemName)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .newChatGlassSurface(cornerRadius: 17)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct NewChatAttachmentPill: View {
+    var systemName: String
+    var title: String
+    var remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemName)
+                .foregroundStyle(.secondary)
+
+            Text(title)
+                .font(.caption)
+                .lineLimit(1)
+
+            Button(action: remove) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .newChatGlassSurface(cornerRadius: 17)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func newChatGlassSurface(cornerRadius: CGFloat, interactive: Bool = false) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            if interactive {
+                self
+                    .glassEffect(.regular.interactive(), in: shape)
+                    .overlay(shape.stroke(Color(uiColor: .separator).opacity(0.22), lineWidth: 0.5))
+            } else {
+                self
+                    .glassEffect(.regular, in: shape)
+                    .overlay(shape.stroke(Color(uiColor: .separator).opacity(0.18), lineWidth: 0.5))
+            }
+        } else {
+            self
+                .background(.ultraThinMaterial, in: shape)
+                .overlay(shape.stroke(Color(uiColor: .separator).opacity(0.22), lineWidth: 0.5))
+        }
+    }
+}
+
+private enum PromptStarter: String, CaseIterable, Identifiable {
+    case build
+    case fix
+    case review
+    case release
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .build:
+            "Build"
+        case .fix:
+            "Fix"
+        case .review:
+            "Review"
+        case .release:
+            "Release"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .build:
+            "hammer"
+        case .fix:
+            "wrench.adjustable"
+        case .review:
+            "doc.text.magnifyingglass"
+        case .release:
+            "checklist.checked"
+        }
+    }
+
+    var prompt: String {
+        switch self {
+        case .build:
+            "Build this feature end to end. Keep the change focused, follow the existing architecture, and include tests or validation notes."
+        case .fix:
+            "Find and fix the bug. Explain the root cause, keep the patch minimal, and verify the behavior before finishing."
+        case .review:
+            "Review the current implementation for bugs, UX regressions, missing tests, and release risks. List findings first."
+        case .release:
+            "Run a release-readiness pass. Check tests, build health, documentation, public copy, and App Store readiness blockers."
+        }
     }
 }
 

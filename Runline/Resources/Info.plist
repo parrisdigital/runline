@@ -35,19 +35,6 @@
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_runline-bridge._tcp</string>
-	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Runline connects to Runline Bridge on your Mac for optional Cursor SDK mode.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Runline uses the camera to scan Runline Bridge setup QR codes for optional Cursor SDK mode.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UISupportedInterfaceOrientations</key>

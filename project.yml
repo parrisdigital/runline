@@ -28,12 +28,6 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.developer-tools
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-        NSBonjourServices:
-          - _runline-bridge._tcp
-        NSLocalNetworkUsageDescription: Runline connects to Runline Bridge on your Mac for optional Cursor SDK mode.
-        NSCameraUsageDescription: Runline uses the camera to scan Runline Bridge setup QR codes for optional Cursor SDK mode.
         UILaunchStoryboardName: LaunchScreen
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

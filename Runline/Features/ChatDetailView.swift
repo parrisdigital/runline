@@ -22,86 +22,74 @@ struct ChatDetailView: View {
     @State private var isLoadingFollowUpFiles = false
     @State private var followUpFileImportMessage: String?
     @State private var isArtifactsPresented = false
-    @State private var isSDKToolsPresented = false
-    @State private var sdkMessageIntent: SDKMessageIntent = .continueConversation
-    @State private var selectedSDKModelID: String?
-    @State private var selectedSDKMCPProfileID: String?
+    @State private var followUpModelAgentID: Agent.ID?
+    @State private var selectedFollowUpModelID: String?
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         let currentAgent = appState.agent(id: agent.id) ?? agent
         let latestRun = appState.runs(for: currentAgent).first
+        let events = latestRun.map { appState.events(for: $0.id) } ?? []
+        let timelineItems = ChatTimelineBuilder.items(from: events)
+        let showsComposer = shouldShowComposer(agent: currentAgent, run: latestRun)
 
-        List {
-            Section {
-                LabeledContent("Mode", value: appState.isSDKBridgeAgent(currentAgent) ? "Cursor SDK" : "Cloud Agent")
-                LabeledContent("Repository", value: currentAgent.repository.displayName)
-                LabeledContent("Branch", value: currentAgent.branchName)
-                LabeledContent("Model", value: currentAgent.modelID)
-                if let profile = appState.sdkBridgeProfile(for: currentAgent) {
-                    LabeledContent("SDK Profile", value: profile.name)
-                    LabeledContent("SDK Tools", value: profile.summary)
-                    NavigationLink {
-                        SDKBridgeProfileDetailView(profile: profile)
-                    } label: {
-                        Label("View SDK Profile", systemImage: "wrench.and.screwdriver")
-                    }
-                }
-                if let latestRun {
-                    LabeledContent("Run", value: latestRun.id)
-                    LabeledContent("Updated", value: latestRun.updatedAtDescription)
-                    HStack {
-                        Text("Status")
-                        Spacer()
-                        RunStatusBadge(status: latestRun.status)
-                    }
-                }
-            }
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    CloudChatHeaderCard(agent: currentAgent, run: latestRun)
 
-            if let latestRun {
-                Section("Timeline") {
-                    let events = appState.events(for: latestRun.id)
-                    let timelineItems = ChatTimelineBuilder.items(from: events)
-                    if timelineItems.isEmpty {
-                        ContentUnavailableView(
-                            appState.isStreamExpired(runID: latestRun.id) ? "Stream Paused" : "No Events Yet",
-                            systemImage: appState.isStreamExpired(runID: latestRun.id) ? "clock.badge.exclamationmark" : "dot.radiowaves.left.and.right",
-                            description: Text(appState.isStreamExpired(runID: latestRun.id) ? "Cursor stopped returning live events. Refresh the chat to poll the latest state." : "Events appear as Cursor works.")
-                        )
+                    if let latestRun {
+                        if timelineItems.isEmpty {
+                            CloudChatEmptyTimeline(
+                                isStreamExpired: appState.isStreamExpired(runID: latestRun.id)
+                            )
+                        } else {
+                            ForEach(timelineItems) { item in
+                                ChatTimelineRow(item: item)
+                                    .id(item.id)
+                            }
+                        }
+
+                        if appState.isObserving(runID: latestRun.id) {
+                            CloudRunListeningRow()
+                        }
                     } else {
-                        ForEach(timelineItems) { item in
-                            StreamEventListRow(item: item)
-                        }
+                        ContentUnavailableView(
+                            "No Runs",
+                            systemImage: "message",
+                            description: Text("Runs appear after launch or follow-up.")
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
                     }
 
-                    if appState.isObserving(runID: latestRun.id) {
-                        HStack {
-                            ProgressView()
-                            Text("Listening for Cursor events")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottom")
                 }
-            } else {
-                ContentUnavailableView(
-                    "No Runs",
-                    systemImage: "message",
-                    description: Text("Runs appear after launch or follow-up.")
-                )
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, showsComposer ? 170 : 20)
+            }
+            .background(Color(uiColor: .systemBackground))
+            .onChange(of: timelineItems.map(\.id)) { _, _ in
+                withAnimation(.snappy(duration: 0.2)) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
             }
         }
         .scrollDismissesKeyboard(.interactively)
+        .overlay(alignment: .bottom) {
+            if showsComposer {
+                followUpComposer(agent: currentAgent, run: latestRun)
+            }
+        }
         .navigationTitle(currentAgent.name)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             await appState.refreshAgentDetail(agentID: currentAgent.id)
             if let latestRun = appState.runs(for: currentAgent).first {
                 await appState.loadEvents(for: currentAgent, run: latestRun)
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            if shouldShowComposer(agent: currentAgent, run: latestRun) {
-                followUpComposer(agent: currentAgent)
             }
         }
         .toolbar {
@@ -121,14 +109,6 @@ struct ChatDetailView: View {
                         isArtifactsPresented = true
                     } label: {
                         Label("Artifacts", systemImage: "tray.full")
-                    }
-
-                    if appState.isSDKBridgeAgent(currentAgent) {
-                        Button {
-                            isSDKToolsPresented = true
-                        } label: {
-                            Label("SDK Tools", systemImage: "wrench.and.screwdriver")
-                        }
                     }
 
                     if let url = currentAgent.pullRequestURL {
@@ -176,13 +156,6 @@ struct ChatDetailView: View {
         }
         .task {
             await appState.refreshAgentDetail(agentID: currentAgent.id)
-            seedSDKComposerDefaults(for: currentAgent)
-            if appState.isSDKBridgeAgent(currentAgent) {
-                await appState.reloadSDKBridgeProfiles()
-            }
-        }
-        .onChange(of: currentAgent.id) { _, _ in
-            seedSDKComposerDefaults(for: currentAgent)
         }
         .task(id: latestRun?.id) {
             guard let latestRun else { return }
@@ -196,15 +169,6 @@ struct ChatDetailView: View {
         .sheet(isPresented: $isArtifactsPresented) {
             ArtifactsSheet(agent: currentAgent)
         }
-        .sheet(isPresented: $isSDKToolsPresented) {
-            NavigationStack {
-                if let profile = appState.sdkBridgeProfile(for: appState.agent(id: currentAgent.id) ?? currentAgent) {
-                    SDKBridgeProfileDetailView(profile: profile)
-                } else {
-                    SDKToolsView()
-                }
-            }
-        }
         .fileImporter(
             isPresented: $isFollowUpFileImporterPresented,
             allowedContentTypes: PromptFileLoader.allowedContentTypes,
@@ -217,15 +181,34 @@ struct ChatDetailView: View {
     }
 
     private func shouldShowComposer(agent: Agent, run: AgentRun?) -> Bool {
-        guard let run, run.status.isTerminal else { return false }
+        guard run != nil else { return false }
         if case .active = agent.status {
             return true
         }
         return false
     }
 
-    private func followUpComposer(agent: Agent) -> some View {
+    private func followUpComposer(agent: Agent, run: AgentRun?) -> some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer(spacing: 10) {
+                    followUpComposerContent(agent: agent, run: run)
+                }
+            } else {
+                followUpComposerContent(agent: agent, run: run)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
+    private func followUpComposerContent(agent: Agent, run: AgentRun?) -> some View {
         VStack(spacing: 8) {
+            if let run, !run.status.isTerminal {
+                CloudRunProgressBar(status: run.status)
+            }
+
             if shouldShowFollowUpAttachments {
                 followUpAttachmentStrip
             }
@@ -235,170 +218,125 @@ struct ChatDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 16)
             }
 
-            if appState.isSDKBridgeAgent(agent) {
-                sdkComposerControls(agent: agent)
-            }
+            composerInputSurface(agent: agent, run: run)
+        }
+    }
 
-            HStack(alignment: .center, spacing: 8) {
-                Menu {
-                    if appState.capabilities.supportsImagesInPrompt {
-                        PhotosPicker(
-                            selection: $selectedFollowUpPhotoItems,
-                            maxSelectionCount: Self.maxPromptImages,
-                            matching: .images
-                        ) {
-                            Label("Photos", systemImage: "photo")
-                        }
-                        .disabled(isLoadingFollowUpImages || followUpImages.count >= Self.maxPromptImages)
-                    }
-
-                    Button {
-                        isFollowUpFileImporterPresented = true
-                    } label: {
-                        Label("Files", systemImage: "doc")
-                    }
-                    .disabled(isLoadingFollowUpFiles || followUpFiles.count >= PromptFileLoader.maxFiles)
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title3)
-                        .frame(width: Self.composerControlSize, height: Self.composerControlSize)
-                        .background(Circle().fill(Color(uiColor: .secondarySystemBackground)))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Attach context")
-                .onChange(of: selectedFollowUpPhotoItems) { _, items in
-                    Task {
-                        await loadFollowUpImages(from: items)
-                    }
+    private func composerInputSurface(agent: Agent, run: AgentRun?) -> some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                if followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(run?.status.isTerminal == false ? "Steer this run" : "Ask for follow-up changes")
+                        .foregroundStyle(.secondary)
+                        .allowsHitTesting(false)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 15)
                 }
 
-                TextField("Message", text: $followUpText, axis: .vertical)
-                    .lineLimit(1...5)
+                TextField("", text: $followUpText, axis: .vertical)
+                    .lineLimit(2...7)
                     .textInputAutocapitalization(.sentences)
                     .autocorrectionDisabled(false)
                     .focused($isComposerFocused)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 21, style: .continuous)
-                            .fill(Color(uiColor: .secondarySystemBackground))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 21, style: .continuous)
-                            .stroke(Color(uiColor: .separator).opacity(0.25), lineWidth: 0.5)
-                    )
+                    .padding(.horizontal, 18)
+                    .padding(.top, 15)
+                    .padding(.bottom, 12)
+            }
+
+            Divider()
+                .opacity(0.32)
+
+            HStack(spacing: 10) {
+                attachmentMenuButton
+
+                CloudComposerModelMenu(
+                    models: appState.models,
+                    selection: followUpModelBinding(for: agent)
+                )
+
+                Spacer(minLength: 0)
+
+                if let run, !run.status.isTerminal {
+                    Button {
+                        Task {
+                            await appState.cancel(agent: agent, run: run)
+                        }
+                    } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.red)
+                            .frame(width: Self.composerControlSize, height: Self.composerControlSize)
+                            .composerGlassSurface(cornerRadius: Self.composerControlSize / 2, interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Cancel run")
+                }
 
                 Button {
                     sendFollowUp(agent: agent)
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 34))
-                        .symbolRenderingMode(.hierarchical)
-                        .frame(width: Self.composerControlSize, height: Self.composerControlSize)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(canSendFollowUp ? Color.white : Color(uiColor: .systemGray))
+                        .frame(width: 40, height: 40)
+                        .background(
+                            Circle()
+                                .fill(canSendFollowUp ? Color(uiColor: .systemBlue) : Color(uiColor: .systemGray5))
+                        )
+                        .shadow(color: canSendFollowUp ? Color.blue.opacity(0.28) : .clear, radius: 10, y: 5)
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSendFollowUp)
                 .accessibilityLabel("Send follow-up")
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .padding(.vertical, 8)
         }
-        .background(.bar)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .opacity(0.90)
+        )
+        .composerGlassSurface(cornerRadius: 28)
+        .shadow(color: Color.black.opacity(0.10), radius: 18, y: 8)
     }
 
-    private func sdkComposerControls(agent: Agent) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                Menu {
-                    Picker("Intent", selection: $sdkMessageIntent) {
-                        ForEach(SDKMessageIntent.allCases) { intent in
-                            Label(intent.title, systemImage: intent.symbolName)
-                                .tag(intent)
-                        }
-                    }
-                } label: {
-                    Label(sdkMessageIntent.title, systemImage: sdkMessageIntent.symbolName)
+    private var attachmentMenuButton: some View {
+        Menu {
+            if appState.capabilities.supportsImagesInPrompt {
+                PhotosPicker(
+                    selection: $selectedFollowUpPhotoItems,
+                    maxSelectionCount: Self.maxPromptImages,
+                    matching: .images
+                ) {
+                    Label("Photos", systemImage: "photo")
                 }
-                .buttonStyle(.bordered)
-
-                Menu {
-                    Picker("Model", selection: sdkModelSelectionBinding) {
-                        Text("Default").tag(Optional<String>.none)
-                        ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models)) { model in
-                            Text(model.displayName).tag(Optional(model.id))
-                        }
-                    }
-                } label: {
-                    Label(selectedSDKModelTitle, systemImage: "cpu")
-                }
-                .buttonStyle(.bordered)
-
-                Menu {
-                    Picker("MCP Profile", selection: sdkMCPProfileSelectionBinding) {
-                        Text("No Profile").tag(Optional<String>.none)
-                        ForEach(appState.sdkBridgeProfiles) { profile in
-                            Text(profile.name).tag(Optional(profile.id))
-                        }
-                    }
-                } label: {
-                    Label(selectedSDKProfileTitle, systemImage: "point.3.connected.trianglepath.dotted")
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    isSDKToolsPresented = true
-                } label: {
-                    Label("Tools", systemImage: "wrench.and.screwdriver")
-                }
-                .buttonStyle(.bordered)
-
-                if !followUpImages.isEmpty {
-                    Label("\(followUpImages.count) image\(followUpImages.count == 1 ? "" : "s")", systemImage: "photo")
-                        .font(.subheadline)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(Color(uiColor: .secondarySystemBackground)))
-                }
-
-                if !followUpFiles.isEmpty {
-                    Label("\(followUpFiles.count) file\(followUpFiles.count == 1 ? "" : "s")", systemImage: "doc.text")
-                        .font(.subheadline)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(Color(uiColor: .secondarySystemBackground)))
-                }
+                .disabled(isLoadingFollowUpImages || followUpImages.count >= Self.maxPromptImages)
             }
-            .padding(.horizontal, 12)
+
+            Button {
+                isFollowUpFileImporterPresented = true
+            } label: {
+                Label("Files", systemImage: "doc")
+            }
+            .disabled(isLoadingFollowUpFiles || followUpFiles.count >= PromptFileLoader.maxFiles)
+        } label: {
+            Image(systemName: "paperclip")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color(uiColor: .systemBlue))
+                .frame(width: Self.composerControlSize, height: Self.composerControlSize)
+                .composerGlassSurface(cornerRadius: Self.composerControlSize / 2, interactive: true)
         }
-    }
-
-    private var sdkModelSelectionBinding: Binding<String?> {
-        Binding {
-            selectedSDKModelID
-        } set: { modelID in
-            selectedSDKModelID = NewChatModelPickerOptions.modelID(from: modelID)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Attach files or images")
+        .onChange(of: selectedFollowUpPhotoItems) { _, items in
+            Task {
+                await loadFollowUpImages(from: items)
+            }
         }
-    }
-
-    private var sdkMCPProfileSelectionBinding: Binding<String?> {
-        Binding {
-            selectedSDKMCPProfileID
-        } set: { profileID in
-            selectedSDKMCPProfileID = profileID
-        }
-    }
-
-    private var selectedSDKModelTitle: String {
-        guard let selectedSDKModelID else { return "Default" }
-        return appState.models.first(where: { $0.id == selectedSDKModelID })?.displayName ?? selectedSDKModelID
-    }
-
-    private var selectedSDKProfileTitle: String {
-        guard let selectedSDKMCPProfileID else { return "No Profile" }
-        return appState.sdkBridgeProfiles.first(where: { $0.id == selectedSDKMCPProfileID })?.name ?? selectedSDKMCPProfileID
     }
 
     private var shouldShowFollowUpAttachments: Bool {
@@ -425,7 +363,7 @@ struct ChatDetailView: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(Color(uiColor: .secondarySystemBackground)))
+                    .composerGlassSurface(cornerRadius: 14)
                 }
 
                 ForEach(followUpFiles) { file in
@@ -445,7 +383,7 @@ struct ChatDetailView: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(Color(uiColor: .secondarySystemBackground)))
+                    .composerGlassSurface(cornerRadius: 14)
                 }
 
                 if isLoadingFollowUpImages || isLoadingFollowUpFiles {
@@ -481,21 +419,28 @@ struct ChatDetailView: View {
             await appState.createFollowUp(
                 agent: agent,
                 prompt: prompt,
-                intent: sdkMessageIntent,
-                sdkModelID: selectedSDKModelID,
-                sdkMCPProfileID: selectedSDKMCPProfileID
+                modelID: selectedFollowUpModelID(for: agent)
             )
-            sdkMessageIntent = .continueConversation
             if let latestRun = appState.runs(for: agent).first {
                 await appState.observeRun(agent: agent, run: latestRun)
             }
         }
     }
 
-    private func seedSDKComposerDefaults(for agent: Agent) {
-        guard appState.isSDKBridgeAgent(agent) else { return }
-        selectedSDKModelID = NewChatModelPickerOptions.selection(from: agent.modelID)
-        selectedSDKMCPProfileID = appState.sdkBridgeProfileID(for: agent)
+    private func followUpModelBinding(for agent: Agent) -> Binding<String?> {
+        Binding {
+            selectedFollowUpModelID(for: agent)
+        } set: { modelID in
+            followUpModelAgentID = agent.id
+            selectedFollowUpModelID = NewChatModelPickerOptions.modelID(from: modelID)
+        }
+    }
+
+    private func selectedFollowUpModelID(for agent: Agent) -> String? {
+        if followUpModelAgentID == agent.id {
+            return selectedFollowUpModelID
+        }
+        return NewChatModelPickerOptions.modelID(from: agent.modelID)
     }
 
     private func loadFollowUpImages(from items: [PhotosPickerItem]) async {
@@ -561,6 +506,463 @@ struct ChatDetailView: View {
     private func fileImportMessage(from result: PromptFileLoadResult) -> String? {
         guard !result.skippedFilenames.isEmpty else { return nil }
         return "Skipped unsupported or large files: \(result.skippedFilenames.joined(separator: ", "))"
+    }
+}
+
+private struct CloudChatHeaderCard: View {
+    var agent: Agent
+    var run: AgentRun?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Label("Cursor Cloud", systemImage: "cloud.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.blue)
+
+                Spacer(minLength: 8)
+
+                if let run {
+                    RunStatusBadge(status: run.status)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(agent.name)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(2)
+
+                Text(agent.repository.displayName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    CloudChatContextChip(systemName: "arrow.triangle.branch", title: agent.branchName)
+                    CloudChatContextChip(systemName: "cpu", title: agent.modelID)
+                    if let run {
+                        CloudChatContextChip(systemName: "clock", title: run.updatedAtDescription)
+                    }
+
+                    if agent.artifactCount > 0 {
+                        CloudChatContextChip(systemName: "tray.full", title: "\(agent.artifactCount) artifact\(agent.artifactCount == 1 ? "" : "s")")
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct CloudChatContextChip: View {
+    var systemName: String
+    var title: String
+
+    var body: some View {
+        Label(title, systemImage: systemName)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
+    }
+}
+
+private struct CloudChatEmptyTimeline: View {
+    var isStreamExpired: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            CloudAvatar(
+                systemName: isStreamExpired ? "clock.badge.exclamationmark" : "dot.radiowaves.left.and.right",
+                tint: isStreamExpired ? .orange : .blue
+            )
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Cursor")
+                        .font(.caption.weight(.semibold))
+                    Text(isStreamExpired ? "Paused" : "Starting")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+
+                Text(isStreamExpired ? "Live updates are paused for this run. Pull to refresh for the latest Cloud Agent state." : "Waiting for the first Cloud Agent update.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.trailing, 8)
+            }
+
+            Spacer(minLength: 24)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct ChatTimelineRow: View {
+    var item: ChatTimelineItem
+
+    var body: some View {
+        switch item.kind {
+        case .user:
+            UserMessageRow(item: item)
+        case .assistant:
+            AssistantMessageRow(item: item)
+        case .status, .done, .heartbeat:
+            CloudStatusEventPill(item: item)
+        default:
+            CloudActivityDisclosureRow(item: item)
+        }
+    }
+}
+
+private struct UserMessageRow: View {
+    var item: ChatTimelineItem
+
+    var body: some View {
+        HStack(alignment: .top) {
+            Spacer(minLength: 52)
+
+            VStack(alignment: .trailing, spacing: 5) {
+                TimelineMessageText(
+                    message: item.message,
+                    isTechnical: false,
+                    rendersMarkdown: false,
+                    foregroundColor: .white
+                )
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.blue)
+                )
+
+                Text(item.timestamp)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: 560, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct AssistantMessageRow: View {
+    var item: ChatTimelineItem
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            CloudAvatar(systemName: "sparkles", tint: .blue)
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Cursor")
+                        .font(.caption.weight(.semibold))
+                    Text(item.timestamp)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+
+                TimelineMessageText(
+                    message: item.message,
+                    isTechnical: false,
+                    rendersMarkdown: true,
+                    foregroundColor: .primary
+                )
+                .padding(.trailing, 8)
+            }
+            .frame(maxWidth: 680, alignment: .leading)
+
+            Spacer(minLength: 24)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct CloudActivityDisclosureRow: View {
+    var item: ChatTimelineItem
+    @State private var isExpanded: Bool
+
+    init(item: ChatTimelineItem) {
+        self.item = item
+        _isExpanded = State(initialValue: item.kind == .error || item.kind == .request)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            if isExpanded {
+                TimelineMessageText(
+                    message: item.message,
+                    isTechnical: isTechnical,
+                    rendersMarkdown: rendersMarkdown,
+                    foregroundColor: messageColor
+                )
+                .padding(.top, 8)
+                .padding(.leading, 34)
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: symbolName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 20)
+
+                Text(item.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Text(item.timestamp)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .tint(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(uiColor: .secondarySystemBackground).opacity(0.65), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var isTechnical: Bool {
+        item.kind == .toolCall || item.kind == .result || item.kind == .error
+    }
+
+    private var rendersMarkdown: Bool {
+        switch item.kind {
+        case .assistant, .thinking, .task, .request:
+            true
+        default:
+            false
+        }
+    }
+
+    private var messageColor: Color {
+        switch item.kind {
+        case .assistant, .user:
+            .primary
+        default:
+            .secondary
+        }
+    }
+
+    private var symbolName: String {
+        switch item.kind {
+        case .system:
+            "gearshape"
+        case .status:
+            "checkmark.circle"
+        case .thinking:
+            "brain"
+        case .toolCall:
+            "terminal"
+        case .task:
+            "checklist"
+        case .request:
+            "questionmark.bubble"
+        case .result:
+            "doc.text"
+        case .heartbeat:
+            "waveform.path.ecg"
+        case .error:
+            "exclamationmark.triangle"
+        case .done:
+            "checkmark.seal"
+        default:
+            "circle"
+        }
+    }
+
+    private var color: Color {
+        switch item.kind {
+        case .status, .done:
+            .green
+        case .error:
+            .red
+        case .thinking, .request:
+            .orange
+        case .assistant, .toolCall, .task, .result:
+            .blue
+        default:
+            .secondary
+        }
+    }
+}
+
+private struct CloudStatusEventPill: View {
+    var item: ChatTimelineItem
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Label(item.title, systemImage: symbolName)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(color)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(color.opacity(0.10)))
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var symbolName: String {
+        switch item.kind {
+        case .done:
+            "checkmark.seal"
+        case .heartbeat:
+            "waveform.path.ecg"
+        default:
+            "checkmark.circle"
+        }
+    }
+
+    private var color: Color {
+        switch item.kind {
+        case .done, .status:
+            .green
+        default:
+            .secondary
+        }
+    }
+}
+
+private struct CloudComposerModelMenu: View {
+    var models: [AgentModel]
+    @Binding var selection: String?
+
+    var body: some View {
+        Menu {
+            Button {
+                selection = nil
+            } label: {
+                modelMenuLabel(title: "Default", isSelected: selection == nil)
+            }
+
+            ForEach(NewChatModelPickerOptions.visibleModels(from: models)) { model in
+                Button {
+                    selection = model.id
+                } label: {
+                    modelMenuLabel(title: model.displayName, isSelected: selection == model.id)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "cloud")
+                    .font(.caption.weight(.semibold))
+
+                Text("Cloud")
+                    .font(.caption.weight(.medium))
+
+                Rectangle()
+                    .fill(Color(uiColor: .separator).opacity(0.45))
+                    .frame(width: 1, height: 12)
+
+                Text(modelTitle)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .composerGlassSurface(cornerRadius: 16, interactive: true)
+        }
+        .menuIndicator(.hidden)
+        .tint(.secondary)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Select Cloud Agent model. Current model \(modelTitle)")
+    }
+
+    private var modelTitle: String {
+        guard let selection else { return "Default" }
+        if let model = models.first(where: { $0.id == selection }) {
+            return model.displayName
+        }
+        return selection
+    }
+
+    private func modelMenuLabel(title: String, isSelected: Bool) -> some View {
+        Label(title, systemImage: isSelected ? "checkmark" : "cpu")
+    }
+}
+
+private struct CloudAvatar: View {
+    var systemName: String
+    var tint: Color
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .frame(width: 28, height: 28)
+            .background(Circle().fill(tint.opacity(0.12)))
+    }
+}
+
+private struct CloudRunListeningRow: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Listening for Cursor events")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+}
+
+private struct CloudRunProgressBar: View {
+    var status: RunStatus
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text(status == .creating ? "Starting Cloud Agent" : "Cloud Agent running")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func composerGlassSurface(cornerRadius: CGFloat, interactive: Bool = false) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            if interactive {
+                self
+                    .glassEffect(.regular.interactive(), in: shape)
+                    .overlay(shape.stroke(Color(uiColor: .separator).opacity(0.26), lineWidth: 0.5))
+            } else {
+                self
+                    .glassEffect(.regular, in: shape)
+                    .overlay(shape.stroke(Color(uiColor: .separator).opacity(0.24), lineWidth: 0.5))
+            }
+        } else {
+            self
+                .background(.ultraThinMaterial, in: shape)
+                .overlay(shape.stroke(Color(uiColor: .separator).opacity(0.26), lineWidth: 0.5))
+        }
     }
 }
 

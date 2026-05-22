@@ -7,15 +7,13 @@ Runline is in public beta.
 Open a GitHub issue for:
 
 - reproducible app bugs
-- Runline Bridge installation problems
+- Cursor Cloud Agent run issues that appear specific to Runline
 - documentation issues
 - focused feature requests
 
-Include the app build number, iOS version, device type, bridge version, and clear reproduction steps when relevant.
+Include the app build number, iOS version, device type, and clear reproduction steps when relevant.
 
-For Cursor SDK mode, also include whether the bridge is local LAN, Simulator localhost, or hosted HTTPS. Do not include pairing tokens, API keys, terminal environment dumps, or private repository contents.
-
-For bridge setup options, see [docs/self-hosting.md](docs/self-hosting.md).
+Do not include API keys, Apple credentials, private repository contents, private prompts, artifact URLs, or other secrets.
 
 ## Security Issues
 

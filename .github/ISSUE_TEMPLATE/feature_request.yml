@@ -23,7 +23,7 @@ body:
       label: Area
       options:
         - Cloud Agent
-        - Cursor SDK and Runline Bridge
+        - Automations
         - iPhone UI
         - iPad UI
         - Notifications

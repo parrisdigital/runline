@@ -17,7 +17,18 @@ struct WelcomeView: View {
 
                 Spacer(minLength: 24)
 
-                VStack(spacing: 14) {
+                VStack(spacing: 18) {
+                    VStack(spacing: 6) {
+                        Text("Runline")
+                            .font(.largeTitle.weight(.semibold))
+                        Text("Start and manage Cursor Cloud Agents from iPhone and iPad.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: 340)
+
                     Form {
                         Section {
                             SecureField("Cursor API key", text: $apiKey)
@@ -45,7 +56,7 @@ struct WelcomeView: View {
                             .disabled(!canConnect || appState.isLoading)
                             .accessibilityIdentifier("welcome.connect")
                         } header: {
-                            Text("Cursor")
+                            Text("Cursor Cloud")
                         }
                     }
                     .frame(height: 164)

@@ -1,172 +1,103 @@
-# Releases
+# Release Checklist
 
-This document is the maintainer checklist for GitHub, npm, and TestFlight releases.
+This document is for maintainers preparing TestFlight, App Store, and public GitHub releases.
 
-## Current Public State
+Runline is a Cursor Cloud-only iOS app. Release work should not introduce required hosted services or private endpoints.
 
-| Surface | State |
+## Current Release State
+
+| Area | State |
 | --- | --- |
-| GitHub repository | Public at `https://github.com/parrisdigital/runline` |
-| License | MIT |
-| iOS bundle ID | `com.matthewparris.runline` |
-| iOS marketing version | `1.0` |
-| Local project build number | `21` in `project.yml` |
-| TestFlight | Runline `1.0 (21)` is in internal and external beta testing |
-| npm package | `runline-bridge@0.1.6` published |
-| npm dist-tags | `latest` -> `0.1.6`, `beta` -> `0.1.6` |
-| GitHub releases | Source beta `v1.0.0-beta.1`; latest TestFlight marker `testflight-1.0-21`; historical TestFlight release `testflight-1.0-6` |
+| iOS app | Runline `1.0 (21)` in beta sequence |
+| Runtime | Direct Cursor Cloud Agents API |
+| Public source | Safe to build without maintainer credentials |
+| ASC config | Live `.asc/workflow.json` remains local and ignored |
 
-Next intended TestFlight upload: Runline `1.0 (22)`.
+## Local Preflight
 
-The stale draft GitHub release for build 24 was removed. Use explicit build numbers for every TestFlight upload so App Store Connect, GitHub notes, and the local project stay aligned.
-
-## Pre-Release Checks
-
-Run these from the repository root:
+Run these before public-facing release work:
 
 ```bash
-git status --short
 git diff --check
-npm --prefix orchestrator run typecheck
-npm --prefix orchestrator run build
-npm --prefix orchestrator audit --audit-level=high
 gitleaks detect --source . --redact --verbose
-gitleaks detect --source . --no-git --redact --verbose
 xcodebuild test -project Runline.xcodeproj -scheme Runline -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1'
-```
-
-Review public-boundary docs before source releases:
-
-- [SELF_HOSTING_MODEL.md](../SELF_HOSTING_MODEL.md)
-- [docs/self-hosting.md](self-hosting.md)
-- [AGENTS.md](../AGENTS.md)
-- [Legal/TRADEMARKS.md](../Legal/TRADEMARKS.md)
-
-For a faster metadata-only check:
-
-```bash
 xcodebuild -list -project Runline.xcodeproj
 ruby -c Tools/set_build_number.rb
 plutil -lint ExportOptions-AppStore.plist ExportOptions-TestFlightUpload.plist Runline/Resources/Info.plist Runline/Resources/PrivacyInfo.xcprivacy Runline/Resources/Runline.entitlements
 ```
 
-## GitHub Release
-
-Use GitHub releases for public source milestones and important TestFlight markers.
-
-Recommended source beta tag format:
+For deeper public-release checks:
 
 ```bash
-git tag v1.0.0-beta.1
-git push origin v1.0.0-beta.1
-gh release create v1.0.0-beta.1 \
-  --repo parrisdigital/runline \
-  --prerelease \
-  --title "Runline Public Beta" \
-  --notes-file /tmp/runline-public-beta.md
+gitleaks detect --source . --no-git --redact --verbose
 ```
 
-Recommended TestFlight tag format:
+## Build Number
 
-```text
-testflight-1.0-<build-number>
-```
+Use explicit TestFlight build numbers.
 
-Do not attach IPAs, archives, signing files, `.p8` keys, provisioning profiles, or local ASC artifacts to public releases.
+Update build numbers through the project files and keep these in sync:
 
-## npm Release
+- `project.yml`
+- `Runline.xcodeproj/project.pbxproj`
+- `CHANGELOG.md`
+- this release document when the public state changes
 
-`runline-bridge` lives in `orchestrator/`.
+## TestFlight
 
-Before publishing:
+Local ASC automation expects a private `Runline` App Store Connect profile in the maintainer's keychain.
 
-```bash
-npm --prefix orchestrator install
-npm --prefix orchestrator run typecheck
-npm --prefix orchestrator run build
-npm --prefix orchestrator audit --audit-level=high
-npm --prefix orchestrator pack --dry-run
-```
-
-Patch release:
-
-```bash
-cd orchestrator
-npm version patch --no-git-tag-version
-npm publish --tag beta
-npm dist-tag add runline-bridge@<version> latest
-```
-
-If npm reports `EOTP` for an account that uses a passkey or security key instead of authenticator codes, rerun the protected write with browser authentication:
-
-```bash
-npm publish --tag beta --auth-type=web
-npm dist-tag add runline-bridge@<version> latest --auth-type=web
-```
-
-After publish:
-
-```bash
-npm view runline-bridge version dist-tags versions repository.url homepage bugs.url license description --json
-npm install -g runline-bridge@latest
-runline-bridge --version
-runline-bridge up --help
-```
-
-Commit the package version, shrinkwrap, and documentation updates after a successful publish. If source is prepared before publishing, clearly document that npm `latest` still points to the previous published version.
-
-## TestFlight Release
-
-The ASC workflow is maintainer-only. It expects a local App Store Connect profile named `Runline` and private credentials stored outside git.
-
-Create the local workflow from the sanitized example:
+Create local config from the sanitized example:
 
 ```bash
 cp .asc/workflow.example.json .asc/workflow.json
 ```
 
-Fill in the local App Store Connect app ID, bundle ID, and TestFlight group IDs. The live `.asc/workflow.json` file is ignored by git and must not be committed.
+Fill in local App Store Connect app and group IDs. Keep `.asc/workflow.json` ignored.
 
-Preflight:
+Run preflight:
 
 ```bash
 asc workflow run preflight
 ```
 
-Upload and distribute with an explicit build number:
+Upload with an explicit build number:
 
 ```bash
 asc workflow run testflight BUILD_NUMBER:<next-build-number>
 ```
 
-Distribute an already uploaded build:
+## App Store Review Notes
 
-```bash
-asc workflow run distribute-existing BUILD_NUMBER:<build-number>
-```
+Keep review notes clear and public-safe:
 
-Use the next intentional build number, not the local `CURRENT_PROJECT_VERSION`, if TestFlight/App Store Connect has a different latest visible build.
+- Runline is an independent client for Cursor Cloud Agents.
+- Users provide their own Cursor API key.
+- Cursor API keys are stored in Keychain.
+- Cursor bills usage through the user's Cursor account.
+- Runline is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 
-## Release Notes Template
+Do not include private maintainer IDs, Apple API keys, signing files, live ASC workflow config, archives, IPAs, or private endpoints in public issues or releases.
 
-```text
-Runline <version> (<build>)
+## GitHub Release
 
-- Cloud Agent mode remains the default native iOS path.
-- Cursor SDK mode remains optional through Runline Bridge.
-- Tested on iPhone and iPad layouts.
-- Bridge package: runline-bridge@<version>.
-- SDK mode requires a reachable Runline Bridge; Cloud Agent mode remains direct from iOS.
-- Security checks: npm audit and gitleaks passed.
-```
+Public GitHub releases should include source notes only.
 
-## Security Checklist
+Do not attach:
 
-- No `.env`, `.npmrc`, `.p8`, `.p12`, `.mobileprovision`, `.ipa`, `.xcarchive`, private key, certificate, or ASC artifact is tracked.
-- No live `.asc/workflow.json` maintainer config is tracked.
-- Only safe examples such as `.asc/workflow.example.json` and `orchestrator/.env.example` are tracked.
-- `gitleaks detect --source . --redact --verbose` passes.
-- `gitleaks detect --source . --no-git --redact --verbose` passes.
-- npm package contents are checked with `npm pack --dry-run`.
-- TestFlight artifacts remain in `.asc/artifacts/` and are ignored by git.
-- Cursor and Apple credentials are rotated immediately if they are ever exposed.
+- `.ipa` files
+- `.xcarchive` files
+- signing certificates
+- provisioning profiles
+- live ASC artifacts
+- local secrets or environment files
+
+## Public Source Gate
+
+Before opening or publishing source, confirm:
+
+- `.asc/workflow.json` is ignored and absent from the diff.
+- no Cursor API keys, Apple credentials, APNs credentials, or private repository data are present.
+- generated archives, IPAs, and Xcode result bundles are absent.
+- docs describe the Cloud-only runtime accurately.
+- the non-affiliation disclaimer is present in app-facing docs.

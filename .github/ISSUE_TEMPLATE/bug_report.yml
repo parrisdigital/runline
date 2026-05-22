@@ -6,13 +6,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not include Cursor API keys, bridge pairing tokens, Apple credentials, private repository contents, or other secrets.
+        Do not include Cursor API keys, Apple credentials, private repository contents, private prompts, artifact URLs, or other secrets.
   - type: input
     id: version
     attributes:
-      label: App or bridge version
-      description: Include the TestFlight build number or `runline-bridge --version`.
-      placeholder: "Runline 1.0 (11), runline-bridge 0.1.2"
+      label: App version
+      description: Include the TestFlight build number or App Store version.
+      placeholder: "Runline 1.0 (21)"
     validations:
       required: true
   - type: dropdown
@@ -21,8 +21,9 @@ body:
       label: Mode
       options:
         - Cloud Agent
-        - Cursor SDK with Runline Bridge
-        - Settings or onboarding
+        - Automations
+        - Settings
+        - Onboarding
         - Other
     validations:
       required: true
@@ -49,6 +50,6 @@ body:
     id: environment
     attributes:
       label: Environment
-      placeholder: "iPhone/iPad model, iOS version, Mac version, Node version, network setup"
+      placeholder: "iPhone/iPad model, iOS version, network conditions"
     validations:
       required: false

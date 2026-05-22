@@ -10,22 +10,8 @@ Requirements:
 
 - macOS with Xcode capable of building the configured iOS target
 - iOS 26+ simulator runtime for full local app testing
-- Node.js 20+
-- npm
-
-Install bridge dependencies:
-
-```bash
-npm --prefix orchestrator install
-```
-
-Run bridge checks:
-
-```bash
-npm --prefix orchestrator run typecheck
-npm --prefix orchestrator run build
-npm --prefix orchestrator audit --audit-level=high
-```
+- Swift 6
+- XcodeGen, if regenerating `Runline.xcodeproj` from `project.yml`
 
 Run iOS tests:
 
@@ -36,14 +22,21 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1'
 ```
 
+Run metadata checks:
+
+```bash
+xcodebuild -list -project Runline.xcodeproj
+ruby -c Tools/set_build_number.rb
+plutil -lint ExportOptions-AppStore.plist ExportOptions-TestFlightUpload.plist Runline/Resources/Info.plist Runline/Resources/PrivacyInfo.xcprivacy Runline/Resources/Runline.entitlements
+```
+
 ## Pull Requests
 
 - Keep UI changes native to SwiftUI and iOS system patterns.
-- Keep Cloud Agent mode working without Runline Bridge.
-- Keep Cursor SDK mode optional and clearly labeled as requiring Runline Bridge.
+- Keep the Cursor Cloud Agent path working with only a user API key.
 - Add or update tests for behavior changes.
-- Do not commit generated archives, IPAs, derived data, local ASC artifacts, npm tokens, Apple signing material, API keys, or private repository data.
-- Run `git diff --check`, bridge typecheck/build/audit, and relevant iOS tests before opening a PR.
+- Do not commit generated archives, IPAs, derived data, local ASC artifacts, Apple signing material, API keys, or private repository data.
+- Run `git diff --check`, secret scanning, and relevant iOS tests before opening a PR.
 - For release process changes, update [docs/RELEASES.md](docs/RELEASES.md) and [CHANGELOG.md](CHANGELOG.md).
 - Follow [AGENTS.md](AGENTS.md) for repository operating rules and [Legal/TRADEMARKS.md](Legal/TRADEMARKS.md) for branding boundaries.
 

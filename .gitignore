@@ -15,10 +15,9 @@ xcuserdata/
 .swiftpm/
 Package.resolved
 
-# Node
+# Node artifacts from local experiments
 node_modules/
 **/node_modules/
-orchestrator/dist/
 
 # Local ASC release config and generated artifacts
 .asc/*
@@ -29,7 +28,6 @@ orchestrator/dist/
 .env
 .env.*
 !.env.example
-!orchestrator/.env.example
 .npmrc
 *.local.xcconfig
 Secrets.plist
