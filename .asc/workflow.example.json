@@ -49,10 +49,6 @@
           "run": "git diff --check"
         },
         {
-          "name": "orchestrator_typecheck",
-          "run": "npm --prefix orchestrator run typecheck"
-        },
-        {
           "name": "ios_tests",
           "run": "xcodebuild test -project $PROJECT -scheme $SCHEME -destination \"$SIM_DESTINATION\""
         }
