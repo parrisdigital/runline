@@ -1,0 +1,25 @@
+Runline/Features/ChatDetailView.swift
+  s_d248ce3e94eb45::t_04b93f0897eae0 34,39,48-50,263,312-345
+  s_d248ce3e94eb45::t_1bc5ace56397bc 614-666,674,684-875,1051-1057
+Runline/Features/NewChatSheet.swift
+  s_d248ce3e94eb45::t_cb903cdd7a764f 760-764,771-773
+  s_d248ce3e94eb45::t_239a0b1d0ad2e4 189,765,767-769
+  s_d248ce3e94eb45::t_6da2cc38599b6a 157,174-177,181-184,188,190-191,393-402
+  s_d248ce3e94eb45::t_ce998be0a8f973 766,770
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "7f318b6bc1f887c0784f55ffa809a4424ef33c30",
+  "prompts": {},
+  "sessions": {
+    "s_d248ce3e94eb45": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e4d13-bc66-7bc2-8d3f-c1c0f21ec167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
