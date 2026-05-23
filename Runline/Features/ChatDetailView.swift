@@ -31,11 +31,12 @@ struct ChatDetailView: View {
         let latestRun = appState.runs(for: currentAgent).first
         let events = latestRun.map { appState.events(for: $0.id) } ?? []
         let timelineItems = ChatTimelineBuilder.items(from: events)
+        let timelineSections = ChatTimelineSection.sections(from: timelineItems)
         let showsComposer = shouldShowComposer(agent: currentAgent, run: latestRun)
 
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
+                LazyVStack(alignment: .leading, spacing: 14) {
                     CloudChatHeaderCard(agent: currentAgent, run: latestRun)
 
                     if let latestRun {
@@ -44,9 +45,9 @@ struct ChatDetailView: View {
                                 isStreamExpired: appState.isStreamExpired(runID: latestRun.id)
                             )
                         } else {
-                            ForEach(timelineItems) { item in
-                                ChatTimelineRow(item: item)
-                                    .id(item.id)
+                            ForEach(timelineSections) { section in
+                                ChatTimelineSectionView(section: section)
+                                    .id(section.id)
                             }
                         }
 
@@ -259,38 +260,7 @@ struct ChatDetailView: View {
 
                 Spacer(minLength: 0)
 
-                if let run, !run.status.isTerminal {
-                    Button {
-                        Task {
-                            await appState.cancel(agent: agent, run: run)
-                        }
-                    } label: {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.red)
-                            .frame(width: Self.composerControlSize, height: Self.composerControlSize)
-                            .composerGlassSurface(cornerRadius: Self.composerControlSize / 2, interactive: true)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Cancel run")
-                }
-
-                Button {
-                    sendFollowUp(agent: agent)
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(canSendFollowUp ? Color.white : Color(uiColor: .systemGray))
-                        .frame(width: 40, height: 40)
-                        .background(
-                            Circle()
-                                .fill(canSendFollowUp ? Color(uiColor: .systemBlue) : Color(uiColor: .systemGray5))
-                        )
-                        .shadow(color: canSendFollowUp ? Color.blue.opacity(0.28) : .clear, radius: 10, y: 5)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSendFollowUp)
-                .accessibilityLabel("Send follow-up")
+                primaryComposerActionButton(agent: agent, run: run)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -336,6 +306,43 @@ struct ChatDetailView: View {
             Task {
                 await loadFollowUpImages(from: items)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func primaryComposerActionButton(agent: Agent, run: AgentRun?) -> some View {
+        if let run, !run.status.isTerminal {
+            Button {
+                Task {
+                    await appState.cancel(agent: agent, run: run)
+                }
+            } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color(uiColor: .systemRed)))
+                    .shadow(color: Color.red.opacity(0.26), radius: 10, y: 5)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel run")
+        } else {
+            Button {
+                sendFollowUp(agent: agent)
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(canSendFollowUp ? Color.white : Color(uiColor: .systemGray))
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle()
+                            .fill(canSendFollowUp ? Color(uiColor: .systemBlue) : Color(uiColor: .systemGray5))
+                    )
+                    .shadow(color: canSendFollowUp ? Color.blue.opacity(0.28) : .clear, radius: 10, y: 5)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSendFollowUp)
+            .accessibilityLabel("Send follow-up")
         }
     }
 
@@ -604,6 +611,59 @@ private struct CloudChatEmptyTimeline: View {
     }
 }
 
+private struct ChatTimelineSection: Identifiable, Hashable {
+    var id: String
+    var items: [ChatTimelineItem]
+    var isActivityLog: Bool
+
+    static func sections(from items: [ChatTimelineItem]) -> [ChatTimelineSection] {
+        var sections: [ChatTimelineSection] = []
+        var activityItems: [ChatTimelineItem] = []
+
+        func flushActivityItems() {
+            guard !activityItems.isEmpty else { return }
+            sections.append(
+                ChatTimelineSection(
+                    id: activityItems.map(\.id).joined(separator: "-"),
+                    items: activityItems,
+                    isActivityLog: true
+                )
+            )
+            activityItems = []
+        }
+
+        for item in items {
+            if item.isActivityLogItem {
+                activityItems.append(item)
+            } else {
+                flushActivityItems()
+                sections.append(
+                    ChatTimelineSection(
+                        id: item.id,
+                        items: [item],
+                        isActivityLog: false
+                    )
+                )
+            }
+        }
+
+        flushActivityItems()
+        return sections
+    }
+}
+
+private struct ChatTimelineSectionView: View {
+    var section: ChatTimelineSection
+
+    var body: some View {
+        if section.isActivityLog {
+            CloudActivityLog(items: section.items)
+        } else if let item = section.items.first {
+            ChatTimelineRow(item: item)
+        }
+    }
+}
+
 private struct ChatTimelineRow: View {
     var item: ChatTimelineItem
 
@@ -611,12 +671,204 @@ private struct ChatTimelineRow: View {
         switch item.kind {
         case .user:
             UserMessageRow(item: item)
-        case .assistant:
+        case .assistant, .result:
             AssistantMessageRow(item: item)
         case .status, .done, .heartbeat:
             CloudStatusEventPill(item: item)
         default:
             CloudActivityDisclosureRow(item: item)
+        }
+    }
+}
+
+private struct CloudActivityLog: View {
+    var items: [ChatTimelineItem]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(items.indices, id: \.self) { index in
+                CloudActivityCompactRow(item: items[index])
+
+                if index < items.index(before: items.endIndex) {
+                    Divider()
+                        .opacity(0.35)
+                        .padding(.leading, 46)
+                }
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.58))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 0.5)
+        )
+    }
+}
+
+private struct CloudActivityCompactRow: View {
+    var item: ChatTimelineItem
+    @State private var isExpanded: Bool
+
+    init(item: ChatTimelineItem) {
+        self.item = item
+        _isExpanded = State(initialValue: item.kind == .error || item.kind == .request)
+    }
+
+    var body: some View {
+        Group {
+            if hasUsefulDetail {
+                DisclosureGroup(isExpanded: $isExpanded) {
+                    TimelineMessageText(
+                        message: item.message,
+                        isTechnical: isTechnical,
+                        rendersMarkdown: rendersMarkdown,
+                        foregroundColor: messageColor
+                    )
+                    .padding(.leading, 34)
+                    .padding(.trailing, 8)
+                    .padding(.top, 6)
+                    .padding(.bottom, 10)
+                } label: {
+                    label
+                }
+                .tint(.secondary)
+            } else {
+                label
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, hasUsefulDetail && isExpanded ? 10 : 9)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var label: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: symbolName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(compactTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                if !isExpanded, hasUsefulDetail, shouldShowCollapsedPreview {
+                    Text(collapsedPreview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Text(item.timestamp)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private var compactTitle: String {
+        switch item.kind {
+        case .toolCall:
+            item.title.localizedCaseInsensitiveContains("Started") ? "Tool Call Started" : "Tool Call"
+        case .thinking:
+            item.title.localizedCaseInsensitiveContains("Completed") ? "Thinking Completed" : "Thinking"
+        case .task:
+            item.title
+        case .done:
+            "Turn Ended"
+        default:
+            item.title
+        }
+    }
+
+    private var hasUsefulDetail: Bool {
+        let message = item.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { return false }
+        return message.localizedCaseInsensitiveCompare(item.title) != .orderedSame
+            && message.localizedCaseInsensitiveCompare(compactTitle) != .orderedSame
+            && message != "Stream closed"
+    }
+
+    private var shouldShowCollapsedPreview: Bool {
+        switch item.kind {
+        case .thinking, .toolCall, .task, .request, .error:
+            true
+        default:
+            false
+        }
+    }
+
+    private var collapsedPreview: String {
+        item.message
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isTechnical: Bool {
+        item.kind == .toolCall || item.kind == .error
+    }
+
+    private var rendersMarkdown: Bool {
+        switch item.kind {
+        case .thinking, .task, .request:
+            true
+        default:
+            false
+        }
+    }
+
+    private var messageColor: Color {
+        switch item.kind {
+        case .error:
+            .red
+        default:
+            .secondary
+        }
+    }
+
+    private var symbolName: String {
+        switch item.kind {
+        case .system:
+            "gearshape"
+        case .status:
+            "checkmark.circle"
+        case .thinking:
+            "brain"
+        case .toolCall:
+            "terminal"
+        case .task:
+            "checklist"
+        case .request:
+            "questionmark.bubble"
+        case .heartbeat:
+            "waveform.path.ecg"
+        case .error:
+            "exclamationmark.triangle"
+        case .done:
+            "checkmark.seal"
+        default:
+            "circle"
+        }
+    }
+
+    private var color: Color {
+        switch item.kind {
+        case .status, .done:
+            .green
+        case .error:
+            .red
+        case .thinking, .request:
+            .orange
+        case .toolCall, .task:
+            .blue
+        default:
+            .secondary
         }
     }
 }
@@ -792,6 +1044,17 @@ private struct CloudActivityDisclosureRow: View {
             .blue
         default:
             .secondary
+        }
+    }
+}
+
+private extension ChatTimelineItem {
+    var isActivityLogItem: Bool {
+        switch kind {
+        case .system, .status, .thinking, .toolCall, .task, .request, .heartbeat, .error, .done, .unknown:
+            true
+        case .user, .assistant, .result:
+            false
         }
     }
 }

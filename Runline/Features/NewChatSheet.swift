@@ -154,7 +154,7 @@ struct NewChatForm: View {
             HStack(spacing: 10) {
                 attachmentMenuButton
 
-                NewChatInlinePill(systemName: "textformat", title: "\(appState.launchDraft.prompt.text.count)")
+                promptCountLabel
 
                 Spacer(minLength: 0)
 
@@ -171,15 +171,24 @@ struct NewChatForm: View {
             NewChatSectionHeader(title: "Output", systemName: "arrow.triangle.branch")
 
             VStack(spacing: 0) {
-                Toggle("Open pull request", isOn: autoCreatePRBinding)
+                NewChatOutputToggleRow(
+                    title: "Open pull request",
+                    isOn: autoCreatePRBinding
+                )
 
                 if appState.launchDraft.autoCreatePullRequest {
                     Divider().opacity(0.45)
-                    Toggle("Request reviewers", isOn: requestReviewersBinding)
+                    NewChatOutputToggleRow(
+                        title: "Request reviewers",
+                        isOn: requestReviewersBinding
+                    )
                 }
 
                 Divider().opacity(0.45)
-                Toggle("Let Cursor name branch", isOn: autoNameBranchBinding)
+                NewChatOutputToggleRow(
+                    title: "Let Cursor name branch",
+                    isOn: autoNameBranchBinding
+                )
 
                 if !appState.launchDraft.autoGenerateBranch {
                     Divider().opacity(0.45)
@@ -193,7 +202,6 @@ struct NewChatForm: View {
                     .padding(.top, 2)
                 }
             }
-            .font(.body)
         }
         .padding(14)
         .newChatGlassSurface(cornerRadius: 22)
@@ -380,6 +388,18 @@ struct NewChatForm: View {
             || !appState.launchDraft.prompt.images.isEmpty
             || !appState.launchDraft.prompt.files.isEmpty
             || promptFileImportMessage != nil
+    }
+
+    @ViewBuilder
+    private var promptCountLabel: some View {
+        let count = appState.launchDraft.prompt.text.count
+        if count > 0 {
+            Text("\(count) chars")
+                .font(.caption.weight(.medium).monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .accessibilityLabel("\(count) characters")
+        }
     }
 
     private var attachmentPreviewStrip: some View {
@@ -734,6 +754,20 @@ private struct NewChatSelectorLabel: View {
         .padding(12)
         .newChatGlassSurface(cornerRadius: 16, interactive: true)
         .accessibilityElement(children: .combine)
+    }
+}
+
+private struct NewChatOutputToggleRow: View {
+    var title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(title, isOn: $isOn)
+        .toggleStyle(.switch)
+        .font(.body)
+        .frame(minHeight: 40)
+        .padding(.vertical, 3)
+        .accessibilityLabel(title)
     }
 }
 
