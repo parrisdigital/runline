@@ -1147,16 +1147,8 @@ private struct ConversationHeaderCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Label(headerTitle, systemImage: agent.runtimeMode.detailSymbolName)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(agent.runtimeMode.detailTint)
-
-                Spacer(minLength: 8)
-
-                if let run {
-                    RunStatusBadge(status: run.status)
-                }
+            if agent.runtimeMode == .cloud {
+                cloudRuntimeHeader
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -1197,8 +1189,18 @@ private struct ConversationHeaderCard: View {
         .padding(.vertical, 6)
     }
 
-    private var headerTitle: String {
-        agent.runtimeMode == .sdkBridge ? "Live Workspace" : "Cursor Cloud"
+    private var cloudRuntimeHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Label("Cursor Cloud", systemImage: agent.runtimeMode.detailSymbolName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(agent.runtimeMode.detailTint)
+
+            Spacer(minLength: 8)
+
+            if let run {
+                RunStatusBadge(status: run.status)
+            }
+        }
     }
 
     private var primaryTitle: String {
