@@ -1,0 +1,37 @@
+Runline/Networking/SDKBridgeClient.swift
+  s_984bf69dd03ef8::t_06843fa3e8426d 288-290,314,316-326
+  s_984bf69dd03ef8::t_828f29588c14a5 315,327-336
+  s_984bf69dd03ef8::t_5e0453c919e406 407-427
+Runline/Features/ChatsView.swift
+  s_984bf69dd03ef8::t_1fb6315e52d523 931,945,950,972,986,999
+  s_984bf69dd03ef8::t_48680f9aa47b05 404,898-899,901-905,907-918,921-922
+  s_984bf69dd03ef8::t_8d8ab44754f1f7 114-119,155-169,171-191,193-194
+  s_984bf69dd03ef8::t_65ac3b01157801 1793-1796
+  s_984bf69dd03ef8::t_80ce3b47dce320 268-272,313-317
+  s_984bf69dd03ef8::t_132827e662b893 906
+  s_984bf69dd03ef8::t_b0cc41519e711a 2288
+  s_984bf69dd03ef8::t_befe7ff5ca52c0 192,196-197
+  s_984bf69dd03ef8::t_7c22d08ac7ee6d 1791-1792,1797-1800
+  s_984bf69dd03ef8::t_b108ad4296cf06 195
+  s_984bf69dd03ef8::t_ad48143d026745 1757,1765-1790,1801-1853
+  s_984bf69dd03ef8::t_d703dcbd5b1253 170,879
+  s_984bf69dd03ef8::t_3731188ca0ec65 1653-1654
+  s_984bf69dd03ef8::t_dff117163b96f7 2303
+  s_984bf69dd03ef8::t_9c3b1736b846fc 696-701
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "7bd0b081d49b6804719d8809d9b9f86802b01fff",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
