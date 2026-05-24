@@ -1,0 +1,19 @@
+.asc/workflow.example.json
+  s_984bf69dd03ef8::t_3a1af97e2a1f5a 13-14,81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "5ab8119b7381ad4af3c9ede53e29dedb7eef04d3",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
