@@ -955,10 +955,6 @@ struct ChatListContent: View {
                     repositoryCount: appState.repositories.count
                 )
 
-                if experience == .cursorChat {
-                    cursorChatDrawerIntro
-                }
-
                 listContent
             }
             .padding(.horizontal, 16)
@@ -1105,21 +1101,10 @@ struct ChatListContent: View {
         }
     }
 
-    private var cursorChatDrawerIntro: some View {
-        HStack(spacing: 10) {
-            Label("\(activeAgents.count) chat\(activeAgents.count == 1 ? "" : "s")", systemImage: "bubble.left.and.bubble.right")
-            Spacer(minLength: 8)
-            Label("\(workspaceGroups.count) workspace\(workspaceGroups.count == 1 ? "" : "s")", systemImage: "folder")
-        }
-        .font(.caption.weight(.medium))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 2)
-    }
-
     @ViewBuilder
     private func cursorChatPinnedSection(title: String, agents: [Agent]) -> some View {
         if !agents.isEmpty {
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .center, spacing: 8) {
                     Image(systemName: title == "Active Now" ? "dot.radiowaves.left.and.right" : "archivebox")
                         .font(.subheadline.weight(.medium))
@@ -1127,8 +1112,9 @@ struct ChatListContent: View {
                         .frame(width: 22)
 
                     Text(title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.primary)
+                        .textCase(.uppercase)
 
                     Spacer(minLength: 8)
 
@@ -1139,9 +1125,9 @@ struct ChatListContent: View {
                         .padding(.vertical, 4)
                         .background(Capsule().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, 4)
 
-                VStack(spacing: 2) {
+                VStack(spacing: 1) {
                     ForEach(agents) { agent in
                         conversationRow(agent, style: .drawer)
                     }
@@ -1158,38 +1144,32 @@ struct ChatListContent: View {
             ? group.agents
             : Array(group.agents.prefix(Self.collapsedWorkspaceThreadLimit))
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 2) {
             Button {
                 if hiddenCount > 0 {
                     toggleWorkspaceGroup(group.id)
                 }
             } label: {
-                HStack(alignment: .center, spacing: 10) {
+                HStack(alignment: .center, spacing: 9) {
                     Image(systemName: group.isGeneralChat ? "bubble.left.and.bubble.right" : "folder")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(group.isGeneralChat ? Color(uiColor: .systemGreen) : .secondary)
-                        .frame(width: 22)
+                        .frame(width: 20)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(group.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-
-                        Text(group.subtitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                    Text(group.title)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
                     Spacer(minLength: 8)
 
-                    Text("\(group.agents.count)")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
+                    if !group.subtitle.isEmpty, !group.isGeneralChat {
+                        Text(group.subtitle)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
 
                     if hiddenCount > 0 {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -1198,10 +1178,12 @@ struct ChatListContent: View {
                     }
                 }
                 .contentShape(Rectangle())
+                .padding(.horizontal, 4)
+                .padding(.vertical, 5)
             }
             .buttonStyle(.plain)
 
-            VStack(spacing: 2) {
+            VStack(spacing: 1) {
                 ForEach(visibleAgents) { agent in
                     conversationRow(agent, style: .drawer)
                 }
@@ -1212,7 +1194,7 @@ struct ChatListContent: View {
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "ellipsis")
-                                .frame(width: 22)
+                                .frame(width: 18)
                             Text("Show \(hiddenCount) more")
                             Spacer(minLength: 0)
                         }
@@ -1226,7 +1208,7 @@ struct ChatListContent: View {
             }
             .padding(.leading, 26)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 1)
     }
 
     @ViewBuilder
@@ -1387,7 +1369,7 @@ struct ChatListContent: View {
         }
 
         return ConversationThreadMetadata(
-            preview: run.status.isTerminal ? agent.name : "\(agent.runtimeMode.title) is \(run.status.title.lowercased())",
+            preview: run.status.isTerminal ? run.status.title : "\(agent.runtimeMode.title) is \(run.status.title.lowercased())",
             changedFileCount: changedFileCount,
             artifactCount: agent.artifactCount,
             hasPullRequest: agent.pullRequestURL != nil,
@@ -1415,7 +1397,9 @@ struct ChatListContent: View {
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        return collapsed.isEmpty ? "Workspace conversation" : collapsed
+        guard !collapsed.isEmpty else { return "Workspace conversation" }
+        guard collapsed.count > 140 else { return collapsed }
+        return String(collapsed.prefix(140)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
     }
 
     private func isGeneralChat(_ repository: Repository) -> Bool {
@@ -1522,65 +1506,101 @@ private struct ConversationThreadRow: View {
     }
 
     private var drawerBody: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Circle()
-                .fill(tint)
-                .frame(width: 8, height: 8)
-                .opacity(run?.status == .running || run?.status == .creating ? 1 : 0.42)
-                .padding(.leading, 2)
+        HStack(alignment: .center, spacing: 8) {
+            runningIndicator
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(displayTitle)
                         .font(.body.weight(isSelected ? .semibold : .regular))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
 
                     Spacer(minLength: 6)
 
-                    Text(agent.updatedAtDescription)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+                    drawerTrailingStatus
                 }
 
-                HStack(spacing: 6) {
-                    Text(metadata.preview)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-
-                    Spacer(minLength: 0)
-
-                    if metadata.changedFileCount > 0 {
-                        Label("\(metadata.changedFileCount)", systemImage: "doc.text.magnifyingglass")
-                            .labelStyle(.iconOnly)
-                            .font(.caption2)
+                if shouldShowDrawerPreview {
+                    HStack(spacing: 6) {
+                        Text(metadata.preview)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
+                            .lineLimit(1)
+                            .truncationMode(.tail)
 
-                    if metadata.hasPullRequest {
-                        Image(systemName: "arrow.up.right.square")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+
+                        drawerOutputIndicators
                     }
                 }
-            }
-
-            if let run, !run.status.isTerminal {
-                RunStatusBadge(status: run.status)
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background {
             if isSelected {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.blue.opacity(0.11))
+                    .fill(Color(uiColor: .tertiarySystemGroupedBackground))
             }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var runningIndicator: some View {
+        if run?.status == .running || run?.status == .creating {
+            Circle()
+                .fill(Color(uiColor: .systemBlue))
+                .frame(width: 7, height: 7)
+        } else {
+            Color.clear
+                .frame(width: 7, height: 7)
+        }
+    }
+
+    @ViewBuilder
+    private var drawerTrailingStatus: some View {
+        if let run, !run.status.isTerminal {
+            Text(run.status.title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color(uiColor: .systemBlue))
+                .lineLimit(1)
+        } else {
+            Text(agent.updatedAtDescription)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+    }
+
+    private var shouldShowDrawerPreview: Bool {
+        let preview = metadata.preview.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !preview.isEmpty && preview.localizedCaseInsensitiveCompare(displayTitle) != .orderedSame
+    }
+
+    @ViewBuilder
+    private var drawerOutputIndicators: some View {
+        if metadata.changedFileCount > 0 {
+            Label("\(metadata.changedFileCount)", systemImage: "doc.text.magnifyingglass")
+                .labelStyle(.iconOnly)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+
+        if metadata.artifactCount > 0 {
+            Image(systemName: "tray.full")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+
+        if metadata.hasPullRequest {
+            Image(systemName: "arrow.up.right.square")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder
