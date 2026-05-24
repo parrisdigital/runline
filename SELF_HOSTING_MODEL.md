@@ -4,7 +4,7 @@ This file explains what the public Runline repository is for, what it includes, 
 
 Runline's default runtime path is backendless: the iOS app talks directly to Cursor's Cloud Agents API using the user's Cursor API key.
 
-Runline also includes SDK-backed Cursor Chat bridge source under `Services/cursor-sdk-bridge` for auditability and maintainer deployment. The app uses the hosted Runline bridge by default, and normal iOS users and contributors do not need npm, Node, Fly, or a local bridge.
+Runline also includes SDK-backed Cursor Chat bridge source under `Services/cursor-sdk-bridge` for auditability and maintainer deployment. Official beta builds can include a maintainer-configured bridge endpoint, but the public source does not publish the live bridge URL. Normal iOS users and contributors do not need npm, Node, Fly, or a local bridge for Cursor Cloud.
 
 Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 
@@ -29,6 +29,7 @@ The public repository does not include:
 - Apple API keys, signing certificates, provisioning profiles, archives, or IPAs
 - private Cursor API keys
 - private Fly tokens, bridge shared secrets, live `fly.toml`, or deployment credentials
+- private bridge URLs or build settings that point at live infrastructure
 - private APNs credentials
 - private deployment defaults
 
@@ -69,7 +70,7 @@ The public repo stays generic so users can inspect and run the iOS app without b
 That means:
 
 - Cursor Cloud requests remain direct from iOS.
-- Cursor Chat uses the hosted Runline bridge by default; public-source contributors do not need to install or run the bridge locally.
+- official beta builds may include a maintainer-configured Cursor Chat bridge endpoint; public-source builds keep that endpoint out of git and can provide it through `RUNLINE_SDK_BRIDGE_URL`
 - public source does not contain private bridge secrets, private deployment config, or private credentials
 - public source contains `fly.example.toml`, not live Fly app configuration
 - local release automation uses examples instead of live maintainer config

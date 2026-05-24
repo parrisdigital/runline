@@ -71,8 +71,8 @@ struct SettingsFormContent: View {
             }
 
             Section {
-                LabeledContent("Status", value: "Ready")
-                LabeledContent("Provider", value: "Runline Bridge")
+                LabeledContent("Status", value: appState.isSDKBridgeConfigured ? "Ready" : "Not configured")
+                LabeledContent("Provider", value: appState.isSDKBridgeConfigured ? "Runline Bridge" : "Build configuration")
 
                 Button {
                     Task {
@@ -85,11 +85,11 @@ struct SettingsFormContent: View {
                         Label("Test Bridge", systemImage: "network")
                     }
                 }
-                .disabled(appState.isCheckingSDKBridge)
+                .disabled(appState.isCheckingSDKBridge || !appState.isSDKBridgeConfigured)
             } header: {
                 Text("Cursor Chat")
             } footer: {
-                Text("Cursor Chat starts SDK-backed workspace sessions through the Runline bridge. Your Cursor key stays in Keychain and is sent over HTTPS only when you start or continue a chat.")
+                Text("Cursor Chat starts SDK-backed workspace sessions through the configured Runline bridge. Your Cursor key stays in Keychain and is sent over HTTPS only when you start or continue a chat.")
             }
 
             Section("Enterprise API") {

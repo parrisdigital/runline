@@ -27,7 +27,7 @@ enum SDKBridgeError: LocalizedError, Equatable {
 enum SDKBridgePreferences {
     static let isEnabledKey = "sdkBridge.isEnabled"
     static let baseURLKey = "sdkBridge.baseURL"
-    static let defaultBaseURLString = "https://runline-sdk-bridge.fly.dev"
+    static let defaultBaseURLInfoKey = "RunlineSDKBridgeDefaultURL"
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         guard defaults.object(forKey: isEnabledKey) != nil else { return true }
@@ -38,26 +38,42 @@ enum SDKBridgePreferences {
         defaults.set(isEnabled, forKey: isEnabledKey)
     }
 
-    static func baseURLString(defaults: UserDefaults = .standard) -> String {
-        defaults.string(forKey: baseURLKey) ?? defaultBaseURLString
+    static func baseURLString(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> String {
+        if let configured = normalizedURLString(defaults.string(forKey: baseURLKey)) {
+            return configured
+        }
+        return bundledDefaultBaseURLString(bundle: bundle) ?? ""
     }
 
     static func setBaseURLString(_ value: String, defaults: UserDefaults = .standard) {
         defaults.set(value.trimmingCharacters(in: .whitespacesAndNewlines), forKey: baseURLKey)
     }
 
-    static func configuredBaseURL(defaults: UserDefaults = .standard) -> URL? {
-        baseURL(from: baseURLString(defaults: defaults))
+    static func configuredBaseURL(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> URL? {
+        baseURL(from: baseURLString(defaults: defaults, bundle: bundle))
     }
 
     static func baseURL(from value: String) -> URL? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed = normalizedURLString(value),
+              !trimmed.contains("$(") else {
+            return nil
+        }
         guard let url = URL(string: trimmed),
               ["http", "https"].contains(url.scheme?.lowercased()),
               url.host?.isEmpty == false else {
             return nil
         }
         return url
+    }
+
+    static func bundledDefaultBaseURLString(bundle: Bundle = .main) -> String? {
+        let value = bundle.object(forInfoDictionaryKey: defaultBaseURLInfoKey) as? String
+        return normalizedURLString(value).flatMap { baseURL(from: $0) == nil ? nil : $0 }
+    }
+
+    private static func normalizedURLString(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

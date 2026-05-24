@@ -18,7 +18,7 @@ Runline is in public beta.
 - Runtime: Cursor Chat through the Runline SDK bridge, plus direct Cursor Cloud Agents API from the device.
 - Authentication: user-owned Cursor API keys stored in iOS Keychain.
 - TestFlight/App Store Connect releases: maintainer-managed.
-- Public source: Cloud Agent mode requires no hosted backend, Node service, or private endpoint.
+- Public source: Cloud Agent mode requires no hosted backend, Node service, or private endpoint; Cursor Chat bridge endpoints are supplied by private build configuration.
 
 ## What Runline Does
 
@@ -48,7 +48,7 @@ Runline has two runtime paths. Cursor Cloud remains fully backendless, while Cur
 | Cursor Chat | iOS to the Runline SDK bridge, then `@cursor/sdk` to Cursor cloud runtime | Cursor-like live sessions, SDK event streaming, follow-up iteration | Cursor API key |
 | Cursor Cloud | Directly from iOS to Cursor Cloud Agents | Repository tasks, artifacts, PR workflows, release checks | Cursor API key |
 
-Runline does not require Node, a Mac relay, or a user-run backend for Cursor Cloud. Cursor Chat uses the hosted Runline bridge by default, so normal iOS users and contributors do not need to install or run the bridge locally.
+Runline does not require Node, a Mac relay, or a user-run backend for Cursor Cloud. Official beta builds can include a maintainer-configured Runline bridge for Cursor Chat, but the public source does not publish the live bridge URL.
 
 ## Install the iOS Beta
 
@@ -66,7 +66,7 @@ Cursor API keys stay on device in Keychain. Cursor Cloud uses the key directly f
 
 The SDK bridge source is included in `Services/cursor-sdk-bridge` for transparency and maintainer deployment. It is not part of the normal iOS setup path, and contributors do not need npm, Node, Fly, or a local bridge to build and inspect the app.
 
-Bridge deployments should keep live Fly configuration, bridge secrets, and tokens outside git. The service includes `fly.example.toml` only as a public-safe shape for maintainers or advanced self-hosters. The bridge does not persist Cursor API keys or prompt text.
+Bridge deployments should keep live Fly configuration, bridge URLs, bridge secrets, and tokens outside git. The service includes `fly.example.toml` only as a public-safe shape for maintainers or advanced self-hosters. Maintainer builds can supply `RUNLINE_SDK_BRIDGE_URL` through private local build settings. The bridge does not persist Cursor API keys or prompt text.
 
 ## Repository Layout
 
@@ -126,7 +126,7 @@ gitleaks detect --source . --no-git --redact --verbose
 | TestFlight | Runline `1.0 (25)` in beta testing | Requires App Store Connect access |
 | App Store | Preparing public publishing | Maintainer-managed |
 
-See [docs/RELEASES.md](docs/RELEASES.md) for the maintainer release checklist, [CHANGELOG.md](CHANGELOG.md) for public release notes, and [docs/ROADMAP.md](docs/ROADMAP.md) for the beta roadmap.
+See [docs/RELEASES.md](docs/RELEASES.md) for the maintainer release checklist, [CHANGELOG.md](CHANGELOG.md) for public release notes, [docs/ROADMAP.md](docs/ROADMAP.md) for the beta roadmap, and [docs/CURSOR_SDK_CAPABILITIES.md](docs/CURSOR_SDK_CAPABILITIES.md) for the verified SDK capability map behind Cursor Chat.
 
 ## Maintainer TestFlight Workflow
 
@@ -161,7 +161,7 @@ Use explicit build numbers so TestFlight stays aligned with the active Runline s
 - Cursor API keys are stored on iOS in Keychain.
 - Cursor Cloud requests go directly from iOS to Cursor's Cloud Agents API.
 - Cursor Chat requests send the Cursor API key over HTTPS to the Runline bridge for SDK execution. The bridge is designed not to persist Cursor API keys.
-- Users do not need to configure a bridge URL or shared secret for the default Cursor Chat path.
+- Official beta users do not need to configure a bridge URL or shared secret when the build includes the maintainer bridge endpoint. Public-source builds should supply `RUNLINE_SDK_BRIDGE_URL` privately before enabling Cursor Chat.
 - Apple signing material, API keys, `.env` files, archives, IPAs, and provisioning profiles must never be committed.
 
 Report vulnerabilities privately through [SECURITY.md](SECURITY.md).

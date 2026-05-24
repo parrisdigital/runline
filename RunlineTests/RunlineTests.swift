@@ -38,6 +38,9 @@ final class RunlineTests: XCTestCase {
 
     @MainActor
     func testSDKBridgeCanLaunchGeneralConversationWithoutRepository() {
+        let previousBridgeURL = configureTestSDKBridge()
+        defer { restoreTestSDKBridge(previousBridgeURL) }
+
         let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
         appState.launchDraft.prompt.text = "Explain this architecture"
         appState.launchDraft.runtimeMode = .sdkBridge
@@ -84,6 +87,76 @@ final class RunlineTests: XCTestCase {
 
         XCTAssertEqual(events.first?.kind, .user)
         XCTAssertEqual(events.first?.message, "Continue with the next step.")
+    }
+
+    @MainActor
+    func testCursorChatLaunchPersistsPromptTitleAndPreviewOnDevice() async throws {
+        let previousBridgeURL = configureTestSDKBridge()
+        defer { restoreTestSDKBridge(previousBridgeURL) }
+
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("runline-cache-\(UUID().uuidString).json")
+        let cache = LocalAppCache(fileURL: cacheURL)
+        defer { try? cache.clear() }
+
+        let appState = AppState(
+            provider: MockAgentProvider(),
+            apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"),
+            appCache: cache,
+            sdkBridgeProviderFactory: { _, _, _ in MockAgentProvider() }
+        )
+        appState.launchDraft.prompt.text = "Research native Cursor app architecture"
+        appState.launchDraft.runtimeMode = .sdkBridge
+        appState.launchDraft.source = .general
+
+        let launchResult = await appState.launchAgent()
+        let result = try XCTUnwrap(launchResult)
+        let snapshot = try XCTUnwrap(cache.load())
+        let cachedAgent = try XCTUnwrap(snapshot.agents.first { $0.id == result.agent.id })
+        let cachedEvents = snapshot.eventsByRunID[result.run.id, default: []]
+
+        XCTAssertEqual(cachedEvents.first?.kind, .user)
+        XCTAssertEqual(cachedEvents.first?.message, "Research native Cursor app architecture")
+        XCTAssertEqual(cachedAgent.name, "Research Native Cursor App Architecture")
+        XCTAssertEqual(cachedAgent.conversationPreview, "Research native Cursor app architecture")
+    }
+
+    @MainActor
+    func testCursorChatFollowUpUpdatesPersistedPreviewWithoutRenamingConversation() async throws {
+        let previousBridgeURL = configureTestSDKBridge()
+        defer { restoreTestSDKBridge(previousBridgeURL) }
+
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("runline-cache-\(UUID().uuidString).json")
+        let cache = LocalAppCache(fileURL: cacheURL)
+        defer { try? cache.clear() }
+
+        let appState = AppState(
+            provider: MockAgentProvider(),
+            apiKeyStore: InMemoryAPIKeyStore(apiKey: "cursor-test-key"),
+            appCache: cache,
+            sdkBridgeProviderFactory: { _, _, _ in MockAgentProvider() }
+        )
+        appState.launchDraft.prompt.text = "Plan workspace persistence"
+        appState.launchDraft.runtimeMode = .sdkBridge
+        appState.launchDraft.source = .general
+        let maybeLaunchResult = await appState.launchAgent()
+        let launchResult = try XCTUnwrap(maybeLaunchResult)
+        let originalTitle = try XCTUnwrap(appState.agent(id: launchResult.agent.id)?.name)
+
+        await appState.createFollowUp(
+            agent: launchResult.agent,
+            prompt: AgentPrompt(text: "Now add the relaunch verification checklist.")
+        )
+
+        let snapshot = try XCTUnwrap(cache.load())
+        let cachedAgent = try XCTUnwrap(snapshot.agents.first { $0.id == launchResult.agent.id })
+        let latestRun = try XCTUnwrap(snapshot.runsByAgentID[launchResult.agent.id]?.first)
+        let latestEvents = snapshot.eventsByRunID[latestRun.id, default: []]
+
+        XCTAssertEqual(cachedAgent.name, originalTitle)
+        XCTAssertEqual(cachedAgent.conversationPreview, "Now add the relaunch verification checklist.")
+        XCTAssertEqual(latestEvents.first?.message, "Now add the relaunch verification checklist.")
     }
 
     func testLayoutModeUsesSplitViewForRegularWidth() {
@@ -217,6 +290,14 @@ final class RunlineTests: XCTestCase {
         XCTAssertTrue(
             ConversationTitleGenerator.shouldReplace(
                 currentTitle: "General Chat",
+                with: "Research Native Cursor App Architecture",
+                repository: repository,
+                firstPrompt: events[0].message
+            )
+        )
+        XCTAssertTrue(
+            ConversationTitleGenerator.shouldReplace(
+                currentTitle: "research-native-cursor",
                 with: "Research Native Cursor App Architecture",
                 repository: repository,
                 firstPrompt: events[0].message
@@ -374,6 +455,15 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(error.localizedDescription, "Your Cursor account has reached its hard usage limit. Increase the hard limit in Cursor settings, then try again.")
     }
 
+    func testSDKBridgePreferencesRejectUnconfiguredBuildPlaceholder() {
+        XCTAssertNil(SDKBridgePreferences.baseURL(from: ""))
+        XCTAssertNil(SDKBridgePreferences.baseURL(from: "$(RUNLINE_SDK_BRIDGE_URL)"))
+        XCTAssertEqual(
+            SDKBridgePreferences.baseURL(from: "https://bridge.runline.test")?.absoluteString,
+            "https://bridge.runline.test"
+        )
+    }
+
     @MainActor
     func testDeepLinksFocusChatsTabForAdaptiveShells() {
         let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
@@ -494,6 +584,20 @@ final class RunlineTests: XCTestCase {
         try await provider.deleteAgent(agentID: agent.id)
         let remaining = try await provider.listAgents()
         XCTAssertFalse(remaining.contains { $0.id == agent.id })
+    }
+
+    private func configureTestSDKBridge() -> String? {
+        let previous = UserDefaults.standard.string(forKey: SDKBridgePreferences.baseURLKey)
+        SDKBridgePreferences.setBaseURLString("https://bridge.runline.test")
+        return previous
+    }
+
+    private func restoreTestSDKBridge(_ previous: String?) {
+        if let previous {
+            SDKBridgePreferences.setBaseURLString(previous)
+        } else {
+            UserDefaults.standard.removeObject(forKey: SDKBridgePreferences.baseURLKey)
+        }
     }
 }
 

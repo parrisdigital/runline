@@ -9,7 +9,7 @@ Runline's default Cloud Agent mode is backendless. Release work should not make 
 | Area | State |
 | --- | --- |
 | iOS app | Runline `1.0 (25)` in beta sequence |
-| Runtime | Hosted SDK bridge for Cursor Chat; direct Cursor Cloud Agents API for Cursor Cloud |
+| Runtime | Maintainer-configured SDK bridge for Cursor Chat; direct Cursor Cloud Agents API for Cursor Cloud |
 | Public source | Safe to build without maintainer credentials |
 | ASC config | Live `.asc/workflow.json` remains local and ignored |
 
@@ -96,7 +96,7 @@ Keep review notes clear and public-safe:
 
 Do not include private maintainer IDs, Apple API keys, signing files, live ASC workflow config, archives, IPAs, or private endpoints in public issues or releases.
 
-If Cursor Chat is included in release notes, describe it as using the Runline bridge with each user's Cursor API key. Do not publish Fly tokens, bridge shared secrets, Cursor API keys, private bridge URLs, or private deployment config.
+If Cursor Chat is included in release notes, describe it as using the Runline bridge with each user's Cursor API key. Do not publish Fly tokens, bridge shared secrets, Cursor API keys, private bridge URLs, private `RUNLINE_SDK_BRIDGE_URL` values, or private deployment config.
 
 ## GitHub Release
 
@@ -119,5 +119,5 @@ Before opening or publishing source, confirm:
 - no Cursor API keys, Apple credentials, APNs credentials, or private repository data are present.
 - generated archives, IPAs, and Xcode result bundles are absent.
 - live Fly app config is absent; only `Services/cursor-sdk-bridge/fly.example.toml` is tracked.
-- docs describe the backendless Cursor Cloud runtime and hosted Cursor Chat bridge accurately.
+- docs describe the backendless Cursor Cloud runtime and privately configured Cursor Chat bridge accurately.
 - the non-affiliation disclaimer is present in app-facing docs.

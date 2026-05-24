@@ -13,6 +13,7 @@ final class AppState {
     private let sdkBridgeAuthStore: APIKeyStore
     private let appCache: LocalAppCache
     private let providerFactory: @MainActor (String) throws -> AgentProvider
+    private let sdkBridgeProviderFactory: @MainActor (String, URL, String?) throws -> AgentProvider
     private var connectedAPIKey: String?
     private var hasRestoredConnection = false
     private var observingRunIDs: Set<AgentRun.ID> = []
@@ -50,7 +51,10 @@ final class AppState {
         enterpriseAPIKeyStore: APIKeyStore = KeychainAPIKeyStore(account: .cursorEnterpriseAdmin),
         sdkBridgeAuthStore: APIKeyStore = KeychainAPIKeyStore(account: .sdkBridgeAuth),
         appCache: LocalAppCache = LocalAppCache(),
-        providerFactory: @escaping @MainActor (String) throws -> AgentProvider = { try CursorAgentProvider(apiKey: $0) }
+        providerFactory: @escaping @MainActor (String) throws -> AgentProvider = { try CursorAgentProvider(apiKey: $0) },
+        sdkBridgeProviderFactory: @escaping @MainActor (String, URL, String?) throws -> AgentProvider = { apiKey, baseURL, bridgeSecret in
+            try CursorSDKBridgeProvider(apiKey: apiKey, bridgeBaseURL: baseURL, bridgeSecret: bridgeSecret)
+        }
     ) {
         self.provider = provider
         enterpriseProvider = provider as? EnterpriseDataProvider
@@ -59,6 +63,7 @@ final class AppState {
         self.sdkBridgeAuthStore = sdkBridgeAuthStore
         self.appCache = appCache
         self.providerFactory = providerFactory
+        self.sdkBridgeProviderFactory = sdkBridgeProviderFactory
         launchDraft = AgentLaunchDraft(
             prompt: AgentPrompt(text: ""),
             modelID: nil,
@@ -89,6 +94,10 @@ final class AppState {
 
     var sdkBridgeURLString: String {
         SDKBridgePreferences.baseURLString()
+    }
+
+    var isSDKBridgeConfigured: Bool {
+        SDKBridgePreferences.configuredBaseURL() != nil
     }
 
     var activeAgents: [Agent] {
@@ -365,7 +374,7 @@ final class AppState {
                 }
             }
         }
-        refreshAutomaticConversationTitles()
+        refreshAutomaticConversationMetadata()
         saveCachedState()
 
         if let refreshError {
@@ -612,7 +621,7 @@ final class AppState {
             let provider = try agentProvider(for: draft.runtimeMode)
             let result = try await provider.createAgent(draft)
             let initialEvents = initialLocalEvents(runID: result.run.id, prompt: draft.prompt)
-            let launchedAgent = agentWithAutomaticConversationTitle(result.agent, events: initialEvents)
+            let launchedAgent = agentWithAutomaticConversationMetadata(result.agent, events: initialEvents)
             agents.insert(launchedAgent, at: 0)
             runsByAgentID[launchedAgent.id] = [result.run]
             eventsByRunID[result.run.id] = initialEvents
@@ -704,6 +713,7 @@ final class AppState {
             let refreshedRuns = (try? await provider.listRuns(agentID: agent.id)) ?? [run] + runsByAgentID[agent.id, default: []]
             runsByAgentID[agent.id] = refreshedRuns
             eventsByRunID[run.id] = initialLocalEvents(runID: run.id, prompt: followUpPrompt)
+            refreshAutomaticConversationMetadata(runID: run.id)
             saveCachedState()
         } catch {
             handleError(error)
@@ -926,11 +936,7 @@ final class AppState {
             guard let apiKey = connectedAPIKey ?? storedAPIKey else {
                 throw CursorAPIError.missingProvider
             }
-            return try CursorSDKBridgeProvider(
-                apiKey: apiKey,
-                bridgeBaseURL: baseURL,
-                bridgeSecret: try sdkBridgeAuthStore.loadAPIKey()
-            )
+            return try sdkBridgeProviderFactory(apiKey, baseURL, try sdkBridgeAuthStore.loadAPIKey())
         }
     }
 
@@ -946,24 +952,28 @@ final class AppState {
     private func reconciledIncomingAgent(_ incomingAgent: Agent, existing: Agent?) -> Agent {
         guard incomingAgent.runtimeMode == .sdkBridge,
               let existing,
-              existing.runtimeMode == .sdkBridge,
-              ConversationTitleGenerator.isPlaceholderTitle(incomingAgent.name, repository: incomingAgent.repository),
-              !ConversationTitleGenerator.isPlaceholderTitle(existing.name, repository: existing.repository) else {
+              existing.runtimeMode == .sdkBridge else {
             return incomingAgent
         }
 
         var resolvedAgent = incomingAgent
-        resolvedAgent.name = existing.name
+        if ConversationTitleGenerator.isPlaceholderTitle(incomingAgent.name, repository: incomingAgent.repository),
+           !ConversationTitleGenerator.isPlaceholderTitle(existing.name, repository: existing.repository) {
+            resolvedAgent.name = existing.name
+        }
+        if resolvedAgent.conversationPreview?.nilIfBlank == nil {
+            resolvedAgent.conversationPreview = existing.conversationPreview
+        }
         return resolvedAgent
     }
 
-    private func refreshAutomaticConversationTitles() {
+    private func refreshAutomaticConversationMetadata() {
         for runID in eventsByRunID.keys {
-            refreshAutomaticConversationTitle(runID: runID)
+            refreshAutomaticConversationMetadata(runID: runID)
         }
     }
 
-    private func refreshAutomaticConversationTitle(runID: AgentRun.ID) {
+    private func refreshAutomaticConversationMetadata(runID: AgentRun.ID) {
         guard let agentIndex = agents.firstIndex(where: { agent in
             runsByAgentID[agent.id, default: []].contains { $0.id == runID }
         }),
@@ -972,37 +982,39 @@ final class AppState {
         }
 
         let events = eventsByRunID[runID, default: []]
-        guard let title = ConversationTitleGenerator.title(from: events, repository: agents[agentIndex].repository) else {
-            return
+        if let preview = ConversationPreviewGenerator.preview(from: events) {
+            agents[agentIndex].conversationPreview = preview
         }
 
-        let firstPrompt = events.first { $0.kind == .user }?.message
-        guard ConversationTitleGenerator.shouldReplace(
-            currentTitle: agents[agentIndex].name,
-            with: title,
-            repository: agents[agentIndex].repository,
-            firstPrompt: firstPrompt
-        ) else {
-            return
-        }
+        if let title = ConversationTitleGenerator.title(from: events, repository: agents[agentIndex].repository) {
+            let firstPrompt = events.first { $0.kind == .user }?.message
+            guard ConversationTitleGenerator.shouldReplace(
+                currentTitle: agents[agentIndex].name,
+                with: title,
+                repository: agents[agentIndex].repository,
+                firstPrompt: firstPrompt
+            ) else {
+                return
+            }
 
-        agents[agentIndex].name = title
+            agents[agentIndex].name = title
+        }
     }
 
-    private func agentWithAutomaticConversationTitle(_ agent: Agent, events: [AgentStreamEvent]) -> Agent {
-        guard agent.runtimeMode == .sdkBridge,
-              let title = ConversationTitleGenerator.title(from: events, repository: agent.repository),
-              ConversationTitleGenerator.shouldReplace(
+    private func agentWithAutomaticConversationMetadata(_ agent: Agent, events: [AgentStreamEvent]) -> Agent {
+        guard agent.runtimeMode == .sdkBridge else { return agent }
+
+        var updatedAgent = agent
+        updatedAgent.conversationPreview = ConversationPreviewGenerator.preview(from: events)
+        if let title = ConversationTitleGenerator.title(from: events, repository: agent.repository),
+           ConversationTitleGenerator.shouldReplace(
                 currentTitle: agent.name,
                 with: title,
                 repository: agent.repository,
                 firstPrompt: events.first { $0.kind == .user }?.message
-              ) else {
-            return agent
+           ) {
+            updatedAgent.name = title
         }
-
-        var updatedAgent = agent
-        updatedAgent.name = title
         return updatedAgent
     }
 
@@ -1025,7 +1037,7 @@ final class AppState {
         let knownIDs = Set(existing.map(\.id))
         existing.append(contentsOf: events.filter { knownIDs.contains($0.id) == false })
         eventsByRunID[runID] = existing
-        refreshAutomaticConversationTitle(runID: runID)
+        refreshAutomaticConversationMetadata(runID: runID)
     }
 
     private func initialLocalEvents(runID: AgentRun.ID, prompt: AgentPrompt) -> [AgentStreamEvent] {

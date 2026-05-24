@@ -237,6 +237,7 @@ struct Agent: Identifiable, Hashable, Codable {
     var artifactCount: Int
     var pullRequestURL: URL?
     var runtimeMode: AgentRuntimeMode
+    var conversationPreview: String?
 
     init(
         id: String,
@@ -249,7 +250,8 @@ struct Agent: Identifiable, Hashable, Codable {
         updatedAtDescription: String,
         artifactCount: Int,
         pullRequestURL: URL?,
-        runtimeMode: AgentRuntimeMode = .cloud
+        runtimeMode: AgentRuntimeMode = .cloud,
+        conversationPreview: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -262,6 +264,7 @@ struct Agent: Identifiable, Hashable, Codable {
         self.artifactCount = artifactCount
         self.pullRequestURL = pullRequestURL
         self.runtimeMode = runtimeMode
+        self.conversationPreview = conversationPreview
     }
 
     init(from decoder: Decoder) throws {
@@ -277,6 +280,7 @@ struct Agent: Identifiable, Hashable, Codable {
         artifactCount = try container.decode(Int.self, forKey: .artifactCount)
         pullRequestURL = try container.decodeIfPresent(URL.self, forKey: .pullRequestURL)
         runtimeMode = try container.decodeIfPresent(AgentRuntimeMode.self, forKey: .runtimeMode) ?? .cloud
+        conversationPreview = try container.decodeIfPresent(String.self, forKey: .conversationPreview)
     }
 }
 
@@ -473,6 +477,11 @@ enum ConversationTitleGenerator {
             return true
         }
 
+        if isMachineGeneratedSlugTitle(currentTitle),
+           generated.hasPrefix(current + " ") {
+            return true
+        }
+
         return false
     }
 
@@ -599,6 +608,43 @@ enum ConversationTitleGenerator {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isMachineGeneratedSlugTitle(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.contains("-") || trimmed.contains("_") else { return false }
+        return trimmed == trimmed.lowercased()
+            && trimmed.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+    }
+}
+
+enum ConversationPreviewGenerator {
+    static func preview(from events: [AgentStreamEvent]) -> String? {
+        guard let event = events.last(where: isPreviewEvent) else { return nil }
+        return collapsedPreview(from: event.message)
+    }
+
+    static func preview(from prompt: AgentPrompt) -> String? {
+        collapsedPreview(from: prompt.text)
+    }
+
+    static func collapsedPreview(from message: String, maxLength: Int = 140) -> String? {
+        let collapsed = message
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !collapsed.isEmpty else { return nil }
+        guard collapsed.count > maxLength else { return collapsed }
+        return String(collapsed.prefix(maxLength)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+    }
+
+    private static func isPreviewEvent(_ event: AgentStreamEvent) -> Bool {
+        switch event.kind {
+        case .user, .assistant, .result, .task, .request, .status, .error:
+            !event.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        default:
+            false
+        }
     }
 }
 

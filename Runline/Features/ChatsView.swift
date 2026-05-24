@@ -1802,7 +1802,11 @@ private enum ConversationThreadMetadataBuilder {
 
         let title = agent.name.trimmingCharacters(in: .whitespacesAndNewlines)
         if title.isEmpty || ConversationTitleGenerator.isPlaceholderTitle(title, repository: agent.repository) {
-            return agent.repository.isGeneralChat ? "Untitled General Chat" : agent.repository.displayName
+            if let preview = agent.conversationPreview?.nilIfBlank,
+               let previewTitle = ConversationTitleGenerator.title(from: preview, repository: agent.repository) {
+                return previewTitle
+            }
+            return fallbackTitle(for: agent)
         }
         return title
     }
@@ -1819,11 +1823,15 @@ private enum ConversationThreadMetadataBuilder {
                 return preview
             }
         }
+        if let preview = agent.conversationPreview?.nilIfBlank,
+           preview.localizedCaseInsensitiveCompare(title) != .orderedSame {
+            return preview
+        }
 
         if let run, !run.status.isTerminal {
             return "\(agent.runtimeMode.title) is \(run.status.title.lowercased())"
         }
-        return agent.repository.isGeneralChat ? "General Chat" : workspaceSubtitle(for: agent.repository)
+        return agent.repository.isGeneralChat ? "No saved transcript on this device" : workspaceSubtitle(for: agent.repository)
     }
 
     private static func isPreviewEvent(_ event: AgentStreamEvent) -> Bool {
@@ -1850,6 +1858,17 @@ private enum ConversationThreadMetadataBuilder {
             return "General Chat"
         }
         return repository.defaultBranch.isEmpty ? "Repository workspace" : repository.defaultBranch
+    }
+
+    private static func fallbackTitle(for agent: Agent) -> String {
+        guard agent.repository.isGeneralChat else {
+            return agent.repository.displayName
+        }
+
+        if let updatedAt = agent.updatedAtDescription.nilIfBlank, updatedAt.lowercased() != "now" {
+            return "General Chat from \(updatedAt)"
+        }
+        return "General Chat"
     }
 }
 
