@@ -4,9 +4,11 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct NewChatSheet: View {
+    var runtimeMode: AgentRuntimeMode?
+
     var body: some View {
         NavigationStack {
-            NewChatForm(presentation: .sheet)
+            NewChatForm(presentation: .sheet, runtimeMode: runtimeMode)
         }
     }
 }
@@ -17,18 +19,18 @@ enum NewChatPresentation: Equatable {
 }
 
 enum NewChatModelPickerOptions {
-    static func visibleModels(from models: [AgentModel]) -> [AgentModel] {
-        models.filter { !$0.isCursorDefaultModel }
+    static func visibleModels(from models: [AgentModel], excluding preferredModelID: String? = nil) -> [AgentModel] {
+        models.filter { model in
+            !model.isCursorDefaultModel && model.id != preferredModelID
+        }
     }
 
-    static func selection(from modelID: String?) -> String? {
-        guard let modelID = modelID?.nilIfBlank else { return nil }
-        return modelID.isCursorDefaultModelIdentifier ? nil : modelID
+    static func selection(from modelID: String?, runtimeMode: AgentRuntimeMode = .cloud) -> String? {
+        runtimeMode.normalizedLaunchModelID(modelID)
     }
 
-    static func modelID(from selection: String?) -> String? {
-        guard let selection = selection?.nilIfBlank else { return nil }
-        return selection.isCursorDefaultModelIdentifier ? nil : selection
+    static func modelID(from selection: String?, runtimeMode: AgentRuntimeMode = .cloud) -> String? {
+        runtimeMode.normalizedLaunchModelID(selection)
     }
 }
 
@@ -44,6 +46,7 @@ struct NewChatForm: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     var presentation: NewChatPresentation
+    var runtimeMode: AgentRuntimeMode?
     @State private var sourceMode: SourceMode = .installed
     @State private var manualRepositoryURL = ""
     @State private var pullRequestURL = ""
@@ -65,6 +68,9 @@ struct NewChatForm: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if runtimeMode == nil {
+                    runtimeCard
+                }
                 targetCard
                 promptComposerCard
                 outputCard
@@ -75,7 +81,7 @@ struct NewChatForm: View {
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("New Chat")
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if presentation == .sheet {
@@ -90,6 +96,7 @@ struct NewChatForm: View {
             launchBar
         }
         .task {
+            applyLockedRuntimeMode()
             seedSourceFields()
         }
         .fileImporter(
@@ -101,6 +108,32 @@ struct NewChatForm: View {
                 await loadPromptFiles(from: result)
             }
         }
+    }
+
+    private var runtimeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            NewChatSectionHeader(title: "Runtime", systemName: "bolt.horizontal")
+
+            Picker("Runtime", selection: runtimeModeBinding) {
+                ForEach(AgentRuntimeMode.allCases) { mode in
+                    Text(mode.shortTitle).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if appState.launchDraft.runtimeMode == .sdkBridge {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Cursor Chat uses the Runline bridge with your Cursor key")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(14)
+        .newChatGlassSurface(cornerRadius: 22)
     }
 
     private var targetCard: some View {
@@ -221,7 +254,7 @@ struct NewChatForm: View {
                             .font(.headline.weight(.bold))
                     }
 
-                    Text(appState.isLaunching ? "Starting" : "Start Cloud Chat")
+                    Text(appState.isLaunching ? "Starting" : launchButtonTitle)
                         .font(.headline.weight(.semibold))
                 }
                 .foregroundStyle(.white)
@@ -440,12 +473,15 @@ struct NewChatForm: View {
     private var modelMenu: some View {
         Menu {
             Button {
-                modelSelectionBinding.wrappedValue = nil
+                modelSelectionBinding.wrappedValue = preferredModelID
             } label: {
-                Label("Default", systemImage: modelSelectionBinding.wrappedValue == nil ? "checkmark" : "cpu")
+                Label(
+                    appState.launchDraft.runtimeMode.preferredLaunchModelTitle,
+                    systemImage: modelSelectionBinding.wrappedValue == preferredModelID ? "checkmark" : "cpu"
+                )
             }
 
-            ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models)) { model in
+            ForEach(NewChatModelPickerOptions.visibleModels(from: appState.models, excluding: preferredModelID)) { model in
                 Button {
                     modelSelectionBinding.wrappedValue = model.id
                 } label: {
@@ -460,6 +496,10 @@ struct NewChatForm: View {
         .accessibilityLabel("Select model")
     }
 
+    private var preferredModelID: String? {
+        appState.launchDraft.runtimeMode.preferredLaunchModelID
+    }
+
     private var selectedRepository: Repository? {
         if case .repository(let url, _) = appState.launchDraft.source,
            let repository = appState.repositories.first(where: { $0.url == url }) {
@@ -469,8 +509,36 @@ struct NewChatForm: View {
     }
 
     private var selectedModelTitle: String {
-        guard let selection = modelSelectionBinding.wrappedValue else { return "Default" }
+        guard let selection = modelSelectionBinding.wrappedValue else { return appState.launchDraft.runtimeMode.preferredLaunchModelTitle }
         return appState.models.first(where: { $0.id == selection })?.displayName ?? selection
+    }
+
+    private var launchButtonTitle: String {
+        switch appState.launchDraft.runtimeMode {
+        case .cloud:
+            "Start Cursor Cloud"
+        case .sdkBridge:
+            "Start Cursor Chat"
+        }
+    }
+
+    private var navigationTitle: String {
+        switch runtimeMode {
+        case .cloud:
+            "New Cursor Cloud"
+        case .sdkBridge:
+            "New Cursor Chat"
+        case nil:
+            "New Chat"
+        }
+    }
+
+    private var runtimeModeBinding: Binding<AgentRuntimeMode> {
+        Binding {
+            appState.launchDraft.runtimeMode
+        } set: { mode in
+            applyRuntimeMode(mode)
+        }
     }
 
     private func inlineTextField(
@@ -518,9 +586,19 @@ struct NewChatForm: View {
 
     private var modelSelectionBinding: Binding<String?> {
         Binding {
-            NewChatModelPickerOptions.selection(from: appState.launchDraft.modelID)
+            NewChatModelPickerOptions.selection(
+                from: appState.launchDraft.modelID,
+                runtimeMode: appState.launchDraft.runtimeMode
+            )
         } set: { modelID in
-            appState.launchDraft.modelID = NewChatModelPickerOptions.modelID(from: modelID)
+            let resolvedModelID = NewChatModelPickerOptions.modelID(
+                from: modelID,
+                runtimeMode: appState.launchDraft.runtimeMode
+            )
+            appState.launchDraft.modelID = resolvedModelID
+            if appState.launchDraft.runtimeMode == .sdkBridge {
+                CursorChatModelPreference.saveSelectedModelID(resolvedModelID)
+            }
         }
     }
 
@@ -575,6 +653,8 @@ struct NewChatForm: View {
 
     private func seedSourceFields() {
         switch appState.launchDraft.source {
+        case .general:
+            sourceMode = .installed
         case .repository(let url, _):
             if appState.repositories.contains(where: { $0.url == url }) {
                 sourceMode = .installed
@@ -585,6 +665,18 @@ struct NewChatForm: View {
         case .pullRequest(let url):
             sourceMode = .pullRequest
             pullRequestURL = url.absoluteString
+        }
+    }
+
+    private func applyLockedRuntimeMode() {
+        guard let runtimeMode else { return }
+        applyRuntimeMode(runtimeMode)
+    }
+
+    private func applyRuntimeMode(_ mode: AgentRuntimeMode) {
+        appState.launchDraft.applyRuntimeMode(mode)
+        if mode == .sdkBridge {
+            appState.launchDraft.modelID = CursorChatModelPreference.selectedModelID()
         }
     }
 
@@ -627,6 +719,7 @@ struct NewChatForm: View {
 
     private func launch() {
         focusedField = nil
+        applyLockedRuntimeMode()
         Task {
             await appState.launchAgent()
             if presentation == .sheet, appState.errorMessage == nil {

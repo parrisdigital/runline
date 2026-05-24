@@ -4,11 +4,14 @@ This file is for human contributors and coding agents working in the Runline rep
 
 ## Project Boundary
 
-Runline is a Cursor Cloud-only iOS app.
+Runline is a native iOS app with two separate Cursor development experiences: SDK-backed Cursor Chat and direct Cursor Cloud.
 
-- The iOS app talks directly to Cursor Cloud Agents.
+- Cursor Cloud talks directly from iOS to Cursor Cloud Agents and remains the backendless fallback.
 - The app must keep working without Node, a hosted backend, or any local companion service.
-- API keys stay in Keychain and are used only for direct Cursor API requests.
+- Cursor Chat uses the hosted Runline bridge by default and may use a self-hosted `Services/cursor-sdk-bridge` Node service for advanced deployments.
+- API keys stay in Keychain on iOS.
+- In Cursor Cloud, the Cursor API key is used only for direct Cursor API requests.
+- In Cursor Chat, the Cursor API key may be sent over HTTPS to the configured SDK bridge for SDK execution. Do not persist it on the bridge.
 
 Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 
@@ -24,6 +27,7 @@ Never commit:
 - `.asc/workflow.json`
 - APNs credentials
 - private MCP credentials
+- Fly tokens, bridge shared secrets, or private deployment config
 
 Only `.asc/workflow.example.json` is safe to track for App Store Connect workflow shape.
 
@@ -50,10 +54,11 @@ xcodebuild test -project Runline.xcodeproj -scheme Runline -destination 'platfor
 - Keep API keys in Keychain.
 - Keep the non-affiliation disclaimer visible where appropriate.
 
-## Cursor Cloud Rules
+## Cursor Cloud and SDK Rules
 
 - Do not log Cursor API keys, prompts, file contents, artifact URLs, or private repository data.
 - Prefer the existing `CursorAPIClient`, `CursorAgentProvider`, and domain models over new network paths.
+- Prefer `CursorSDKBridgeProvider` and `SDKBridgeClient` for Cursor Chat behavior instead of adding parallel SDK bridge clients.
 - Do not add undocumented Cursor API calls for public behavior unless they are guarded and documented as experimental.
 
 ## Documentation Rules

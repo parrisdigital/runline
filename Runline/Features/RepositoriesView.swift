@@ -23,12 +23,13 @@ struct RepositoriesView: View {
                     }
                 }
                 .sheet(isPresented: $isNewChatPresented) {
-                    NewChatSheet()
+                    NewChatSheet(runtimeMode: .cloud)
                 }
         }
     }
 
     private func select(_ repository: Repository) {
+        appState.launchDraft.applyRuntimeMode(.cloud)
         appState.launchDraft.source = .repository(
             url: repository.url,
             startingRef: repository.defaultBranch.nilIfBlank

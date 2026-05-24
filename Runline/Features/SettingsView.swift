@@ -49,7 +49,8 @@ struct SettingsFormContent: View {
             Section {
                 LabeledContent("Repositories", value: "\(appState.repositories.count)")
                 LabeledContent("Models", value: "\(appState.models.count)")
-                LabeledContent("Chats", value: "\(appState.agents.count)")
+                LabeledContent("Cursor Cloud", value: "\(appState.agents.filter { $0.runtimeMode == .cloud }.count)")
+                LabeledContent("Cursor Chat", value: "\(appState.agents.filter { $0.runtimeMode == .sdkBridge }.count)")
 
                 Button {
                     Task {
@@ -67,6 +68,28 @@ struct SettingsFormContent: View {
                 Text("Cursor Cloud")
             } footer: {
                 Text("Runline talks directly to Cursor's Cloud Agents API from this device. No separate server is required.")
+            }
+
+            Section {
+                LabeledContent("Status", value: "Ready")
+                LabeledContent("Provider", value: "Runline Bridge")
+
+                Button {
+                    Task {
+                        await appState.testSDKBridgeConnection()
+                    }
+                } label: {
+                    if appState.isCheckingSDKBridge {
+                        ProgressView()
+                    } else {
+                        Label("Test Bridge", systemImage: "network")
+                    }
+                }
+                .disabled(appState.isCheckingSDKBridge)
+            } header: {
+                Text("Cursor Chat")
+            } footer: {
+                Text("Cursor Chat starts SDK-backed workspace sessions through the Runline bridge. Your Cursor key stays in Keychain and is sent over HTTPS only when you start or continue a chat.")
             }
 
             Section("Enterprise API") {

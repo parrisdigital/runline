@@ -93,7 +93,7 @@ struct CursorAPIEndpointCacheEntry: Equatable, Hashable {
     var result: CursorAPIEndpointResult
 }
 
-enum JSONValue: Decodable, Equatable, Hashable, Sendable {
+enum JSONValue: Codable, Equatable, Hashable, Sendable {
     case object([String: JSONValue])
     case array([JSONValue])
     case string(String)
@@ -118,6 +118,24 @@ enum JSONValue: Decodable, Equatable, Hashable, Sendable {
             self = .string(string)
         } else {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value.")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .object(let object):
+            try container.encode(object)
+        case .array(let array):
+            try container.encode(array)
+        case .string(let string):
+            try container.encode(string)
+        case .number(let number):
+            try container.encode(number)
+        case .bool(let bool):
+            try container.encode(bool)
+        case .null:
+            try container.encodeNil()
         }
     }
 

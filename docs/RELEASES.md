@@ -2,14 +2,14 @@
 
 This document is for maintainers preparing TestFlight, App Store, and public GitHub releases.
 
-Runline is a Cursor Cloud-only iOS app. Release work should not introduce required hosted services or private endpoints.
+Runline's default Cloud Agent mode is backendless. Release work should not make hosted services or private endpoints required for the core iOS app.
 
 ## Current Release State
 
 | Area | State |
 | --- | --- |
 | iOS app | Runline `1.0 (25)` in beta sequence |
-| Runtime | Direct Cursor Cloud Agents API |
+| Runtime | Hosted SDK bridge for Cursor Chat; direct Cursor Cloud Agents API for Cursor Cloud |
 | Public source | Safe to build without maintainer credentials |
 | ASC config | Live `.asc/workflow.json` remains local and ignored |
 
@@ -79,6 +79,8 @@ Keep review notes clear and public-safe:
 
 Do not include private maintainer IDs, Apple API keys, signing files, live ASC workflow config, archives, IPAs, or private endpoints in public issues or releases.
 
+If Cursor Chat is included in release notes, describe it as using the Runline bridge with each user's Cursor API key. Do not publish Fly tokens, bridge shared secrets, Cursor API keys, private bridge URLs, or private deployment config.
+
 ## GitHub Release
 
 Public GitHub releases should include source notes only.
@@ -99,5 +101,5 @@ Before opening or publishing source, confirm:
 - `.asc/workflow.json` is ignored and absent from the diff.
 - no Cursor API keys, Apple credentials, APNs credentials, or private repository data are present.
 - generated archives, IPAs, and Xcode result bundles are absent.
-- docs describe the Cloud-only runtime accurately.
+- docs describe the backendless Cursor Cloud runtime and hosted Cursor Chat bridge accurately.
 - the non-affiliation disclaimer is present in app-facing docs.

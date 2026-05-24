@@ -18,6 +18,7 @@ Package.resolved
 # Node artifacts from local experiments
 node_modules/
 **/node_modules/
+Services/*/dist/
 
 # Local ASC release config and generated artifacts
 .asc/*

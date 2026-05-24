@@ -10,6 +10,7 @@ protocol APIKeyStore {
 enum APIKeyStoreAccount: String {
     case cursorCloudAgent = "cursor-cloud-agent"
     case cursorEnterpriseAdmin = "cursor-enterprise-admin"
+    case sdkBridgeAuth = "sdk-bridge-auth"
 }
 
 enum APIKeyStoreError: LocalizedError {

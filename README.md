@@ -4,7 +4,7 @@
   <img src="DesignAssets/runline-logo-transparent-1024.png" alt="Runline logo" width="96" height="96">
 </p>
 
-Runline is a native iOS 26+ client for Cursor Cloud Agents. It is designed around a simple public-source model: connect a Cursor API key, choose a repository, start a Cloud Agent chat, follow the run, review artifacts, and continue the conversation from iPhone or iPad.
+Runline is a native iOS 26+ client for Cursor development on iPhone and iPad. It has two separate experiences: Cursor Chat for SDK-backed conversational workspace sessions, and Cursor Cloud for the structured Cloud Agent workflow.
 
 Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 
@@ -15,31 +15,36 @@ Runline is independent and is not affiliated with, endorsed by, or connected to 
 Runline is in public beta.
 
 - iOS app: native SwiftUI app for iOS 26+ and iPadOS 26+.
-- Runtime: direct Cursor Cloud Agents API from the device.
+- Runtime: Cursor Chat through the Runline SDK bridge, plus direct Cursor Cloud Agents API from the device.
 - Authentication: user-owned Cursor API keys stored in iOS Keychain.
 - TestFlight/App Store Connect releases: maintainer-managed.
-- Public source: no hosted backend, no Node service, no private endpoint required.
+- Public source: Cloud Agent mode requires no hosted backend, Node service, or private endpoint.
 
 ## What Runline Does
 
 - Stores the user's Cursor API key in iOS Keychain.
 - Lists Cursor repositories and models.
-- Starts Cursor Cloud Agent runs from a refined native composer.
-- Shows Cloud Agent chats with message bubbles, grouped run events, status, artifacts, and pull request links.
-- Supports follow-up prompts, files, and images where the Cursor Cloud API accepts them.
+- Starts conversational Cursor Chat sessions from a composer-first screen with repo-backed or general-chat context.
+- Tracks Cursor Chat conversations in a slide-over drawer grouped by workspace.
+- Starts Cursor Cloud Agent runs from the structured native Cloud flow.
+- Shows agent chats with immediate user bubbles, grouped run events, status, artifacts, and pull request links.
+- Shows inline file-change summaries and diff sheets when SDK events include parseable change data.
+- Supports follow-up prompts, files, and images, including queued Cursor Chat follow-ups while a run is active.
+- Adds the included Fly-hostable Cursor SDK bridge for Cursor Chat.
 - Provides search, iPhone tab navigation, and iPad split-view navigation.
 - Supports system appearance, light mode, dark mode, and notification preferences.
 - Keeps the non-affiliation disclaimer visible in the app and docs.
 
 ## Runtime Model
 
-Runline has one runtime path:
+Runline has two runtime paths. Cursor Cloud remains fully backendless, while Cursor Chat uses the Runline SDK bridge for the more native conversational workspace loop.
 
 | Mode | Where it runs | Best for | Requirements |
 | --- | --- | --- | --- |
-| Cloud Agent | Directly from iOS to Cursor Cloud Agents | Repository tasks, follow-ups, artifacts, PR workflows, release checks | Cursor API key |
+| Cursor Chat | iOS to the Runline SDK bridge, then `@cursor/sdk` to Cursor cloud runtime | Cursor-like live sessions, SDK event streaming, follow-up iteration | Cursor API key |
+| Cursor Cloud | Directly from iOS to Cursor Cloud Agents | Repository tasks, artifacts, PR workflows, release checks | Cursor API key |
 
-Runline does not require Node, a Mac relay, a hosted backend, or any Runline server.
+Runline does not require Node, a Mac relay, or a user-run backend for Cursor Cloud. Cursor Chat uses the hosted Runline bridge by default; advanced users can self-host the included `Services/cursor-sdk-bridge` service.
 
 ## Install the iOS Beta
 
@@ -48,16 +53,30 @@ The iOS beta is distributed through TestFlight by the maintainer. Once installed
 1. Open Runline.
 2. Connect a Cursor API key.
 3. Select a repository or paste a repository URL.
-4. Start a Cloud Agent chat.
-5. Continue the run from the chat composer when more context is needed.
+4. Start a conversational Cursor Chat or a structured Cursor Cloud run.
+5. Continue the session from the chat composer when more context is needed.
 
-Cursor API keys stay on device in Keychain for direct Cloud Agent requests.
+Cursor API keys stay on device in Keychain. Cursor Cloud uses the key directly from the app; Cursor Chat sends it over HTTPS to the Runline bridge only for SDK-backed requests.
+
+## Optional Cursor Chat Bridge
+
+The SDK bridge is a small Node service in `Services/cursor-sdk-bridge`. Local development uses an in-memory session store by default. Fly deployments should mount a volume and set `RUNLINE_BRIDGE_SESSION_STORE_PATH` so session IDs, run IDs, repo metadata, model IDs, run status, and PR metadata can survive Machine restarts. The bridge does not persist Cursor API keys or prompt text.
+
+Fly setup for the included `fly.toml`:
+
+```bash
+cd Services/cursor-sdk-bridge
+fly volumes create runline_sdk_bridge_data --app runline-sdk-bridge --region iad --size 1
+fly deploy --app runline-sdk-bridge
+```
 
 ## Repository Layout
 
 ```text
 Runline/                  SwiftUI app source
 RunlineTests/             Unit tests for app state, providers, cache, routing, and Cursor API mapping
+Services/cursor-sdk-bridge/
+                          Optional Fly-hostable Cursor SDK bridge for Cursor Chat
 DesignAssets/             Public logo and app icon source previews
 Legal/                    Trademark and branding guidance
 Tools/                    Maintainer utilities such as build-number updates
@@ -84,6 +103,15 @@ xcodebuild test \
   -project Runline.xcodeproj \
   -scheme Runline \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1'
+```
+
+Run the optional SDK bridge checks:
+
+```bash
+npm --prefix Services/cursor-sdk-bridge run typecheck
+npm --prefix Services/cursor-sdk-bridge test
+npm --prefix Services/cursor-sdk-bridge run build
+npm --prefix Services/cursor-sdk-bridge audit --omit=dev --audit-level=high
 ```
 
 Run metadata checks:
@@ -142,8 +170,9 @@ Use explicit build numbers so TestFlight stays aligned with the active Runline s
 ## Security Model
 
 - Cursor API keys are stored on iOS in Keychain.
-- Cloud Agent requests go directly from iOS to Cursor's Cloud Agents API.
-- Runline does not require or ship a backend service.
+- Cursor Cloud requests go directly from iOS to Cursor's Cloud Agents API.
+- Cursor Chat requests send the Cursor API key over HTTPS to the Runline bridge for SDK execution. The bridge is designed not to persist Cursor API keys.
+- Users do not need to configure a bridge URL or shared secret for the default Cursor Chat path.
 - Apple signing material, API keys, `.env` files, archives, IPAs, and provisioning profiles must never be committed.
 
 Report vulnerabilities privately through [SECURITY.md](SECURITY.md).

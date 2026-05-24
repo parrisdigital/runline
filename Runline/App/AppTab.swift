@@ -1,7 +1,8 @@
 import SwiftUI
 
 enum AppTab: String, CaseIterable, Identifiable {
-    case chats
+    case cursorChat
+    case cursorCloud
     case repositories
     case settings
 
@@ -9,8 +10,10 @@ enum AppTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .chats:
-            "Chats"
+        case .cursorChat:
+            "Cursor Chat"
+        case .cursorCloud:
+            "Cursor Cloud"
         case .repositories:
             "Repositories"
         case .settings:
@@ -20,12 +23,34 @@ enum AppTab: String, CaseIterable, Identifiable {
 
     var symbolName: String {
         switch self {
-        case .chats:
+        case .cursorChat:
             "message"
+        case .cursorCloud:
+            "cloud"
         case .repositories:
             "folder"
         case .settings:
             "gearshape"
+        }
+    }
+
+    init(runtimeMode: AgentRuntimeMode) {
+        switch runtimeMode {
+        case .cloud:
+            self = .cursorCloud
+        case .sdkBridge:
+            self = .cursorChat
+        }
+    }
+
+    var runtimeMode: AgentRuntimeMode? {
+        switch self {
+        case .cursorChat:
+            .sdkBridge
+        case .cursorCloud:
+            .cloud
+        case .repositories, .settings:
+            nil
         }
     }
 }

@@ -527,6 +527,184 @@ final class CursorAPITests: XCTestCase {
         XCTAssertEqual(MockURLProtocol.capturedRequests[0].header("Accept"), "text/event-stream")
     }
 
+    func testSDKBridgeCreateSessionUsesBridgeHeadersAndRepoPayload() async throws {
+        MockURLProtocol.handler = { request in
+            try Self.jsonResponse(for: request, body: [
+                "sessionId": "agent-1",
+                "agentId": "agent-1",
+                "runId": "run-1",
+                "status": "running",
+                "eventsURL": "/v1/sessions/agent-1/events?runId=run-1",
+                "runEventsURL": "/v1/sessions/agent-1/runs/run-1/events",
+                "stateURL": "/v1/sessions/agent-1"
+            ])
+        }
+        let client = try makeSDKBridgeClient(apiKey: "cursor-test-key", bridgeSecret: "bridge-secret")
+
+        let response = try await client.createSession(
+            SDKBridgeSessionStartRequest(
+                prompt: "Say hello.",
+                images: nil,
+                repo: SDKBridgeRepoRequest(url: "https://github.com/acme/app", startingRef: "main", prUrl: nil),
+                modelId: "composer-2",
+                autoCreatePR: false,
+                skipReviewerRequest: true,
+                workOnCurrentBranch: true
+            )
+        )
+
+        XCTAssertEqual(response.sessionId, "agent-1")
+        let captured = try XCTUnwrap(MockURLProtocol.capturedRequests.first)
+        XCTAssertEqual(captured.method, "POST")
+        XCTAssertEqual(captured.url?.path, "/v1/sessions")
+        XCTAssertEqual(captured.header("Accept"), "application/json")
+        XCTAssertEqual(captured.header("Content-Type"), "application/json")
+        XCTAssertEqual(captured.header("X-Cursor-API-Key"), "cursor-test-key")
+        XCTAssertEqual(captured.header("X-Runline-Bridge-Secret"), "bridge-secret")
+
+        let body = try XCTUnwrap(captured.jsonBody)
+        XCTAssertEqual(body["prompt"] as? String, "Say hello.")
+        XCTAssertEqual(body["modelId"] as? String, "composer-2")
+        XCTAssertEqual(body["autoCreatePR"] as? Bool, false)
+        XCTAssertEqual(body["skipReviewerRequest"] as? Bool, true)
+        XCTAssertEqual(body["workOnCurrentBranch"] as? Bool, true)
+        let repo = try XCTUnwrap(body["repo"] as? [String: Any])
+        XCTAssertEqual(repo["url"] as? String, "https://github.com/acme/app")
+        XCTAssertEqual(repo["startingRef"] as? String, "main")
+    }
+
+    @MainActor
+    func testSDKBridgeRepoLessSessionsRemainGeneralChat() async throws {
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/sessions")
+            return try Self.jsonResponse(for: request, body: [
+                "items": [
+                    [
+                        "sessionId": "agent-general",
+                        "agentId": "agent-general",
+                        "modelId": "composer-2.5",
+                        "autoCreatePR": false,
+                        "latestRunId": "run-general",
+                        "runs": [
+                            [
+                                "runId": "run-general",
+                                "agentId": "agent-general",
+                                "status": "finished",
+                                "createdAt": "2026-05-23T12:00:00Z",
+                                "updatedAt": "2026-05-23T12:00:02Z"
+                            ]
+                        ],
+                        "createdAt": "2026-05-23T12:00:00Z",
+                        "updatedAt": "2026-05-23T12:00:02Z"
+                    ]
+                ]
+            ])
+        }
+        let provider = try CursorSDKBridgeProvider(
+            apiKey: "cursor-test-key",
+            bridgeBaseURL: URL(string: "https://bridge.runline.test")!,
+            session: makeSession()
+        )
+
+        let agents = try await provider.listAgents()
+        let agent = try XCTUnwrap(agents.first)
+
+        XCTAssertEqual(agent.name, "General Chat")
+        XCTAssertTrue(agent.repository.isGeneralChat)
+        XCTAssertEqual(agent.repository.defaultBranch, "")
+        XCTAssertEqual(agent.branchName, "")
+        XCTAssertEqual(agent.latestRunID, "run-general")
+    }
+
+    @MainActor
+    func testSDKBridgeSessionNameDrivesGeneralChatThreadTitle() async throws {
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/sessions")
+            return try Self.jsonResponse(for: request, body: [
+                "items": [
+                    [
+                        "sessionId": "agent-general",
+                        "agentId": "agent-general",
+                        "name": "Research Native Cursor App Architecture",
+                        "modelId": "composer-2.5",
+                        "autoCreatePR": false,
+                        "latestRunId": "run-general",
+                        "runs": [
+                            [
+                                "runId": "run-general",
+                                "agentId": "agent-general",
+                                "status": "finished",
+                                "createdAt": "2026-05-23T12:00:00Z",
+                                "updatedAt": "2026-05-23T12:00:02Z"
+                            ]
+                        ],
+                        "createdAt": "2026-05-23T12:00:00Z",
+                        "updatedAt": "2026-05-23T12:00:02Z"
+                    ]
+                ]
+            ])
+        }
+        let provider = try CursorSDKBridgeProvider(
+            apiKey: "cursor-test-key",
+            bridgeBaseURL: URL(string: "https://bridge.runline.test")!,
+            session: makeSession()
+        )
+
+        let agents = try await provider.listAgents()
+        let agent = try XCTUnwrap(agents.first)
+
+        XCTAssertEqual(agent.name, "Research Native Cursor App Architecture")
+        XCTAssertTrue(agent.repository.isGeneralChat)
+        XCTAssertEqual(agent.branchName, "")
+    }
+
+    func testSDKBridgeStreamEventsUsesRunScopedEndpointAndResumeHeader() async throws {
+        MockURLProtocol.handler = { request in
+            let payload: String
+            if request.value(forHTTPHeaderField: "Last-Event-ID") == "run-1:000001" {
+                payload = """
+                id: run-1:000002
+                event: assistant
+                data: {"id":"run-1:000002","event":"assistant","createdAt":"2026-05-23T12:00:01Z","data":{"type":"assistant","text":"Hello from Cursor."}}
+
+                """
+            } else {
+                payload = """
+                id: run-1:000001
+                event: status
+                data: {"id":"run-1:000001","event":"status","createdAt":"2026-05-23T12:00:00Z","data":{"type":"status","message":"Run started."}}
+
+                """
+            }
+
+            return HTTPResponse(
+                response: HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "text/event-stream"]
+                )!,
+                data: Data(payload.utf8)
+            )
+        }
+        let client = try makeSDKBridgeClient()
+
+        let firstEvents = try await client.streamEvents(sessionID: "agent-1", runID: "run-1", lastEventID: nil)
+        let secondEvents = try await client.streamEvents(sessionID: "agent-1", runID: "run-1", lastEventID: "run-1:000001")
+        let mappedEvents = SDKBridgeEventMapper.events(from: firstEvents + secondEvents, runID: "run-1")
+
+        XCTAssertEqual(MockURLProtocol.capturedRequests.map { $0.url?.path }, [
+            "/v1/sessions/agent-1/runs/run-1/events",
+            "/v1/sessions/agent-1/runs/run-1/events"
+        ])
+        XCTAssertNil(MockURLProtocol.capturedRequests[0].header("Last-Event-ID"))
+        XCTAssertEqual(MockURLProtocol.capturedRequests[1].header("Last-Event-ID"), "run-1:000001")
+        XCTAssertEqual(MockURLProtocol.capturedRequests[0].header("Accept"), "text/event-stream")
+        XCTAssertEqual(mappedEvents.map(\.kind), [.status, .assistant])
+        XCTAssertEqual(mappedEvents[0].message, "Run started.")
+        XCTAssertEqual(mappedEvents[1].message, "Hello from Cursor.")
+    }
+
     @MainActor
     func testStreamEventsNormalizeInteractionUpdates() async throws {
         MockURLProtocol.handler = { request in
@@ -844,6 +1022,14 @@ final class CursorAPITests: XCTestCase {
         baseURL: URL = URL(string: "https://api.cursor.test")!
     ) throws -> CursorAPIClient {
         try CursorAPIClient(apiKey: apiKey, baseURL: baseURL, session: makeSession())
+    }
+
+    private func makeSDKBridgeClient(
+        apiKey: String = "cursor-test-key",
+        bridgeSecret: String? = nil,
+        baseURL: URL = URL(string: "https://bridge.runline.test")!
+    ) throws -> SDKBridgeClient {
+        try SDKBridgeClient(baseURL: baseURL, apiKey: apiKey, bridgeSecret: bridgeSecret, session: makeSession())
     }
 
     private func makeSession() -> URLSession {

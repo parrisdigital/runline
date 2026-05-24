@@ -1,0 +1,35 @@
+{
+  "name": "@runline/cursor-sdk-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fly-hosted Cursor SDK bridge for Runline Live Workspace sessions.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/server.ts",
+    "lint": "tsc --noEmit",
+    "start": "node dist/src/server.js",
+    "test": "vitest run test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cursor/sdk": "1.0.13",
+    "fastify": "^5.6.2",
+    "zod": "^3.25.76"
+  },
+  "overrides": {
+    "sqlite3": "^6.0.1",
+    "tar": "^7.5.15",
+    "undici": "^6.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.17.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

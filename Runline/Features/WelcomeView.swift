@@ -21,7 +21,7 @@ struct WelcomeView: View {
                     VStack(spacing: 6) {
                         Text("Runline")
                             .font(.largeTitle.weight(.semibold))
-                        Text("Start and manage Cursor Cloud Agents from iPhone and iPad.")
+                        Text("Start conversational Cursor Chat sessions or structured Cursor Cloud runs from iPhone and iPad.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -56,7 +56,7 @@ struct WelcomeView: View {
                             .disabled(!canConnect || appState.isLoading)
                             .accessibilityIdentifier("welcome.connect")
                         } header: {
-                            Text("Cursor Cloud")
+                            Text("Cursor")
                         }
                     }
                     .frame(height: 164)
@@ -65,7 +65,7 @@ struct WelcomeView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: "lock.fill")
                             .imageScale(.small)
-                        Text("Keys are stored in Keychain and used directly with Cursor's Cloud Agents API.")
+                        Text("Your Cursor key is stored in Keychain. Cursor Cloud uses it directly; Cursor Chat uses it through the Runline bridge.")
                     }
                     .font(.footnote)
                     .foregroundStyle(.secondary)

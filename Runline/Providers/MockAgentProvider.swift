@@ -39,6 +39,7 @@ final class MockAgentProvider: AgentProvider, EnterpriseDataProvider {
         repositories = [iosRepo, apiRepo, designRepo]
         models = [
             AgentModel(id: "default", displayName: "default", subtitle: "Cursor recommended", category: .default, qualityScore: 4, costTier: 2),
+            AgentModel(id: "composer-2.5", displayName: "composer-2.5", subtitle: "Cursor Chat composer model", category: .coding, qualityScore: 5, costTier: 2),
             AgentModel(id: "gpt-5.2", displayName: "gpt-5.2", subtitle: "Strong reasoning for complex tasks", category: .coding, qualityScore: 5, costTier: 3),
             AgentModel(id: "claude-4.5-sonnet-thinking", displayName: "claude-4.5-sonnet-thinking", subtitle: "Coding focused with deep reasoning", category: .coding, qualityScore: 5, costTier: 2),
             AgentModel(id: "gpt-4.1-mini", displayName: "gpt-4.1-mini", subtitle: "Fast and cost-efficient", category: .fast, qualityScore: 3, costTier: 1)
@@ -139,6 +140,16 @@ final class MockAgentProvider: AgentProvider, EnterpriseDataProvider {
         let repo: Repository
         let branch: String
         switch draft.source {
+        case .general:
+            repo = Repository(
+                owner: "Cursor",
+                name: "General Chat",
+                url: URL(string: "https://cursor.com/general-chat")!,
+                defaultBranch: "conversation",
+                isFavorite: false,
+                lastUsedDescription: "now"
+            )
+            branch = "conversation"
         case .repository(let url, let startingRef):
             repo = repositories.first(where: { $0.url == url }) ?? Repository(
                 owner: url.deletingLastPathComponent().lastPathComponent,
@@ -174,7 +185,8 @@ final class MockAgentProvider: AgentProvider, EnterpriseDataProvider {
             latestRunID: runID,
             updatedAtDescription: "now",
             artifactCount: 0,
-            pullRequestURL: nil
+            pullRequestURL: nil,
+            runtimeMode: draft.runtimeMode
         )
 
         agents.insert(agent, at: 0)

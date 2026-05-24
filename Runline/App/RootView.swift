@@ -95,10 +95,15 @@ private struct CompactAppShellView: View {
         @Bindable var appState = appState
 
         TabView(selection: $appState.selectedTab) {
-            ChatsView()
-                .tabItem { Label(AppTab.chats.title, systemImage: AppTab.chats.symbolName) }
-                .tag(AppTab.chats)
-                .accessibilityIdentifier("tab.chats")
+            CursorChatView()
+                .tabItem { Label(AppTab.cursorChat.title, systemImage: AppTab.cursorChat.symbolName) }
+                .tag(AppTab.cursorChat)
+                .accessibilityIdentifier("tab.cursorChat")
+
+            CursorCloudView()
+                .tabItem { Label(AppTab.cursorCloud.title, systemImage: AppTab.cursorCloud.symbolName) }
+                .tag(AppTab.cursorCloud)
+                .accessibilityIdentifier("tab.cursorCloud")
 
             RepositoriesView()
                 .tabItem { Label(AppTab.repositories.title, systemImage: AppTab.repositories.symbolName) }
@@ -118,7 +123,8 @@ private struct RegularAppShellView: View {
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var selectedAgentID: Agent.ID?
     @State private var selectedRepositoryURL: URL?
-    @State private var chatQuery = ""
+    @State private var cursorChatQuery = ""
+    @State private var cursorCloudQuery = ""
     @State private var repositoryQuery = ""
     @State private var isComposing = false
 
@@ -140,6 +146,13 @@ private struct RegularAppShellView: View {
         .onChange(of: appState.selectedTab) { _, tab in
             if tab == .settings {
                 isComposing = false
+            }
+            if let runtimeMode = tab.runtimeMode {
+                appState.launchDraft.applyRuntimeMode(runtimeMode)
+                if let selectedAgentID,
+                   appState.agent(id: selectedAgentID)?.runtimeMode != runtimeMode {
+                    self.selectedAgentID = nil
+                }
             }
         }
         .onChange(of: appState.focusedAgentID) { _, agentID in
@@ -168,15 +181,40 @@ private struct RegularAppShellView: View {
     @ViewBuilder
     private var contentColumn: some View {
         switch appState.selectedTab {
-        case .chats:
-            ChatListContent(query: $chatQuery, presentation: .selection($selectedAgentID))
-                .navigationTitle("Chats")
+        case .cursorChat:
+            ChatListContent(
+                runtimeMode: .sdkBridge,
+                experience: .cursorChat,
+                query: $cursorChatQuery,
+                presentation: .selection($selectedAgentID)
+            )
+                .navigationTitle("Cursor Chat")
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: startNewChat) {
+                        Button {
+                            startNewChat(runtimeMode: .sdkBridge)
+                        } label: {
                             Image(systemName: "square.and.pencil")
                         }
-                        .accessibilityLabel("New Chat")
+                        .accessibilityLabel("New Cursor Chat")
+                    }
+                }
+        case .cursorCloud:
+            ChatListContent(
+                runtimeMode: .cloud,
+                experience: .cursorCloud,
+                query: $cursorCloudQuery,
+                presentation: .selection($selectedAgentID)
+            )
+                .navigationTitle("Cursor Cloud")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            startNewChat(runtimeMode: .cloud)
+                        } label: {
+                            Image(systemName: "square.and.pencil")
+                        }
+                        .accessibilityLabel("New Cursor Cloud run")
                     }
                 }
         case .repositories:
@@ -208,30 +246,44 @@ private struct RegularAppShellView: View {
     @ViewBuilder
     private var detailColumn: some View {
         switch appState.selectedTab {
-        case .chats:
+        case .cursorChat:
             if isComposing {
-                NewChatForm(presentation: .detail)
+                NewChatForm(presentation: .detail, runtimeMode: .sdkBridge)
             } else if let selectedAgentID,
                       let agent = appState.agent(id: selectedAgentID) {
                 ChatDetailView(agent: agent)
             } else {
                 ContentUnavailableView(
-                    "Select a Chat",
+                    "Select a Cursor Chat",
                     systemImage: "message",
-                    description: Text("Choose a Cloud Agent conversation from the Chats column.")
+                    description: Text("Choose a workspace chat or start a new conversation.")
                 )
-                .navigationTitle("Chat")
+                .navigationTitle("Cursor Chat")
+            }
+        case .cursorCloud:
+            if isComposing {
+                NewChatForm(presentation: .detail, runtimeMode: .cloud)
+            } else if let selectedAgentID,
+                      let agent = appState.agent(id: selectedAgentID) {
+                ChatDetailView(agent: agent)
+            } else {
+                ContentUnavailableView(
+                    "Select a Cloud Run",
+                    systemImage: "cloud",
+                    description: Text("Choose a Cursor Cloud run from the list.")
+                )
+                .navigationTitle("Cursor Cloud")
             }
         case .repositories:
             if isComposing {
-                NewChatForm(presentation: .detail)
+                NewChatForm(presentation: .detail, runtimeMode: .cloud)
             } else {
                 ContentUnavailableView(
                     "Select a Repository",
                     systemImage: "folder",
-                    description: Text("Choose a repository to start a Cloud Agent chat.")
+                    description: Text("Choose a repository to start a Cursor Cloud run.")
                 )
-                .navigationTitle("New Chat")
+                .navigationTitle("Cursor Cloud")
             }
         case .settings:
             SettingsFormContent()
@@ -239,12 +291,14 @@ private struct RegularAppShellView: View {
         }
     }
 
-    private func startNewChat() {
+    private func startNewChat(runtimeMode: AgentRuntimeMode) {
         selectedAgentID = nil
+        appState.launchDraft.applyRuntimeMode(runtimeMode)
         isComposing = true
     }
 
     private func selectRepository(_ repository: Repository) {
+        appState.launchDraft.applyRuntimeMode(.cloud)
         selectedRepositoryURL = repository.url
         appState.launchDraft.source = .repository(
             url: repository.url,
@@ -257,7 +311,11 @@ private struct RegularAppShellView: View {
         guard let agentID else { return }
         selectedAgentID = agentID
         isComposing = false
-        appState.selectedTab = .chats
+        if let agent = appState.agent(id: agentID) {
+            appState.selectedTab = AppTab(runtimeMode: agent.runtimeMode)
+        } else {
+            appState.selectedTab = .cursorCloud
+        }
         appState.focusedAgentID = nil
     }
 }
@@ -269,7 +327,8 @@ private struct SettingsColumnSummary: View {
                 Label("Account", systemImage: "person.crop.circle")
                 Label("Appearance", systemImage: "circle.lefthalf.filled")
                 Label("Notifications", systemImage: "bell")
-                Label("Advanced API", systemImage: "terminal")
+                Label("Cursor Chat", systemImage: "message")
+                Label("Cursor Cloud", systemImage: "cloud")
             }
 
             Section {

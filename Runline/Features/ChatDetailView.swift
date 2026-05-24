@@ -24,24 +24,41 @@ struct ChatDetailView: View {
     @State private var isArtifactsPresented = false
     @State private var followUpModelAgentID: Agent.ID?
     @State private var selectedFollowUpModelID: String?
+    @State private var queuedFollowUp: QueuedFollowUpDraft?
+    @State private var isTimelineScrollPaused = false
+    @State private var timelineScrollResumeTask: Task<Void, Never>?
+    @State private var timelineSnapshot = ChatTimelineSnapshot.empty
+    @State private var workspaceHandoffPresentation: WorkspaceHandoffPresentation?
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         let currentAgent = appState.agent(id: agent.id) ?? agent
         let latestRun = appState.runs(for: currentAgent).first
         let events = latestRun.map { appState.events(for: $0.id) } ?? []
-        let timelineItems = ChatTimelineBuilder.items(from: events)
-        let timelineSections = ChatTimelineSection.sections(from: timelineItems)
+        let timelineSignature = ChatTimelineEventSignature(runID: latestRun?.id, events: events)
+        let timelineItems = timelineSnapshot.runID == latestRun?.id ? timelineSnapshot.items : []
+        let timelineSections = timelineSnapshot.runID == latestRun?.id ? timelineSnapshot.sections : []
+        let timelineItemIDs = timelineSnapshot.runID == latestRun?.id ? timelineSnapshot.itemIDs : []
         let showsComposer = shouldShowComposer(agent: currentAgent, run: latestRun)
 
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    CloudChatHeaderCard(agent: currentAgent, run: latestRun)
+                    ConversationHeaderCard(
+                        agent: currentAgent,
+                        run: latestRun,
+                        onCreateWorkspace: canCreateWorkspaceFromGeneralChat(agent: currentAgent) ? {
+                            workspaceHandoffPresentation = WorkspaceHandoffPresentation(
+                                agent: currentAgent,
+                                events: events
+                            )
+                        } : nil
+                    )
 
                     if let latestRun {
                         if timelineItems.isEmpty {
                             CloudChatEmptyTimeline(
+                                runtimeMode: currentAgent.runtimeMode,
                                 isStreamExpired: appState.isStreamExpired(runID: latestRun.id)
                             )
                         } else {
@@ -52,7 +69,7 @@ struct ChatDetailView: View {
                         }
 
                         if appState.isObserving(runID: latestRun.id) {
-                            CloudRunListeningRow()
+                            CloudRunListeningRow(runtimeMode: currentAgent.runtimeMode)
                         }
                     } else {
                         ContentUnavailableView(
@@ -73,7 +90,17 @@ struct ChatDetailView: View {
                 .padding(.bottom, showsComposer ? 170 : 20)
             }
             .background(Color(uiColor: .systemBackground))
-            .onChange(of: timelineItems.map(\.id)) { _, _ in
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { _ in
+                        pauseTimelineAutoScroll()
+                    }
+                    .onEnded { _ in
+                        resumeTimelineAutoScrollAfterInteraction()
+                    }
+            )
+            .onChange(of: timelineItemIDs) { _, _ in
+                guard !isTimelineScrollPaused else { return }
                 withAnimation(.snappy(duration: 0.2)) {
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
@@ -110,6 +137,17 @@ struct ChatDetailView: View {
                         isArtifactsPresented = true
                     } label: {
                         Label("Artifacts", systemImage: "tray.full")
+                    }
+
+                    if canCreateWorkspaceFromGeneralChat(agent: currentAgent) {
+                        Button {
+                            workspaceHandoffPresentation = WorkspaceHandoffPresentation(
+                                agent: currentAgent,
+                                events: events
+                            )
+                        } label: {
+                            Label("Create Workspace", systemImage: "folder.badge.plus")
+                        }
                     }
 
                     if let url = currentAgent.pullRequestURL {
@@ -158,17 +196,45 @@ struct ChatDetailView: View {
         .task {
             await appState.refreshAgentDetail(agentID: currentAgent.id)
         }
+        .task(id: timelineSignature) {
+            await rebuildTimelineSnapshot(
+                runID: latestRun?.id,
+                events: events,
+                signature: timelineSignature
+            )
+        }
         .task(id: latestRun?.id) {
             guard let latestRun else { return }
             if latestRun.status.isTerminal {
                 await appState.loadEvents(for: currentAgent, run: latestRun)
                 _ = await appState.artifacts(for: currentAgent)
+                await sendQueuedFollowUpIfNeeded(agent: currentAgent)
             } else {
                 await appState.observeRun(agent: currentAgent, run: latestRun)
+                if let refreshedRun = appState.runs(for: currentAgent).first,
+                   refreshedRun.status.isTerminal {
+                    await sendQueuedFollowUpIfNeeded(agent: currentAgent)
+                }
+            }
+        }
+        .onChange(of: latestRun?.status) { _, status in
+            guard status?.isTerminal == true else { return }
+            Task {
+                await sendQueuedFollowUpIfNeeded(agent: currentAgent)
             }
         }
         .sheet(isPresented: $isArtifactsPresented) {
             ArtifactsSheet(agent: currentAgent)
+        }
+        .sheet(item: $workspaceHandoffPresentation) { presentation in
+            GeneralChatWorkspaceHandoffSheet(presentation: presentation) { repository, branch, instruction in
+                await createWorkspaceFromGeneralChat(
+                    presentation: presentation,
+                    repository: repository,
+                    branch: branch,
+                    instruction: instruction
+                ) != nil
+            }
         }
         .fileImporter(
             isPresented: $isFollowUpFileImporterPresented,
@@ -179,6 +245,10 @@ struct ChatDetailView: View {
                 await loadFollowUpFiles(from: result)
             }
         }
+        .onDisappear {
+            timelineScrollResumeTask?.cancel()
+            timelineScrollResumeTask = nil
+        }
     }
 
     private func shouldShowComposer(agent: Agent, run: AgentRun?) -> Bool {
@@ -187,6 +257,52 @@ struct ChatDetailView: View {
             return true
         }
         return false
+    }
+
+    private func canCreateWorkspaceFromGeneralChat(agent: Agent) -> Bool {
+        agent.runtimeMode == .sdkBridge && agent.repository.url.absoluteString.contains("general-chat")
+    }
+
+    private func createWorkspaceFromGeneralChat(
+        presentation: WorkspaceHandoffPresentation,
+        repository: Repository,
+        branch: String?,
+        instruction: String
+    ) async -> AgentLaunchResult? {
+        await appState.createWorkspaceFromGeneralChat(
+            agent: presentation.agent,
+            events: presentation.events,
+            repository: repository,
+            branch: branch,
+            instruction: instruction
+        )
+    }
+
+    private func rebuildTimelineSnapshot(
+        runID: AgentRun.ID?,
+        events: [AgentStreamEvent],
+        signature: ChatTimelineEventSignature
+    ) async {
+        guard timelineSnapshot.signature != signature else { return }
+        try? await Task.sleep(nanoseconds: 90_000_000)
+        guard !Task.isCancelled else { return }
+        let items = ChatTimelineBuilder.items(from: events)
+        timelineSnapshot = ChatTimelineSnapshot(runID: runID, signature: signature, items: items)
+    }
+
+    private func pauseTimelineAutoScroll() {
+        timelineScrollResumeTask?.cancel()
+        timelineScrollResumeTask = nil
+        isTimelineScrollPaused = true
+    }
+
+    private func resumeTimelineAutoScrollAfterInteraction() {
+        timelineScrollResumeTask?.cancel()
+        timelineScrollResumeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard !Task.isCancelled else { return }
+            isTimelineScrollPaused = false
+        }
     }
 
     private func followUpComposer(agent: Agent, run: AgentRun?) -> some View {
@@ -207,7 +323,15 @@ struct ChatDetailView: View {
     private func followUpComposerContent(agent: Agent, run: AgentRun?) -> some View {
         VStack(spacing: 8) {
             if let run, !run.status.isTerminal {
-                CloudRunProgressBar(status: run.status)
+                CloudRunProgressBar(status: run.status, runtimeMode: agent.runtimeMode, hasQueuedFollowUp: queuedFollowUp != nil)
+            }
+
+            if let queuedFollowUp {
+                QueuedFollowUpRow(draft: queuedFollowUp) {
+                    restoreQueuedFollowUp(queuedFollowUp)
+                } onCancel: {
+                    self.queuedFollowUp = nil
+                }
             }
 
             if shouldShowFollowUpAttachments {
@@ -230,7 +354,7 @@ struct ChatDetailView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 if followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(run?.status.isTerminal == false ? "Steer this run" : "Ask for follow-up changes")
+                    Text(composerPlaceholder(agent: agent, run: run))
                         .foregroundStyle(.secondary)
                         .allowsHitTesting(false)
                         .padding(.horizontal, 18)
@@ -255,6 +379,7 @@ struct ChatDetailView: View {
 
                 CloudComposerModelMenu(
                     models: appState.models,
+                    runtimeMode: agent.runtimeMode,
                     selection: followUpModelBinding(for: agent)
                 )
 
@@ -312,20 +437,35 @@ struct ChatDetailView: View {
     @ViewBuilder
     private func primaryComposerActionButton(agent: Agent, run: AgentRun?) -> some View {
         if let run, !run.status.isTerminal {
-            Button {
-                Task {
-                    await appState.cancel(agent: agent, run: run)
+            if agent.runtimeMode == .sdkBridge, canSendFollowUp {
+                Button {
+                    queueFollowUp(agent: agent)
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color(uiColor: .systemBlue)))
+                        .shadow(color: Color.blue.opacity(0.28), radius: 10, y: 5)
                 }
-            } label: {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(Color(uiColor: .systemRed)))
-                    .shadow(color: Color.red.opacity(0.26), radius: 10, y: 5)
+                .buttonStyle(.plain)
+                .accessibilityLabel(queuedFollowUp == nil ? "Queue follow-up" : "Replace queued follow-up")
+            } else {
+                Button {
+                    Task {
+                        await appState.cancel(agent: agent, run: run)
+                    }
+                } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color(uiColor: .systemRed)))
+                        .shadow(color: Color.red.opacity(0.26), radius: 10, y: 5)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cancel run")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Cancel run")
         } else {
             Button {
                 sendFollowUp(agent: agent)
@@ -409,24 +549,20 @@ struct ChatDetailView: View {
             && !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private func composerPlaceholder(agent: Agent, run: AgentRun?) -> String {
+        guard run?.status.isTerminal == false else { return "Ask for follow-up changes" }
+        return agent.runtimeMode == .sdkBridge ? "Message Cursor while it works" : "Steer this run"
+    }
+
     private func sendFollowUp(agent: Agent) {
-        guard canSendFollowUp else { return }
-        let prompt = AgentPrompt(
-            text: followUpText.trimmingCharacters(in: .whitespacesAndNewlines),
-            images: followUpImages,
-            files: followUpFiles
-        )
-        followUpText = ""
-        followUpImages = []
-        followUpFiles = []
-        selectedFollowUpPhotoItems = []
-        followUpFileImportMessage = nil
+        guard let draft = currentFollowUpDraft(agent: agent) else { return }
+        clearFollowUpComposer()
         isComposerFocused = false
         Task {
             await appState.createFollowUp(
                 agent: agent,
-                prompt: prompt,
-                modelID: selectedFollowUpModelID(for: agent)
+                prompt: draft.prompt,
+                modelID: draft.modelID
             )
             if let latestRun = appState.runs(for: agent).first {
                 await appState.observeRun(agent: agent, run: latestRun)
@@ -434,12 +570,66 @@ struct ChatDetailView: View {
         }
     }
 
+    private func queueFollowUp(agent: Agent) {
+        guard let draft = currentFollowUpDraft(agent: agent) else { return }
+        queuedFollowUp = draft
+        clearFollowUpComposer()
+        isComposerFocused = false
+    }
+
+    private func restoreQueuedFollowUp(_ draft: QueuedFollowUpDraft) {
+        queuedFollowUp = nil
+        followUpText = draft.prompt.text
+        followUpImages = draft.prompt.images
+        followUpFiles = draft.prompt.files
+        selectedFollowUpModelID = draft.modelID
+        followUpModelAgentID = draft.agentID
+        isComposerFocused = true
+    }
+
+    private func sendQueuedFollowUpIfNeeded(agent: Agent) async {
+        guard let draft = queuedFollowUp, draft.agentID == agent.id else { return }
+        queuedFollowUp = nil
+        await appState.createFollowUp(
+            agent: agent,
+            prompt: draft.prompt,
+            modelID: draft.modelID
+        )
+        if let latestRun = appState.runs(for: agent).first {
+            await appState.observeRun(agent: agent, run: latestRun)
+        }
+    }
+
+    private func currentFollowUpDraft(agent: Agent) -> QueuedFollowUpDraft? {
+        guard canSendFollowUp else { return nil }
+        return QueuedFollowUpDraft(
+            agentID: agent.id,
+            prompt: AgentPrompt(
+                text: followUpText.trimmingCharacters(in: .whitespacesAndNewlines),
+                images: followUpImages,
+                files: followUpFiles
+            ),
+            modelID: selectedFollowUpModelID(for: agent)
+        )
+    }
+
+    private func clearFollowUpComposer() {
+        followUpText = ""
+        followUpImages = []
+        followUpFiles = []
+        selectedFollowUpPhotoItems = []
+        followUpFileImportMessage = nil
+    }
+
     private func followUpModelBinding(for agent: Agent) -> Binding<String?> {
         Binding {
             selectedFollowUpModelID(for: agent)
         } set: { modelID in
             followUpModelAgentID = agent.id
-            selectedFollowUpModelID = NewChatModelPickerOptions.modelID(from: modelID)
+            selectedFollowUpModelID = NewChatModelPickerOptions.modelID(
+                from: modelID,
+                runtimeMode: agent.runtimeMode
+            )
         }
     }
 
@@ -447,7 +637,7 @@ struct ChatDetailView: View {
         if followUpModelAgentID == agent.id {
             return selectedFollowUpModelID
         }
-        return NewChatModelPickerOptions.modelID(from: agent.modelID)
+        return NewChatModelPickerOptions.modelID(from: agent.modelID, runtimeMode: agent.runtimeMode)
     }
 
     private func loadFollowUpImages(from items: [PhotosPickerItem]) async {
@@ -516,16 +706,425 @@ struct ChatDetailView: View {
     }
 }
 
-private struct CloudChatHeaderCard: View {
+private struct QueuedFollowUpDraft: Identifiable, Hashable {
+    var id = UUID()
+    var agentID: Agent.ID
+    var prompt: AgentPrompt
+    var modelID: String?
+}
+
+private struct QueuedFollowUpRow: View {
+    var draft: QueuedFollowUpDraft
+    var onEdit: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "text.bubble")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.blue)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color.blue.opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Queued follow-up")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(draft.prompt.text)
+                    .font(.callout)
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+
+                if !draft.prompt.files.isEmpty || !draft.prompt.images.isEmpty {
+                    Text(attachmentSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                onEdit()
+            } label: {
+                Image(systemName: "pencil")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit queued follow-up")
+
+            Button {
+                onCancel()
+            } label: {
+                Image(systemName: "xmark")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel queued follow-up")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(uiColor: .secondarySystemBackground).opacity(0.70), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 0.5)
+        )
+    }
+
+    private var attachmentSummary: String {
+        var parts: [String] = []
+        if !draft.prompt.images.isEmpty {
+            parts.append("\(draft.prompt.images.count) image\(draft.prompt.images.count == 1 ? "" : "s")")
+        }
+        if !draft.prompt.files.isEmpty {
+            parts.append("\(draft.prompt.files.count) file\(draft.prompt.files.count == 1 ? "" : "s")")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+private struct WorkspaceHandoffPresentation: Identifiable {
+    var agent: Agent
+    var events: [AgentStreamEvent]
+
+    var id: Agent.ID { agent.id }
+
+    var preview: String {
+        WorkspaceHandoffPromptBuilder.contextPreview(from: events)
+    }
+}
+
+private struct GeneralChatWorkspaceHandoffSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    var presentation: WorkspaceHandoffPresentation
+    var onCreate: (Repository, String?, String) async -> Bool
+
+    @State private var selectedRepositoryID = ""
+    @State private var branchText = ""
+    @State private var instruction = "Continue with the next concrete implementation step."
+    @State private var isCreating = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    sourceRow
+
+                    if availableRepositories.isEmpty {
+                        emptyRepositoriesView
+                    } else {
+                        repositorySection
+                        instructionSection
+
+                        if !presentation.preview.isEmpty {
+                            contextSection
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 112)
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("Create Workspace")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(isCreating)
+                }
+
+            }
+            .safeAreaInset(edge: .bottom) {
+                createButtonBar
+            }
+            .onAppear {
+                configureInitialRepositoryIfNeeded()
+            }
+            .onChange(of: selectedRepositoryID) { _, _ in
+                guard let selectedRepository else { return }
+                branchText = selectedRepository.defaultBranch
+            }
+        }
+    }
+
+    private var sourceRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color(uiColor: .systemGreen))
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(Color(uiColor: .systemGreen).opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(presentation.agent.name)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text("General Chat")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var repositorySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Workspace")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 2)
+
+            Menu {
+                ForEach(availableRepositories) { repository in
+                    Button {
+                        selectedRepositoryID = repository.id
+                        branchText = repository.defaultBranch
+                    } label: {
+                        Label(repository.displayName, systemImage: selectedRepositoryID == repository.id ? "checkmark" : "folder")
+                    }
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "folder")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(selectedRepository?.displayName ?? "Repository")
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        Text(selectedRepository?.defaultBranch.nilIfBlank ?? "Repository")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 56)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            TextField("Branch or ref", text: $branchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.body)
+                .padding(.horizontal, 14)
+                .frame(height: 48)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private var instructionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Instruction")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 2)
+
+            TextField("Next step", text: $instruction, axis: .vertical)
+                .lineLimit(3...7)
+                .padding(14)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private var contextSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Context")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 2)
+
+            Text(presentation.preview)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private var emptyRepositoriesView: some View {
+        VStack(spacing: 14) {
+            ContentUnavailableView(
+                "No Repositories",
+                systemImage: "folder.badge.questionmark",
+                description: Text("Refresh repositories before creating a workspace from this chat.")
+            )
+
+            Button {
+                Task {
+                    await appState.reloadWorkspace()
+                    configureInitialRepositoryIfNeeded()
+                }
+            } label: {
+                Label("Refresh Repositories", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var createButtonBar: some View {
+        Button {
+            createWorkspace()
+        } label: {
+            if isCreating {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+            } else {
+                Label("Create Workspace", systemImage: "arrow.right")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!canCreate)
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .background(.regularMaterial)
+    }
+
+    private var selectedRepository: Repository? {
+        availableRepositories.first { $0.id == selectedRepositoryID } ?? availableRepositories.first
+    }
+
+    private var availableRepositories: [Repository] {
+        appState.repositories.filter { !$0.isGeneralChat }
+    }
+
+    private var canCreate: Bool {
+        selectedRepository != nil
+            && !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isCreating
+    }
+
+    private func configureInitialRepositoryIfNeeded() {
+        guard selectedRepositoryID.isEmpty, let repository = availableRepositories.first else { return }
+        selectedRepositoryID = repository.id
+        branchText = repository.defaultBranch
+    }
+
+    private func createWorkspace() {
+        guard let repository = selectedRepository else { return }
+        let trimmedInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        isCreating = true
+        Task {
+            let didCreate = await onCreate(repository, branchText.nilIfBlank, trimmedInstruction)
+            isCreating = false
+            if didCreate {
+                dismiss()
+            }
+        }
+    }
+}
+
+enum WorkspaceHandoffPromptBuilder {
+    static func prompt(from events: [AgentStreamEvent], instruction: String, sourceTitle: String? = nil) -> String {
+        let context = conversationContext(from: events)
+        let title = normalizedSourceTitle(sourceTitle, events: events)
+        return """
+        \(title)
+
+        Continue this Cursor Chat in a repository-backed workspace.
+
+        Prior conversation context:
+        \(context)
+
+        Workspace instruction:
+        \(instruction.trimmingCharacters(in: .whitespacesAndNewlines))
+        """
+    }
+
+    static func contextPreview(from events: [AgentStreamEvent]) -> String {
+        let context = conversationContext(from: events)
+        guard context != "No prior message context was available." else { return "" }
+        return context.timelineSingleLinePreview(maxCharacters: 320)
+    }
+
+    private static func normalizedSourceTitle(_ sourceTitle: String?, events: [AgentStreamEvent]) -> String {
+        let trimmedTitle = sourceTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedTitle.isEmpty,
+           trimmedTitle.localizedCaseInsensitiveCompare("General Chat") != .orderedSame {
+            return trimmedTitle.timelineSingleLinePreview(maxCharacters: 96)
+        }
+        let prompt = events.first { $0.kind == .user }?.message
+        return ConversationTitleGenerator.title(
+            from: prompt ?? "Repo workspace",
+            repository: Repository(
+                owner: "Cursor",
+                name: "General Chat",
+                url: URL(string: "https://cursor.com/general-chat")!,
+                defaultBranch: "",
+                isFavorite: false,
+                lastUsedDescription: "now"
+            )
+        ) ?? "Repo Workspace"
+    }
+
+    private static func conversationContext(from events: [AgentStreamEvent]) -> String {
+        let rows = events
+            .filter { event in
+                switch event.kind {
+                case .user, .assistant, .result:
+                    !event.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                default:
+                    false
+                }
+            }
+            .suffix(10)
+            .map { event -> String in
+                let role = event.kind == .user ? "User" : "Cursor"
+                let message = event.message
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .timelineBoundedText(maxCharacters: 900)
+                return "\(role): \(message)"
+            }
+
+        if rows.isEmpty {
+            return "No prior message context was available."
+        }
+
+        return rows.joined(separator: "\n\n").timelineBoundedText(maxCharacters: 5_000)
+    }
+}
+
+private struct ConversationHeaderCard: View {
     var agent: Agent
     var run: AgentRun?
+    var onCreateWorkspace: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Label("Cursor Cloud", systemImage: "cloud.fill")
+                Label(headerTitle, systemImage: agent.runtimeMode.detailSymbolName)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(agent.runtimeMode.detailTint)
 
                 Spacer(minLength: 8)
 
@@ -535,11 +1134,11 @@ private struct CloudChatHeaderCard: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(agent.name)
+                Text(primaryTitle)
                     .font(.title3.weight(.semibold))
                     .lineLimit(2)
 
-                Text(agent.repository.displayName)
+                Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -547,7 +1146,9 @@ private struct CloudChatHeaderCard: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    CloudChatContextChip(systemName: "arrow.triangle.branch", title: agent.branchName)
+                    if !agent.repository.isGeneralChat, let branchName = agent.branchName.nilIfBlank {
+                        CloudChatContextChip(systemName: "arrow.triangle.branch", title: branchName)
+                    }
                     CloudChatContextChip(systemName: "cpu", title: agent.modelID)
                     if let run {
                         CloudChatContextChip(systemName: "clock", title: run.updatedAtDescription)
@@ -556,22 +1157,48 @@ private struct CloudChatHeaderCard: View {
                     if agent.artifactCount > 0 {
                         CloudChatContextChip(systemName: "tray.full", title: "\(agent.artifactCount) artifact\(agent.artifactCount == 1 ? "" : "s")")
                     }
+
+                    if let onCreateWorkspace {
+                        Button(action: onCreateWorkspace) {
+                            CloudChatContextChip(systemName: "folder.badge.plus", title: "Add Repo", tint: Color(uiColor: .systemBlue))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Create repository workspace from this chat")
+                    }
                 }
             }
         }
         .padding(.vertical, 6)
-        .accessibilityElement(children: .combine)
+    }
+
+    private var headerTitle: String {
+        agent.runtimeMode == .sdkBridge ? "Live Workspace" : "Cursor Cloud"
+    }
+
+    private var primaryTitle: String {
+        if agent.runtimeMode == .sdkBridge {
+            return agent.repository.isGeneralChat ? "General Chat" : agent.repository.displayName
+        }
+        return agent.name
+    }
+
+    private var subtitle: String {
+        if agent.runtimeMode == .sdkBridge {
+            return agent.repository.isGeneralChat ? "Repo-less conversation" : agent.name
+        }
+        return agent.repository.displayName
     }
 }
 
 private struct CloudChatContextChip: View {
     var systemName: String
     var title: String
+    var tint: Color?
 
     var body: some View {
         Label(title, systemImage: systemName)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(tint ?? Color(uiColor: .secondaryLabel))
             .lineLimit(1)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -580,6 +1207,7 @@ private struct CloudChatContextChip: View {
 }
 
 private struct CloudChatEmptyTimeline: View {
+    var runtimeMode: AgentRuntimeMode
     var isStreamExpired: Bool
 
     var body: some View {
@@ -598,7 +1226,7 @@ private struct CloudChatEmptyTimeline: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                Text(isStreamExpired ? "Live updates are paused for this run. Pull to refresh for the latest Cloud Agent state." : "Waiting for the first Cloud Agent update.")
+                Text(isStreamExpired ? "Live updates are paused for this run. Pull to refresh for the latest \(runtimeMode.title) state." : "Waiting for the first \(runtimeMode.title) update.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -611,10 +1239,64 @@ private struct CloudChatEmptyTimeline: View {
     }
 }
 
+private struct ChatTimelineEventDigest: Hashable {
+    var id: String
+    var kind: StreamEventKind
+    var title: String
+    var messageCharacterCount: Int
+
+    init(event: AgentStreamEvent) {
+        id = event.id
+        kind = event.kind
+        title = event.title
+        messageCharacterCount = event.message.count
+    }
+}
+
+private struct ChatTimelineEventSignature: Hashable {
+    var runID: AgentRun.ID?
+    var digests: [ChatTimelineEventDigest]
+
+    init(runID: AgentRun.ID?, events: [AgentStreamEvent]) {
+        self.runID = runID
+        digests = events.map(ChatTimelineEventDigest.init(event:))
+    }
+
+    init(runID: AgentRun.ID?, digests: [ChatTimelineEventDigest]) {
+        self.runID = runID
+        self.digests = digests
+    }
+}
+
+private struct ChatTimelineSnapshot {
+    var runID: AgentRun.ID?
+    var signature: ChatTimelineEventSignature
+    var items: [ChatTimelineItem]
+    var sections: [ChatTimelineSection]
+    var itemIDs: [String]
+
+    init(runID: AgentRun.ID?, signature: ChatTimelineEventSignature, items: [ChatTimelineItem]) {
+        self.runID = runID
+        self.signature = signature
+        self.items = items
+        sections = ChatTimelineSection.sections(from: items)
+        itemIDs = items.map(\.id)
+    }
+
+    static let empty = ChatTimelineSnapshot(
+        runID: nil,
+        signature: ChatTimelineEventSignature(runID: nil, digests: []),
+        items: []
+    )
+}
+
 private struct ChatTimelineSection: Identifiable, Hashable {
+    private static let maxVisibleActivityItems = 5
+
     var id: String
     var items: [ChatTimelineItem]
     var isActivityLog: Bool
+    var hiddenActivityItemCount: Int = 0
 
     static func sections(from items: [ChatTimelineItem]) -> [ChatTimelineSection] {
         var sections: [ChatTimelineSection] = []
@@ -622,11 +1304,14 @@ private struct ChatTimelineSection: Identifiable, Hashable {
 
         func flushActivityItems() {
             guard !activityItems.isEmpty else { return }
+            let hiddenCount = max(0, activityItems.count - maxVisibleActivityItems)
+            let visibleItems = hiddenCount > 0 ? Array(activityItems.suffix(maxVisibleActivityItems)) : activityItems
             sections.append(
                 ChatTimelineSection(
-                    id: activityItems.map(\.id).joined(separator: "-"),
-                    items: activityItems,
-                    isActivityLog: true
+                    id: activitySectionID(index: sections.count, items: activityItems),
+                    items: visibleItems,
+                    isActivityLog: true,
+                    hiddenActivityItemCount: hiddenCount
                 )
             )
             activityItems = []
@@ -639,7 +1324,7 @@ private struct ChatTimelineSection: Identifiable, Hashable {
                 flushActivityItems()
                 sections.append(
                     ChatTimelineSection(
-                        id: item.id,
+                        id: messageSectionID(index: sections.count, item: item),
                         items: [item],
                         isActivityLog: false
                     )
@@ -650,6 +1335,15 @@ private struct ChatTimelineSection: Identifiable, Hashable {
         flushActivityItems()
         return sections
     }
+
+    private static func activitySectionID(index: Int, items: [ChatTimelineItem]) -> String {
+        let firstID = items.first?.id.timelineStableIDFragment ?? "empty"
+        return "activity-\(index)-\(firstID)"
+    }
+
+    private static func messageSectionID(index: Int, item: ChatTimelineItem) -> String {
+        "message-\(index)-\(item.id.timelineStableIDFragment)"
+    }
 }
 
 private struct ChatTimelineSectionView: View {
@@ -657,7 +1351,7 @@ private struct ChatTimelineSectionView: View {
 
     var body: some View {
         if section.isActivityLog {
-            CloudActivityLog(items: section.items)
+            CloudActivityLog(items: section.items, hiddenItemCount: section.hiddenActivityItemCount)
         } else if let item = section.items.first {
             ChatTimelineRow(item: item)
         }
@@ -668,26 +1362,410 @@ private struct ChatTimelineRow: View {
     var item: ChatTimelineItem
 
     var body: some View {
+        if let changeSet = item.changeSet {
+            WorkspaceChangeSetCard(changeSet: changeSet, timestamp: item.timestamp)
+        } else {
+            switch item.kind {
+            case .user:
+                UserMessageRow(item: item)
+            case .assistant, .result:
+                AssistantMessageRow(item: item)
+            case .status, .done, .heartbeat:
+                CloudStatusEventPill(item: item)
+            default:
+                CloudActivityDisclosureRow(item: item)
+            }
+        }
+    }
+}
+
+private struct WorkspaceChangeSetCard: View {
+    var changeSet: WorkspaceChangeSet
+    var timestamp: String
+    @State private var isExpanded = false
+    @State private var diffPresentation: WorkspaceDiffPresentation?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+
+            if isExpanded {
+                Divider()
+                    .opacity(0.45)
+
+                ForEach(Array(changeSet.changes.enumerated()), id: \.element.id) { index, change in
+                    Button {
+                        diffPresentation = WorkspaceDiffPresentation(changeSet: changeSet, focusedPath: change.path)
+                    } label: {
+                        WorkspaceFileChangeRow(change: change)
+                    }
+                    .buttonStyle(.plain)
+
+                    if index < changeSet.changes.count - 1 {
+                        Divider()
+                            .opacity(0.35)
+                            .padding(.leading, 12)
+                    }
+                }
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 0.5)
+        )
+        .sheet(item: $diffPresentation) { presentation in
+            WorkspaceDiffSheet(presentation: presentation)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.blue)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(changeSet.title)
+                        .font(.subheadline.weight(.semibold))
+
+                    WorkspaceDiffCountsLabel(additions: changeSet.totalAdditions, deletions: changeSet.totalDeletions)
+                }
+
+                Text("\(changeSet.changes.count) file\(changeSet.changes.count == 1 ? "" : "s") changed")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(timestamp)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Button {
+                diffPresentation = WorkspaceDiffPresentation(changeSet: changeSet, focusedPath: nil)
+            } label: {
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open diff")
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isExpanded ? "Collapse file changes" : "Expand file changes")
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 10)
+    }
+}
+
+private struct WorkspaceFileChangeRow: View {
+    var change: WorkspaceFileChange
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(change.path)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 8)
+
+            Text(change.action.rawValue)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            WorkspaceDiffCountsLabel(additions: change.additions, deletions: change.deletions)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct WorkspaceDiffCountsLabel: View {
+    var additions: Int
+    var deletions: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if additions > 0 {
+                Text("+\(additions)")
+                    .foregroundStyle(.green)
+            }
+            if deletions > 0 {
+                Text("-\(deletions)")
+                    .foregroundStyle(.red)
+            }
+            if additions == 0 && deletions == 0 {
+                Text("+0 -0")
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .font(.caption.monospacedDigit().weight(.semibold))
+    }
+}
+
+private struct WorkspaceDiffPresentation: Identifiable {
+    var changeSet: WorkspaceChangeSet
+    var focusedPath: String?
+
+    var id: String {
+        [changeSet.id, focusedPath ?? "all"].joined(separator: ":")
+    }
+
+    var title: String {
+        focusedPath ?? "Changes"
+    }
+
+    var visibleChanges: [WorkspaceFileChange] {
+        guard let focusedPath else { return changeSet.changes }
+        return changeSet.changes.filter { $0.path == focusedPath }
+    }
+}
+
+private struct WorkspaceDiffSheet: View {
+    var presentation: WorkspaceDiffPresentation
+    @Environment(\.dismiss) private var dismiss
+    @State private var expandedPaths: Set<String> = []
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(presentation.visibleChanges) { change in
+                        diffBlock(change)
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle(presentation.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(allExpanded ? "Collapse" : "Expand") {
+                        if allExpanded {
+                            expandedPaths.removeAll()
+                        } else {
+                            expandedPaths = Set(presentation.visibleChanges.map(\.path))
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                expandedPaths = Set(presentation.visibleChanges.prefix(3).map(\.path))
+            }
+        }
+    }
+
+    private var allExpanded: Bool {
+        let paths = Set(presentation.visibleChanges.map(\.path))
+        return !paths.isEmpty && paths.isSubset(of: expandedPaths)
+    }
+
+    private func diffBlock(_ change: WorkspaceFileChange) -> some View {
+        let isExpanded = expandedPaths.contains(change.path)
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    if isExpanded {
+                        expandedPaths.remove(change.path)
+                    } else {
+                        expandedPaths.insert(change.path)
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundStyle(.secondary)
+
+                    Text(change.path)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Spacer(minLength: 8)
+
+                    WorkspaceDiffCountsLabel(additions: change.additions, deletions: change.deletions)
+                }
+                .padding(12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Divider().opacity(0.45)
+                ScrollView(.horizontal, showsIndicators: true) {
+                    Text((change.diff ?? "No raw diff was provided for this file.")
+                        .timelineBoundedText(maxCharacters: 16_000))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .padding(12)
+                }
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 0.5)
+        )
+    }
+}
+
+private struct CloudActivityDisclosureRow: View {
+    var item: ChatTimelineItem
+    @State private var detailPresentation: TimelineActivityDetailPresentation?
+
+    var body: some View {
+        Group {
+            if item.hasUsefulActivityDetail {
+                Button {
+                    detailPresentation = TimelineActivityDetailPresentation(item: item)
+                } label: {
+                    rowLabel
+                }
+                .buttonStyle(.plain)
+            } else {
+                rowLabel
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(uiColor: .secondarySystemBackground).opacity(0.65), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .sheet(item: $detailPresentation) { presentation in
+            TimelineActivityDetailSheet(presentation: presentation)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rowLabel: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: symbolName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                if item.hasUsefulActivityDetail {
+                    Text(item.activityPreview(maxCharacters: 150))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Text(item.timestamp)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            if item.hasUsefulActivityDetail {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var symbolName: String {
         switch item.kind {
-        case .user:
-            UserMessageRow(item: item)
-        case .assistant, .result:
-            AssistantMessageRow(item: item)
-        case .status, .done, .heartbeat:
-            CloudStatusEventPill(item: item)
+        case .system:
+            "gearshape"
+        case .status:
+            "checkmark.circle"
+        case .thinking:
+            "brain"
+        case .toolCall:
+            "terminal"
+        case .task:
+            "checklist"
+        case .request:
+            "questionmark.bubble"
+        case .result:
+            "doc.text"
+        case .heartbeat:
+            "waveform.path.ecg"
+        case .error:
+            "exclamationmark.triangle"
+        case .done:
+            "checkmark.seal"
         default:
-            CloudActivityDisclosureRow(item: item)
+            "circle"
+        }
+    }
+
+    private var color: Color {
+        switch item.kind {
+        case .status, .done:
+            .green
+        case .error:
+            .red
+        case .thinking, .request:
+            .orange
+        case .assistant, .toolCall, .task, .result:
+            .blue
+        default:
+            .secondary
         }
     }
 }
 
 private struct CloudActivityLog: View {
     var items: [ChatTimelineItem]
+    var hiddenItemCount: Int
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(items.indices, id: \.self) { index in
-                CloudActivityCompactRow(item: items[index])
+            if hiddenItemCount > 0 {
+                CloudActivityHiddenRow(count: hiddenItemCount)
+
+                if !items.isEmpty {
+                    Divider()
+                        .opacity(0.35)
+                        .padding(.leading, 46)
+                }
+            }
+
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                CloudActivityCompactRow(item: item)
 
                 if index < items.index(before: items.endIndex) {
                     Divider()
@@ -707,39 +1785,50 @@ private struct CloudActivityLog: View {
     }
 }
 
+private struct CloudActivityHiddenRow: View {
+    var count: Int
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "ellipsis")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22)
+
+            Text("\(count) earlier activity update\(count == 1 ? "" : "s")")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct CloudActivityCompactRow: View {
     var item: ChatTimelineItem
-    @State private var isExpanded: Bool
-
-    init(item: ChatTimelineItem) {
-        self.item = item
-        _isExpanded = State(initialValue: item.kind == .error || item.kind == .request)
-    }
+    @State private var detailPresentation: TimelineActivityDetailPresentation?
 
     var body: some View {
         Group {
-            if hasUsefulDetail {
-                DisclosureGroup(isExpanded: $isExpanded) {
-                    TimelineMessageText(
-                        message: item.message,
-                        isTechnical: isTechnical,
-                        rendersMarkdown: rendersMarkdown,
-                        foregroundColor: messageColor
-                    )
-                    .padding(.leading, 34)
-                    .padding(.trailing, 8)
-                    .padding(.top, 6)
-                    .padding(.bottom, 10)
+            if item.hasUsefulActivityDetail {
+                Button {
+                    detailPresentation = TimelineActivityDetailPresentation(item: item)
                 } label: {
                     label
                 }
-                .tint(.secondary)
+                .buttonStyle(.plain)
             } else {
                 label
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, hasUsefulDetail && isExpanded ? 10 : 9)
+        .padding(.vertical, 9)
+        .sheet(item: $detailPresentation) { presentation in
+            TimelineActivityDetailSheet(presentation: presentation)
+        }
         .accessibilityElement(children: .combine)
     }
 
@@ -756,11 +1845,13 @@ private struct CloudActivityCompactRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                if !isExpanded, hasUsefulDetail, shouldShowCollapsedPreview {
+                if item.hasUsefulActivityDetail,
+                   shouldShowCollapsedPreview,
+                   collapsedPreview.localizedCaseInsensitiveCompare(compactTitle) != .orderedSame {
                     Text(collapsedPreview)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
 
@@ -769,30 +1860,33 @@ private struct CloudActivityCompactRow: View {
             Text(item.timestamp)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+
+            if item.hasUsefulActivityDetail {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 
     private var compactTitle: String {
         switch item.kind {
         case .toolCall:
-            item.title.localizedCaseInsensitiveContains("Started") ? "Tool Call Started" : "Tool Call"
+            let preview = item.activityPreview(maxCharacters: 72)
+            return preview.isEmpty ? "Tool Call" : toolCallTitle(from: preview)
         case .thinking:
-            item.title.localizedCaseInsensitiveContains("Completed") ? "Thinking Completed" : "Thinking"
+            let preview = item.activityPreview(maxCharacters: 72)
+            if !preview.isEmpty, !preview.localizedCaseInsensitiveContains("thinking update") {
+                return preview
+            }
+            return item.title.localizedCaseInsensitiveContains("Completed") ? "Thought briefly" : "Thinking"
         case .task:
-            item.title
+            return item.title
         case .done:
-            "Turn Ended"
+            return "Turn Ended"
         default:
-            item.title
+            return item.title
         }
-    }
-
-    private var hasUsefulDetail: Bool {
-        let message = item.message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty else { return false }
-        return message.localizedCaseInsensitiveCompare(item.title) != .orderedSame
-            && message.localizedCaseInsensitiveCompare(compactTitle) != .orderedSame
-            && message != "Stream closed"
     }
 
     private var shouldShowCollapsedPreview: Bool {
@@ -805,31 +1899,7 @@ private struct CloudActivityCompactRow: View {
     }
 
     private var collapsedPreview: String {
-        item.message
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var isTechnical: Bool {
-        item.kind == .toolCall || item.kind == .error
-    }
-
-    private var rendersMarkdown: Bool {
-        switch item.kind {
-        case .thinking, .task, .request:
-            true
-        default:
-            false
-        }
-    }
-
-    private var messageColor: Color {
-        switch item.kind {
-        case .error:
-            .red
-        default:
-            .secondary
-        }
+        item.activityPreview(maxCharacters: 180)
     }
 
     private var symbolName: String {
@@ -859,6 +1929,122 @@ private struct CloudActivityCompactRow: View {
 
     private var color: Color {
         switch item.kind {
+        case .status, .done:
+            .green
+        case .error:
+            .red
+        case .thinking, .request:
+            .orange
+        case .toolCall, .task:
+            .blue
+        default:
+            .secondary
+        }
+    }
+
+    private func toolCallTitle(from preview: String) -> String {
+        let parts = preview.split(separator: ":", maxSplits: 1).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard parts.count == 2 else { return preview }
+        let name = parts[0].replacingOccurrences(of: "_", with: " ")
+        let status = parts[1].lowercased()
+        if status.contains("completed") || status.contains("complete") || status.contains("done") {
+            return "Ran \(name)"
+        }
+        if status.contains("running") || status.contains("started") {
+            return "Running \(name)"
+        }
+        return "\(name) \(parts[1])"
+    }
+}
+
+private struct TimelineActivityDetailPresentation: Identifiable {
+    var item: ChatTimelineItem
+
+    var id: String { item.id }
+}
+
+private struct TimelineActivityDetailSheet: View {
+    var presentation: TimelineActivityDetailPresentation
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(presentation.item.title, systemImage: symbolName)
+                            .font(.headline)
+                            .foregroundStyle(color)
+
+                        Text(presentation.item.timestamp)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(detailText)
+                        .font(isTechnical ? .caption.monospaced() : .callout)
+                        .foregroundStyle(isError ? .red : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .padding(16)
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("Activity")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var detailText: String {
+        let message = presentation.item.normalizedActivityMessage
+        guard !message.isEmpty else { return "No additional details were provided." }
+        return message.timelineBoundedText(maxCharacters: 6_000)
+    }
+
+    private var isTechnical: Bool {
+        presentation.item.kind == .toolCall || presentation.item.kind == .error
+    }
+
+    private var isError: Bool {
+        presentation.item.kind == .error
+    }
+
+    private var symbolName: String {
+        switch presentation.item.kind {
+        case .system:
+            "gearshape"
+        case .status:
+            "checkmark.circle"
+        case .thinking:
+            "brain"
+        case .toolCall:
+            "terminal"
+        case .task:
+            "checklist"
+        case .request:
+            "questionmark.bubble"
+        case .heartbeat:
+            "waveform.path.ecg"
+        case .error:
+            "exclamationmark.triangle"
+        case .done:
+            "checkmark.seal"
+        default:
+            "circle"
+        }
+    }
+
+    private var color: Color {
+        switch presentation.item.kind {
         case .status, .done:
             .green
         case .error:
@@ -936,126 +2122,32 @@ private struct AssistantMessageRow: View {
     }
 }
 
-private struct CloudActivityDisclosureRow: View {
-    var item: ChatTimelineItem
-    @State private var isExpanded: Bool
-
-    init(item: ChatTimelineItem) {
-        self.item = item
-        _isExpanded = State(initialValue: item.kind == .error || item.kind == .request)
-    }
-
-    var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            if isExpanded {
-                TimelineMessageText(
-                    message: item.message,
-                    isTechnical: isTechnical,
-                    rendersMarkdown: rendersMarkdown,
-                    foregroundColor: messageColor
-                )
-                .padding(.top, 8)
-                .padding(.leading, 34)
-            }
-        } label: {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: symbolName)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 20)
-
-                Text(item.title)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                Text(item.timestamp)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .tint(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color(uiColor: .secondarySystemBackground).opacity(0.65), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .accessibilityElement(children: .combine)
-    }
-
-    private var isTechnical: Bool {
-        item.kind == .toolCall || item.kind == .result || item.kind == .error
-    }
-
-    private var rendersMarkdown: Bool {
-        switch item.kind {
-        case .assistant, .thinking, .task, .request:
-            true
-        default:
-            false
-        }
-    }
-
-    private var messageColor: Color {
-        switch item.kind {
-        case .assistant, .user:
-            .primary
-        default:
-            .secondary
-        }
-    }
-
-    private var symbolName: String {
-        switch item.kind {
-        case .system:
-            "gearshape"
-        case .status:
-            "checkmark.circle"
-        case .thinking:
-            "brain"
-        case .toolCall:
-            "terminal"
-        case .task:
-            "checklist"
-        case .request:
-            "questionmark.bubble"
-        case .result:
-            "doc.text"
-        case .heartbeat:
-            "waveform.path.ecg"
-        case .error:
-            "exclamationmark.triangle"
-        case .done:
-            "checkmark.seal"
-        default:
-            "circle"
-        }
-    }
-
-    private var color: Color {
-        switch item.kind {
-        case .status, .done:
-            .green
-        case .error:
-            .red
-        case .thinking, .request:
-            .orange
-        case .assistant, .toolCall, .task, .result:
-            .blue
-        default:
-            .secondary
-        }
-    }
-}
-
 private extension ChatTimelineItem {
     var isActivityLogItem: Bool {
-        switch kind {
+        if changeSet != nil {
+            return false
+        }
+        return switch kind {
         case .system, .status, .thinking, .toolCall, .task, .request, .heartbeat, .error, .done, .unknown:
             true
         case .user, .assistant, .result:
             false
         }
+    }
+
+    var hasUsefulActivityDetail: Bool {
+        let normalizedMessage = normalizedActivityMessage
+        guard !normalizedMessage.isEmpty else { return false }
+        return normalizedMessage.localizedCaseInsensitiveCompare(title) != .orderedSame
+            && normalizedMessage != "Stream closed"
+    }
+
+    var normalizedActivityMessage: String {
+        activityDetailText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func activityPreview(maxCharacters: Int = 160) -> String {
+        activityPreviewText.timelineBoundedText(maxCharacters: maxCharacters)
     }
 }
 
@@ -1099,17 +2191,21 @@ private struct CloudStatusEventPill: View {
 
 private struct CloudComposerModelMenu: View {
     var models: [AgentModel]
+    var runtimeMode: AgentRuntimeMode
     @Binding var selection: String?
 
     var body: some View {
         Menu {
             Button {
-                selection = nil
+                selection = preferredModelID
             } label: {
-                modelMenuLabel(title: "Default", isSelected: selection == nil)
+                modelMenuLabel(
+                    title: runtimeMode.preferredLaunchModelTitle,
+                    isSelected: selection == preferredModelID
+                )
             }
 
-            ForEach(NewChatModelPickerOptions.visibleModels(from: models)) { model in
+            ForEach(NewChatModelPickerOptions.visibleModels(from: models, excluding: preferredModelID)) { model in
                 Button {
                     selection = model.id
                 } label: {
@@ -1118,10 +2214,10 @@ private struct CloudComposerModelMenu: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "cloud")
+                Image(systemName: runtimeMode == .sdkBridge ? "message" : "cloud")
                     .font(.caption.weight(.semibold))
 
-                Text("Cloud")
+                Text(runtimeMode == .sdkBridge ? "Chat" : "Cloud")
                     .font(.caption.weight(.medium))
 
                 Rectangle()
@@ -1145,15 +2241,20 @@ private struct CloudComposerModelMenu: View {
         .menuIndicator(.hidden)
         .tint(.secondary)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Select Cloud Agent model. Current model \(modelTitle)")
+        .accessibilityLabel("Select Cursor model. Current model \(modelTitle)")
     }
 
     private var modelTitle: String {
-        guard let selection else { return "Default" }
-        if let model = models.first(where: { $0.id == selection }) {
+        let modelID = runtimeMode.normalizedLaunchModelID(selection)
+        guard let modelID else { return runtimeMode.preferredLaunchModelTitle }
+        if let model = models.first(where: { $0.id == modelID }) {
             return model.displayName
         }
-        return selection
+        return modelID
+    }
+
+    private var preferredModelID: String? {
+        runtimeMode.preferredLaunchModelID
     }
 
     private func modelMenuLabel(title: String, isSelected: Bool) -> some View {
@@ -1175,11 +2276,13 @@ private struct CloudAvatar: View {
 }
 
 private struct CloudRunListeningRow: View {
+    var runtimeMode: AgentRuntimeMode
+
     var body: some View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
-            Text("Listening for Cursor events")
+            Text(runtimeMode == .sdkBridge ? "Waiting for Cursor updates" : "Listening for Cursor events")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
@@ -1191,18 +2294,27 @@ private struct CloudRunListeningRow: View {
 
 private struct CloudRunProgressBar: View {
     var status: RunStatus
+    var runtimeMode: AgentRuntimeMode
+    var hasQueuedFollowUp: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-            Text(status == .creating ? "Starting Cloud Agent" : "Cloud Agent running")
+            Text(statusText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
+    }
+
+    private var statusText: String {
+        if hasQueuedFollowUp {
+            return "Follow-up queued for the next turn"
+        }
+        return status == .creating ? "Starting \(runtimeMode.title)" : "\(runtimeMode.title) running"
     }
 }
 
@@ -1226,6 +2338,13 @@ private extension View {
                 .background(.ultraThinMaterial, in: shape)
                 .overlay(shape.stroke(Color(uiColor: .separator).opacity(0.26), lineWidth: 0.5))
         }
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -1399,5 +2518,32 @@ private struct ArtifactPreviewView: View {
         let clipped = data.prefix(maxBytes)
         let text = String(decoding: clipped, as: UTF8.self)
         return data.count > maxBytes ? text + "\n..." : text
+    }
+}
+
+private extension String {
+    var timelineStableIDFragment: String {
+        let flattened = replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        let normalized = String(flattened.prefix(48))
+            .filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        return normalized.isEmpty ? "item" : String(normalized.prefix(48))
+    }
+
+    func timelineSingleLinePreview(maxCharacters: Int) -> String {
+        let flattened = replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return flattened.timelineBoundedText(maxCharacters: maxCharacters)
+    }
+
+    func timelineBoundedText(maxCharacters: Int) -> String {
+        guard count > maxCharacters else { return self }
+        return String(prefix(maxCharacters)).trimmingCharacters(in: .whitespacesAndNewlines)
+            + "\n\nDetails truncated for smoother chat performance."
     }
 }

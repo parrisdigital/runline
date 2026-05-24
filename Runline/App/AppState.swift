@@ -10,14 +10,16 @@ final class AppState {
     private var enterpriseProvider: EnterpriseDataProvider?
     private let apiKeyStore: APIKeyStore
     private let enterpriseAPIKeyStore: APIKeyStore
+    private let sdkBridgeAuthStore: APIKeyStore
     private let appCache: LocalAppCache
     private let providerFactory: @MainActor (String) throws -> AgentProvider
+    private var connectedAPIKey: String?
     private var hasRestoredConnection = false
     private var observingRunIDs: Set<AgentRun.ID> = []
     private var streamExpiredRunIDs: Set<AgentRun.ID> = []
     private var artifactDownloadsByKey: [String: ArtifactDownload] = [:]
 
-    var selectedTab: AppTab = .chats
+    var selectedTab: AppTab = .cursorChat
     var account: ProviderAccount?
     var enterpriseAccount: ProviderAccount?
     var repositories: [Repository] = []
@@ -37,6 +39,7 @@ final class AppState {
     var isLoading = false
     var isLaunching = false
     var isRefreshing = false
+    var isCheckingSDKBridge = false
     var errorMessage: String?
     var statusMessage: String?
     var launchDraft: AgentLaunchDraft
@@ -45,6 +48,7 @@ final class AppState {
         provider: AgentProvider? = nil,
         apiKeyStore: APIKeyStore = KeychainAPIKeyStore(),
         enterpriseAPIKeyStore: APIKeyStore = KeychainAPIKeyStore(account: .cursorEnterpriseAdmin),
+        sdkBridgeAuthStore: APIKeyStore = KeychainAPIKeyStore(account: .sdkBridgeAuth),
         appCache: LocalAppCache = LocalAppCache(),
         providerFactory: @escaping @MainActor (String) throws -> AgentProvider = { try CursorAgentProvider(apiKey: $0) }
     ) {
@@ -52,12 +56,14 @@ final class AppState {
         enterpriseProvider = provider as? EnterpriseDataProvider
         self.apiKeyStore = apiKeyStore
         self.enterpriseAPIKeyStore = enterpriseAPIKeyStore
+        self.sdkBridgeAuthStore = sdkBridgeAuthStore
         self.appCache = appCache
         self.providerFactory = providerFactory
         launchDraft = AgentLaunchDraft(
             prompt: AgentPrompt(text: ""),
             modelID: nil,
             source: .repository(url: URL(string: "https://github.com/owner/repository")!, startingRef: nil),
+            runtimeMode: .cloud,
             branchName: nil,
             autoGenerateBranch: true,
             autoCreatePullRequest: true,
@@ -75,6 +81,14 @@ final class AppState {
 
     var isConnected: Bool {
         account != nil
+    }
+
+    var isSDKBridgeEnabled: Bool {
+        SDKBridgePreferences.isEnabled()
+    }
+
+    var sdkBridgeURLString: String {
+        SDKBridgePreferences.baseURLString()
     }
 
     var activeAgents: [Agent] {
@@ -95,11 +109,16 @@ final class AppState {
         guard launchDraft.prompt.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
             return false
         }
+        if launchDraft.runtimeMode == .sdkBridge {
+            guard SDKBridgePreferences.configuredBaseURL() != nil else { return false }
+        }
         if !launchDraft.autoGenerateBranch,
            launchDraft.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
             return false
         }
         switch launchDraft.source {
+        case .general:
+            guard launchDraft.runtimeMode == .sdkBridge else { return false }
         case .repository(let url, _):
             guard Self.isUsableRepositoryURL(url) else { return false }
         case .pullRequest(let url):
@@ -143,10 +162,12 @@ final class AppState {
             }
             provider = cursorProvider
             enterpriseProvider = cursorProvider as? EnterpriseDataProvider
+            connectedAPIKey = trimmedKey
             account = validatedAccount
         } catch {
             provider = nil
             enterpriseProvider = nil
+            connectedAPIKey = nil
             account = nil
             handleError(error)
             isLoading = false
@@ -171,6 +192,7 @@ final class AppState {
         try? appCache.clear()
         provider = nil
         enterpriseProvider = nil
+        connectedAPIKey = nil
         account = nil
         enterpriseAccount = nil
         repositories = []
@@ -184,7 +206,48 @@ final class AppState {
         endpointPageOverrides = [:]
         notificationPreferences = NotificationPreferences()
         deviceTokenRegistration = nil
-        selectedTab = .chats
+        selectedTab = .cursorChat
+    }
+
+    func setSDKBridgeEnabled(_ isEnabled: Bool) {
+        SDKBridgePreferences.setEnabled(isEnabled)
+        if !isEnabled, launchDraft.runtimeMode == .sdkBridge {
+            launchDraft.applyRuntimeMode(.cloud)
+        }
+        saveCachedState()
+    }
+
+    func setSDKBridgeURLString(_ value: String) {
+        SDKBridgePreferences.setBaseURLString(value)
+        saveCachedState()
+    }
+
+    func saveSDKBridgeSecret(_ value: String) {
+        do {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                try sdkBridgeAuthStore.deleteAPIKey()
+            } else {
+                try sdkBridgeAuthStore.saveAPIKey(trimmed)
+            }
+            statusMessage = "SDK Bridge settings saved."
+        } catch {
+            errorMessage = "Could not save SDK Bridge settings."
+        }
+    }
+
+    func testSDKBridgeConnection() async {
+        isCheckingSDKBridge = true
+        errorMessage = nil
+        defer { isCheckingSDKBridge = false }
+
+        do {
+            let bridgeProvider = try agentProvider(for: .sdkBridge)
+            _ = try await bridgeProvider.validateConnection()
+            statusMessage = "SDK Bridge connection verified."
+        } catch {
+            handleError(error)
+        }
     }
 
     func connectEnterpriseAPIKey(apiKey: String, shouldPersist: Bool = true) async {
@@ -239,10 +302,37 @@ final class AppState {
             refreshError = refreshError ?? error
         }
 
+        let existingAgentsByID = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0) })
+        let existingSDKAgents = agents.filter { $0.runtimeMode == .sdkBridge }
+        let existingCloudAgents = agents.filter { $0.runtimeMode == .cloud }
+        var mergedAgents: [Agent]
+
         do {
-            agents = try await provider.listAgents()
+            let cloudAgents = try await provider.listAgents()
+            mergedAgents = cloudAgents.map { reconciledIncomingAgent($0, existing: existingAgentsByID[$0.id]) }
         } catch {
             refreshError = refreshError ?? error
+            mergedAgents = existingCloudAgents
+        }
+
+        do {
+            if let bridgeProvider = try? agentProvider(for: .sdkBridge) {
+                let bridgeAgents = try await bridgeProvider.listAgents()
+                for bridgeAgent in bridgeAgents {
+                    let resolvedBridgeAgent = reconciledIncomingAgent(bridgeAgent, existing: existingAgentsByID[bridgeAgent.id])
+                    if let existingIndex = mergedAgents.firstIndex(where: { $0.id == bridgeAgent.id }) {
+                        mergedAgents[existingIndex] = resolvedBridgeAgent
+                    } else {
+                        mergedAgents.append(resolvedBridgeAgent)
+                    }
+                }
+            }
+        } catch {
+            refreshError = refreshError ?? error
+        }
+
+        agents = mergedAgents + existingSDKAgents.filter { sdkAgent in
+            !mergedAgents.contains { $0.id == sdkAgent.id }
         }
 
         if let firstRepo = repositories.first, selectedRepository == nil {
@@ -254,15 +344,20 @@ final class AppState {
             launchDraft.source = .repository(url: url, startingRef: nil)
         }
         if launchDraft.modelID == nil {
-            launchDraft.modelID = models.first?.id
+            launchDraft.modelID = launchDraft.runtimeMode == .sdkBridge
+                ? CursorChatModelPreference.selectedModelID()
+                : models.first?.id
         }
 
         for agent in agents {
             do {
-                let runs = try await provider.listRuns(agentID: agent.id)
+                let runs = try await agentProvider(for: agent).listRuns(agentID: agent.id)
                 runsByAgentID[agent.id] = runs
                 if let latestRun = runs.first, latestRun.status.isTerminal {
-                    eventsByRunID[latestRun.id] = (try? await provider.streamEvents(agentID: agent.id, runID: latestRun.id)) ?? []
+                    if let preloadedEvents = try? await agentProvider(for: agent).streamEvents(agentID: agent.id, runID: latestRun.id),
+                       !preloadedEvents.isEmpty {
+                        mergeEvents(preloadedEvents, runID: latestRun.id)
+                    }
                 }
             } catch {
                 if isNotFound(error) {
@@ -270,6 +365,7 @@ final class AppState {
                 }
             }
         }
+        refreshAutomaticConversationTitles()
         saveCachedState()
 
         if let refreshError {
@@ -307,7 +403,11 @@ final class AppState {
     }
 
     func refreshAgentDetail(agentID: Agent.ID) async {
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            guard let agent = agent(id: agentID) else { throw CursorAPIError.missingProvider }
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
         }
@@ -333,7 +433,10 @@ final class AppState {
     }
 
     func loadEvents(for agent: Agent, run: AgentRun) async {
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
         }
@@ -359,7 +462,10 @@ final class AppState {
         streamExpiredRunIDs.remove(run.id)
         defer { observingRunIDs.remove(run.id) }
 
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
         }
@@ -370,15 +476,20 @@ final class AppState {
         while !Task.isCancelled {
             do {
                 let events = try await provider.streamEvents(agentID: agent.id, runID: currentRun.id)
+                var shouldSaveSnapshot = false
                 if events.isEmpty {
                     emptyRefreshCount += 1
                 } else {
                     emptyRefreshCount = 0
                     mergeEvents(events, runID: currentRun.id)
+                    shouldSaveSnapshot = true
                 }
 
                 let runs = try await provider.listRuns(agentID: agent.id)
-                runsByAgentID[agent.id] = runs
+                if runsByAgentID[agent.id, default: []] != runs {
+                    runsByAgentID[agent.id] = runs
+                    shouldSaveSnapshot = true
+                }
                 if let refreshedRun = runs.first(where: { $0.id == currentRun.id }) {
                     currentRun = refreshedRun
                 }
@@ -396,7 +507,9 @@ final class AppState {
                     return
                 }
 
-                saveCachedState()
+                if shouldSaveSnapshot {
+                    saveCachedState()
+                }
                 try await Task.sleep(nanoseconds: 3_000_000_000)
             } catch {
                 if isCancellation(error) {
@@ -431,7 +544,10 @@ final class AppState {
         if !forceRefresh, let cached = artifactsByAgentID[agent.id] {
             return cached
         }
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return []
         }
@@ -452,7 +568,11 @@ final class AppState {
     }
 
     func downloadArtifact(agentID: Agent.ID, path: String) async -> URL? {
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            guard let agent = agent(id: agentID) else { throw CursorAPIError.missingProvider }
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return nil
         }
@@ -470,33 +590,85 @@ final class AppState {
         }
     }
 
-    func launchAgent() async {
+    @discardableResult
+    func launchAgent() async -> AgentLaunchResult? {
         guard canLaunchAgent else {
             errorMessage = "Select a repository and add instructions before launching an agent."
-            return
+            return nil
         }
 
         isLaunching = true
         errorMessage = nil
+        var draft = launchDraft
+        draft.modelID = draft.runtimeMode == .sdkBridge
+            ? CursorChatModelPreference.resolvedModelID(draft.modelID)
+            : draft.runtimeMode.normalizedLaunchModelID(draft.modelID)
+        defer { isLaunching = false }
+
         do {
-            guard let provider else {
-                throw CursorAPIError.missingProvider
-            }
-            let result = try await provider.createAgent(launchDraft)
-            agents.insert(result.agent, at: 0)
-            runsByAgentID[result.agent.id] = [result.run]
-            eventsByRunID[result.run.id] = []
-            focusedAgentID = result.agent.id
-            selectedTab = .chats
+            let provider = try agentProvider(for: draft.runtimeMode)
+            let result = try await provider.createAgent(draft)
+            let initialEvents = initialLocalEvents(runID: result.run.id, prompt: draft.prompt)
+            let launchedAgent = agentWithAutomaticConversationTitle(result.agent, events: initialEvents)
+            agents.insert(launchedAgent, at: 0)
+            runsByAgentID[launchedAgent.id] = [result.run]
+            eventsByRunID[result.run.id] = initialEvents
+            focusedAgentID = launchedAgent.id
+            selectedTab = AppTab(runtimeMode: launchedAgent.runtimeMode)
             saveCachedState()
+            return AgentLaunchResult(agent: launchedAgent, run: result.run)
         } catch {
             handleError(error)
+            return nil
         }
-        isLaunching = false
     }
 
     func createFollowUp(agent: Agent, text: String) async {
         await createFollowUp(agent: agent, prompt: AgentPrompt(text: text))
+    }
+
+    func workspaceHandoffDraft(
+        from agent: Agent,
+        events: [AgentStreamEvent],
+        repository: Repository,
+        branch: String?,
+        instruction: String
+    ) -> AgentLaunchDraft {
+        let startingRef = branch?.nilIfBlank ?? repository.defaultBranch.nilIfBlank
+        return AgentLaunchDraft(
+            prompt: AgentPrompt(
+                text: WorkspaceHandoffPromptBuilder.prompt(
+                    from: events,
+                    instruction: instruction,
+                    sourceTitle: agent.name
+                )
+            ),
+            modelID: agent.modelID,
+            source: .repository(url: repository.url, startingRef: startingRef),
+            runtimeMode: .sdkBridge,
+            branchName: nil,
+            autoGenerateBranch: true,
+            autoCreatePullRequest: false,
+            skipReviewerRequest: false
+        )
+    }
+
+    @discardableResult
+    func createWorkspaceFromGeneralChat(
+        agent: Agent,
+        events: [AgentStreamEvent],
+        repository: Repository,
+        branch: String?,
+        instruction: String
+    ) async -> AgentLaunchResult? {
+        launchDraft = workspaceHandoffDraft(
+            from: agent,
+            events: events,
+            repository: repository,
+            branch: branch,
+            instruction: instruction
+        )
+        return await launchAgent()
     }
 
     func createFollowUp(
@@ -504,7 +676,10 @@ final class AppState {
         prompt: AgentPrompt,
         modelID: String? = nil
     ) async {
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
         }
@@ -525,7 +700,7 @@ final class AppState {
             )
             let refreshedRuns = (try? await provider.listRuns(agentID: agent.id)) ?? [run] + runsByAgentID[agent.id, default: []]
             runsByAgentID[agent.id] = refreshedRuns
-            eventsByRunID[run.id] = []
+            eventsByRunID[run.id] = initialLocalEvents(runID: run.id, prompt: followUpPrompt)
             saveCachedState()
         } catch {
             handleError(error)
@@ -533,7 +708,10 @@ final class AppState {
     }
 
     func cancel(agent: Agent, run: AgentRun) async {
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
         }
@@ -547,14 +725,17 @@ final class AppState {
     }
 
     func archive(agent: Agent) async {
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
         }
         do {
             try await provider.archiveAgent(agentID: agent.id)
             updateAgent(agent.id) { $0.status = .archived }
-            selectedTab = .chats
+            selectedTab = AppTab(runtimeMode: agent.runtimeMode)
             saveCachedState()
         } catch {
             handleError(error)
@@ -562,7 +743,10 @@ final class AppState {
     }
 
     func unarchive(agent: Agent) async {
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
         }
@@ -576,7 +760,10 @@ final class AppState {
     }
 
     func delete(agent: Agent) async {
-        guard let provider else {
+        let provider: AgentProvider
+        do {
+            provider = try agentProvider(for: agent)
+        } catch {
             errorMessage = CursorAPIError.missingProvider.userMessage
             return
         }
@@ -585,7 +772,7 @@ final class AppState {
             agents.removeAll { $0.id == agent.id }
             runsByAgentID.removeValue(forKey: agent.id)
             artifactsByAgentID.removeValue(forKey: agent.id)
-            selectedTab = .chats
+            selectedTab = AppTab(runtimeMode: agent.runtimeMode)
             saveCachedState()
         } catch {
             handleError(error)
@@ -678,10 +865,10 @@ final class AppState {
         switch deepLink {
         case .agent(let agentID):
             focusedAgentID = agentID
-            selectedTab = .chats
+            selectedTab = tab(forAgentID: agentID)
         case .run(let agentID, _):
             focusedAgentID = agentID
-            selectedTab = .chats
+            selectedTab = tab(forAgentID: agentID)
         }
     }
 
@@ -709,17 +896,111 @@ final class AppState {
         mutate(&agents[index])
     }
 
+    private func tab(forAgentID agentID: Agent.ID) -> AppTab {
+        guard let agent = agent(id: agentID) else { return .cursorCloud }
+        return AppTab(runtimeMode: agent.runtimeMode)
+    }
+
     private func effectiveEndpoint(_ endpoint: CursorAPIEndpoint) -> CursorAPIEndpoint {
         guard endpoint.supportsPagination else { return endpoint }
         return endpoint.withPage(page(for: endpoint))
     }
 
-    private func upsertAgent(_ agent: Agent) {
-        if let index = agents.firstIndex(where: { $0.id == agent.id }) {
-            agents[index] = agent
-        } else {
-            agents.insert(agent, at: 0)
+    private func agentProvider(for agent: Agent) throws -> AgentProvider {
+        try agentProvider(for: agent.runtimeMode)
+    }
+
+    private func agentProvider(for runtimeMode: AgentRuntimeMode) throws -> AgentProvider {
+        switch runtimeMode {
+        case .cloud:
+            guard let provider else { throw CursorAPIError.missingProvider }
+            return provider
+        case .sdkBridge:
+            guard let baseURL = SDKBridgePreferences.configuredBaseURL() else {
+                throw SDKBridgeError.invalidURL
+            }
+            let storedAPIKey = try apiKeyStore.loadAPIKey()
+            guard let apiKey = connectedAPIKey ?? storedAPIKey else {
+                throw CursorAPIError.missingProvider
+            }
+            return try CursorSDKBridgeProvider(
+                apiKey: apiKey,
+                bridgeBaseURL: baseURL,
+                bridgeSecret: try sdkBridgeAuthStore.loadAPIKey()
+            )
         }
+    }
+
+    private func upsertAgent(_ agent: Agent) {
+        let resolvedAgent = reconciledIncomingAgent(agent, existing: self.agent(id: agent.id))
+        if let index = agents.firstIndex(where: { $0.id == resolvedAgent.id }) {
+            agents[index] = resolvedAgent
+        } else {
+            agents.insert(resolvedAgent, at: 0)
+        }
+    }
+
+    private func reconciledIncomingAgent(_ incomingAgent: Agent, existing: Agent?) -> Agent {
+        guard incomingAgent.runtimeMode == .sdkBridge,
+              let existing,
+              existing.runtimeMode == .sdkBridge,
+              ConversationTitleGenerator.isPlaceholderTitle(incomingAgent.name, repository: incomingAgent.repository),
+              !ConversationTitleGenerator.isPlaceholderTitle(existing.name, repository: existing.repository) else {
+            return incomingAgent
+        }
+
+        var resolvedAgent = incomingAgent
+        resolvedAgent.name = existing.name
+        return resolvedAgent
+    }
+
+    private func refreshAutomaticConversationTitles() {
+        for runID in eventsByRunID.keys {
+            refreshAutomaticConversationTitle(runID: runID)
+        }
+    }
+
+    private func refreshAutomaticConversationTitle(runID: AgentRun.ID) {
+        guard let agentIndex = agents.firstIndex(where: { agent in
+            runsByAgentID[agent.id, default: []].contains { $0.id == runID }
+        }),
+              agents[agentIndex].runtimeMode == .sdkBridge else {
+            return
+        }
+
+        let events = eventsByRunID[runID, default: []]
+        guard let title = ConversationTitleGenerator.title(from: events, repository: agents[agentIndex].repository) else {
+            return
+        }
+
+        let firstPrompt = events.first { $0.kind == .user }?.message
+        guard ConversationTitleGenerator.shouldReplace(
+            currentTitle: agents[agentIndex].name,
+            with: title,
+            repository: agents[agentIndex].repository,
+            firstPrompt: firstPrompt
+        ) else {
+            return
+        }
+
+        agents[agentIndex].name = title
+    }
+
+    private func agentWithAutomaticConversationTitle(_ agent: Agent, events: [AgentStreamEvent]) -> Agent {
+        guard agent.runtimeMode == .sdkBridge,
+              let title = ConversationTitleGenerator.title(from: events, repository: agent.repository),
+              ConversationTitleGenerator.shouldReplace(
+                currentTitle: agent.name,
+                with: title,
+                repository: agent.repository,
+                firstPrompt: events.first { $0.kind == .user }?.message
+              ) else {
+            return agent
+        }
+
+        var updatedAgent = agent
+        updatedAgent.name = title
+        return updatedAgent
     }
 
     private func updateRun(_ run: AgentRun, agentID: Agent.ID) {
@@ -735,13 +1016,45 @@ final class AppState {
     private func mergeEvents(_ events: [AgentStreamEvent], runID: AgentRun.ID) {
         guard events.isEmpty == false else { return }
         var existing = eventsByRunID[runID, default: []]
+        if events.contains(where: { $0.kind == .user }) {
+            existing.removeAll { isLocalUserEvent($0, runID: runID) }
+        }
         let knownIDs = Set(existing.map(\.id))
         existing.append(contentsOf: events.filter { knownIDs.contains($0.id) == false })
         eventsByRunID[runID] = existing
+        refreshAutomaticConversationTitle(runID: runID)
+    }
+
+    private func initialLocalEvents(runID: AgentRun.ID, prompt: AgentPrompt) -> [AgentStreamEvent] {
+        let text = prompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return [] }
+        return [
+            AgentStreamEvent(
+                id: localUserEventID(runID: runID),
+                runID: runID,
+                kind: .user,
+                title: "User",
+                message: text,
+                timestamp: "now"
+            )
+        ]
+    }
+
+    private func isLocalUserEvent(_ event: AgentStreamEvent, runID: AgentRun.ID) -> Bool {
+        event.kind == .user && event.id == localUserEventID(runID: runID)
+    }
+
+    private func localUserEventID(runID: AgentRun.ID) -> String {
+        "\(runID)-local-user"
     }
 
     private func repository(from source: AgentSource) -> Repository {
         switch source {
+        case .general:
+            return Self.repository(
+                from: URL(string: "https://cursor.com/general-chat")!,
+                defaultBranch: nil
+            )
         case .repository(let url, let startingRef):
             return repositories.first(where: { $0.url == url })
                 ?? Self.repository(from: url, defaultBranch: startingRef)
@@ -778,6 +1091,9 @@ final class AppState {
     }
 
     private func userMessage(from error: Error) -> String {
+        if let bridgeError = error as? SDKBridgeError {
+            return bridgeError.localizedDescription
+        }
         if let apiError = error as? CursorAPIError {
             return apiError.userMessage
         }
@@ -838,7 +1154,10 @@ final class AppState {
     }
 
     private func isNotFound(_ error: Error) -> Bool {
-        (error as? CursorAPIError)?.isNotFound == true
+        if case SDKBridgeError.requestFailed(statusCode: 404, _) = error {
+            return true
+        }
+        return (error as? CursorAPIError)?.isNotFound == true
     }
 
     private func isStreamExpired(_ error: Error) -> Bool {
@@ -846,6 +1165,9 @@ final class AppState {
     }
 
     private func statusCode(from error: Error) -> Int {
+        if case let SDKBridgeError.requestFailed(statusCode, _) = error {
+            return statusCode
+        }
         if case let CursorAPIError.requestFailed(statusCode, _) = error {
             return statusCode
         }

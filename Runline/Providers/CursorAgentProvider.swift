@@ -227,6 +227,8 @@ final class CursorAgentProvider: AgentProvider, EnterpriseDataProvider {
     private func makeCreateAgentRequest(from draft: AgentLaunchDraft) throws -> CursorCreateAgentRequest {
         let repo: CursorLaunchRepositoryRequest
         switch draft.source {
+        case .general:
+            throw CursorAPIError.requestFailed(statusCode: 400, message: "Cursor Cloud requires a repository or pull request.")
         case .repository(let url, let startingRef):
             repo = CursorLaunchRepositoryRequest(url: url.absoluteString, startingRef: startingRef?.nilIfBlank, prUrl: nil)
         case .pullRequest(let url):

@@ -63,12 +63,85 @@ final class ChatTimelineBuilderTests: XCTestCase {
         XCTAssertEqual(items.map(\.message), ["Run the same check again.", "Confirm the final output."])
     }
 
+    func testParsesUnifiedDiffIntoWorkspaceChangeSet() {
+        let diff = """
+        diff --git a/Runline/App/AppTab.swift b/Runline/App/AppTab.swift
+        index 1111111..2222222 100644
+        --- a/Runline/App/AppTab.swift
+        +++ b/Runline/App/AppTab.swift
+        @@ -1,2 +1,3 @@
+         import SwiftUI
+        +enum Runtime {}
+        -// old
+        """
+        let events = [
+            event(id: "tool-1", kind: .toolCall, title: "Tool Call", message: diff),
+        ]
+
+        let items = ChatTimelineBuilder.items(from: events)
+
+        XCTAssertEqual(items.count, 1)
+        let changeSet = try? XCTUnwrap(items[0].changeSet)
+        XCTAssertEqual(changeSet?.changes.count, 1)
+        XCTAssertEqual(changeSet?.changes.first?.path, "Runline/App/AppTab.swift")
+        XCTAssertEqual(changeSet?.changes.first?.additions, 1)
+        XCTAssertEqual(changeSet?.changes.first?.deletions, 1)
+    }
+
+    func testParsesStructuredFileChangePayloadIntoWorkspaceChangeSet() {
+        let payload: JSONValue = .object([
+            "result": .object([
+                "files": .array([
+                    .object([
+                        "path": .string("Runline/Features/ChatsView.swift"),
+                        "action": .string("modified"),
+                        "additions": .number(12),
+                        "deletions": .number(3),
+                    ]),
+                ]),
+            ]),
+        ])
+        let events = [
+            event(
+                id: "tool-structured",
+                kind: .toolCall,
+                title: "Tool Call",
+                message: "edit_file: completed",
+                rawPayload: payload
+            ),
+        ]
+
+        let items = ChatTimelineBuilder.items(from: events)
+
+        XCTAssertEqual(items.count, 1)
+        let changeSet = try? XCTUnwrap(items[0].changeSet)
+        XCTAssertEqual(changeSet?.changes.first?.path, "Runline/Features/ChatsView.swift")
+        XCTAssertEqual(changeSet?.changes.first?.action, .modified)
+        XCTAssertEqual(changeSet?.changes.first?.additions, 12)
+        XCTAssertEqual(changeSet?.changes.first?.deletions, 3)
+    }
+
+    func testBoundsLargeActivityMessagesForMobileRendering() {
+        let largeOutput = String(repeating: "0123456789", count: 1_200)
+        let events = [
+            event(id: "tool-large", kind: .toolCall, title: "Tool Call", message: largeOutput),
+        ]
+
+        let items = ChatTimelineBuilder.items(from: events)
+
+        XCTAssertEqual(items.count, 1)
+        XCTAssertLessThanOrEqual(items[0].activityPreviewText.count, 220)
+        XCTAssertLessThanOrEqual(items[0].activityDetailText.count, 6_100)
+        XCTAssertTrue(items[0].message.contains("Details truncated"))
+    }
+
     private func event(
         id: String,
         kind: StreamEventKind,
         title: String,
         message: String,
-        timestamp: String = "now"
+        timestamp: String = "now",
+        rawPayload: JSONValue? = nil
     ) -> AgentStreamEvent {
         AgentStreamEvent(
             id: id,
@@ -76,7 +149,8 @@ final class ChatTimelineBuilderTests: XCTestCase {
             kind: kind,
             title: title,
             message: message,
-            timestamp: timestamp
+            timestamp: timestamp,
+            rawPayload: rawPayload
         )
     }
 }

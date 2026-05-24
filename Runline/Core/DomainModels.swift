@@ -1,6 +1,106 @@
 import Foundation
 import SwiftUI
 
+enum AgentRuntimeMode: String, CaseIterable, Identifiable, Hashable, Codable {
+    case cloud = "cloud"
+    case sdkBridge = "sdk_bridge"
+
+    static let cursorChatPreferredModelID = "composer-2.5"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .cloud:
+            "Cursor Cloud"
+        case .sdkBridge:
+            "Cursor Chat"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .cloud:
+            "Cloud"
+        case .sdkBridge:
+            "Chat"
+        }
+    }
+
+    var detailSymbolName: String {
+        switch self {
+        case .cloud:
+            "cloud.fill"
+        case .sdkBridge:
+            "message.fill"
+        }
+    }
+
+    var detailTint: Color {
+        switch self {
+        case .cloud:
+            Color(uiColor: .systemBlue)
+        case .sdkBridge:
+            Color(uiColor: .systemGreen)
+        }
+    }
+
+    var preferredLaunchModelID: String? {
+        switch self {
+        case .cloud:
+            nil
+        case .sdkBridge:
+            Self.cursorChatPreferredModelID
+        }
+    }
+
+    var preferredLaunchModelTitle: String {
+        preferredLaunchModelID ?? "Default"
+    }
+
+    func normalizedLaunchModelID(_ modelID: String?) -> String? {
+        let trimmed = modelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty, !trimmed.isCursorDefaultModelIdentifier else {
+            return preferredLaunchModelID
+        }
+        return trimmed
+    }
+
+    func launchModelIDAfterSwitch(from previousMode: AgentRuntimeMode, currentModelID: String?) -> String? {
+        let trimmed = currentModelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self == .cloud,
+           previousMode == .sdkBridge,
+           trimmed == Self.cursorChatPreferredModelID {
+            return nil
+        }
+        return normalizedLaunchModelID(currentModelID)
+    }
+}
+
+enum CursorChatModelPreference {
+    static let selectedModelIDKey = "runline.cursorChat.selectedModelID"
+
+    static func normalizedModelID(_ modelID: String?) -> String {
+        AgentRuntimeMode.sdkBridge.normalizedLaunchModelID(modelID) ?? AgentRuntimeMode.cursorChatPreferredModelID
+    }
+
+    static func selectedModelID(defaults: UserDefaults = .standard) -> String {
+        normalizedModelID(defaults.string(forKey: selectedModelIDKey))
+    }
+
+    static func resolvedModelID(_ modelID: String?, defaults: UserDefaults = .standard) -> String {
+        let trimmed = modelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty, !trimmed.isCursorDefaultModelIdentifier else {
+            return selectedModelID(defaults: defaults)
+        }
+        return normalizedModelID(trimmed)
+    }
+
+    static func saveSelectedModelID(_ modelID: String?, defaults: UserDefaults = .standard) {
+        defaults.set(normalizedModelID(modelID), forKey: selectedModelIDKey)
+    }
+}
+
 struct ProviderAccount: Identifiable, Hashable, Codable {
     var id: String { apiKeyName }
     var apiKeyName: String
@@ -19,6 +119,10 @@ struct Repository: Identifiable, Hashable, Codable {
 
     var displayName: String {
         "\(owner)/\(name)"
+    }
+
+    var isGeneralChat: Bool {
+        url.absoluteString.contains("general-chat")
     }
 }
 
@@ -113,6 +217,48 @@ struct Agent: Identifiable, Hashable, Codable {
     var updatedAtDescription: String
     var artifactCount: Int
     var pullRequestURL: URL?
+    var runtimeMode: AgentRuntimeMode
+
+    init(
+        id: String,
+        name: String,
+        status: AgentStatus,
+        repository: Repository,
+        branchName: String,
+        modelID: String,
+        latestRunID: String,
+        updatedAtDescription: String,
+        artifactCount: Int,
+        pullRequestURL: URL?,
+        runtimeMode: AgentRuntimeMode = .cloud
+    ) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.repository = repository
+        self.branchName = branchName
+        self.modelID = modelID
+        self.latestRunID = latestRunID
+        self.updatedAtDescription = updatedAtDescription
+        self.artifactCount = artifactCount
+        self.pullRequestURL = pullRequestURL
+        self.runtimeMode = runtimeMode
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        status = try container.decode(AgentStatus.self, forKey: .status)
+        repository = try container.decode(Repository.self, forKey: .repository)
+        branchName = try container.decode(String.self, forKey: .branchName)
+        modelID = try container.decode(String.self, forKey: .modelID)
+        latestRunID = try container.decode(String.self, forKey: .latestRunID)
+        updatedAtDescription = try container.decode(String.self, forKey: .updatedAtDescription)
+        artifactCount = try container.decode(Int.self, forKey: .artifactCount)
+        pullRequestURL = try container.decodeIfPresent(URL.self, forKey: .pullRequestURL)
+        runtimeMode = try container.decodeIfPresent(AgentRuntimeMode.self, forKey: .runtimeMode) ?? .cloud
+    }
 }
 
 struct AgentRun: Identifiable, Hashable, Codable {
@@ -182,6 +328,7 @@ struct AgentPrompt: Hashable, Codable {
 }
 
 enum AgentSource: Hashable, Codable {
+    case general
     case repository(url: URL, startingRef: String?)
     case pullRequest(url: URL)
 }
@@ -190,6 +337,7 @@ struct AgentLaunchDraft: Hashable, Codable {
     var prompt: AgentPrompt
     var modelID: String?
     var source: AgentSource
+    var runtimeMode: AgentRuntimeMode
     var branchName: String?
     var autoGenerateBranch: Bool
     var autoCreatePullRequest: Bool
@@ -199,6 +347,7 @@ struct AgentLaunchDraft: Hashable, Codable {
         prompt: AgentPrompt,
         modelID: String?,
         source: AgentSource,
+        runtimeMode: AgentRuntimeMode = .cloud,
         branchName: String?,
         autoGenerateBranch: Bool,
         autoCreatePullRequest: Bool,
@@ -207,10 +356,17 @@ struct AgentLaunchDraft: Hashable, Codable {
         self.prompt = prompt
         self.modelID = modelID
         self.source = source
+        self.runtimeMode = runtimeMode
         self.branchName = branchName
         self.autoGenerateBranch = autoGenerateBranch
         self.autoCreatePullRequest = autoCreatePullRequest
         self.skipReviewerRequest = skipReviewerRequest
+    }
+
+    mutating func applyRuntimeMode(_ mode: AgentRuntimeMode) {
+        let previousMode = runtimeMode
+        runtimeMode = mode
+        modelID = mode.launchModelIDAfterSwitch(from: previousMode, currentModelID: modelID)
     }
 
     init(from decoder: Decoder) throws {
@@ -218,6 +374,7 @@ struct AgentLaunchDraft: Hashable, Codable {
         prompt = try container.decode(AgentPrompt.self, forKey: .prompt)
         modelID = try container.decodeIfPresent(String.self, forKey: .modelID)
         source = try container.decode(AgentSource.self, forKey: .source)
+        runtimeMode = try container.decodeIfPresent(AgentRuntimeMode.self, forKey: .runtimeMode) ?? .cloud
         branchName = try container.decodeIfPresent(String.self, forKey: .branchName)
         autoGenerateBranch = try container.decode(Bool.self, forKey: .autoGenerateBranch)
         autoCreatePullRequest = try container.decode(Bool.self, forKey: .autoCreatePullRequest)
@@ -259,6 +416,203 @@ struct AgentStreamEvent: Identifiable, Hashable, Codable {
     var title: String
     var message: String
     var timestamp: String
+    var rawPayload: JSONValue? = nil
+}
+
+enum ConversationTitleGenerator {
+    static func title(from prompt: String, repository: Repository) -> String? {
+        title(from: prompt, assistantMessage: nil, repository: repository)
+    }
+
+    static func title(from events: [AgentStreamEvent], repository: Repository) -> String? {
+        let firstPrompt = events.first { $0.kind == .user }?.message
+        let firstResponse = events.first { event in
+            switch event.kind {
+            case .assistant, .result:
+                !event.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            default:
+                false
+            }
+        }?.message
+
+        guard let firstPrompt else { return nil }
+        return title(from: firstPrompt, assistantMessage: firstResponse, repository: repository)
+    }
+
+    static func shouldReplace(currentTitle: String, with generatedTitle: String, repository: Repository, firstPrompt: String?) -> Bool {
+        let current = normalizedComparisonValue(currentTitle)
+        let generated = normalizedComparisonValue(generatedTitle)
+        guard !current.isEmpty, current != generated else { return current != generated }
+
+        if placeholderTitles(for: repository).contains(current) {
+            return true
+        }
+
+        if let firstPrompt,
+           let promptTitle = title(from: firstPrompt, repository: repository),
+           normalizedComparisonValue(promptTitle) == current {
+            return true
+        }
+
+        return false
+    }
+
+    static func isPlaceholderTitle(_ title: String, repository: Repository) -> Bool {
+        placeholderTitles(for: repository).contains(normalizedComparisonValue(title))
+    }
+
+    private static func title(from prompt: String, assistantMessage: String?, repository: Repository) -> String? {
+        if isGenericBuildPrompt(prompt) {
+            return "Next Project Ideas"
+        }
+
+        let source = preferredTitleSource(prompt: prompt, assistantMessage: assistantMessage)
+        let cleaned = cleanedTitleSource(source)
+        guard !cleaned.isEmpty else { return fallbackTitle(for: repository) }
+        return titleCased(cleaned)
+    }
+
+    private static func preferredTitleSource(prompt: String, assistantMessage: String?) -> String {
+        let promptText = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isGenericPrompt(promptText),
+           let assistantMessage,
+           !assistantMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return assistantMessage
+        }
+        return promptText
+    }
+
+    private static func cleanedTitleSource(_ value: String) -> String {
+        var text = value
+            .components(separatedBy: .newlines)
+            .first ?? value
+        text = text.replacingOccurrences(of: #"(?i)^["'`]*\s*(please\s+)?(can|could|would)\s+you\s+"#, with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: #"(?i)^["'`]*\s*(please\s+)?(help\s+me|i\s+need\s+you\s+to|i\s+want\s+to|let'?s|we\s+need\s+to)\s+"#, with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: #"(?i)\busing\s+(cursor|runline|the\s+app)\b"#, with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: #"["'`*_#>\[\]\(\)]"#, with: " ", options: .regularExpression)
+        text = text.replacingOccurrences(of: #"[.!?;:]+$"#, with: "", options: .regularExpression)
+        text = text
+            .components(separatedBy: CharacterSet.whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .prefix(7)
+            .joined(separator: " ")
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func titleCased(_ value: String) -> String {
+        value
+            .split(separator: " ")
+            .map { formattedWord(String($0)) }
+            .joined(separator: " ")
+    }
+
+    private static func formattedWord(_ word: String) -> String {
+        let trimmed = word.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        let lowercase = trimmed.lowercased()
+        let knownForms: [String: String] = [
+            "api": "API",
+            "sdk": "SDK",
+            "ui": "UI",
+            "ux": "UX",
+            "ios": "iOS",
+            "ipados": "iPadOS",
+            "macos": "macOS",
+            "github": "GitHub",
+            "gitlab": "GitLab",
+            "json": "JSON",
+            "sse": "SSE",
+            "pr": "PR",
+            "repo": "Repo"
+        ]
+        if let known = knownForms[lowercase] {
+            return known
+        }
+        if trimmed.contains(where: { $0.isUppercase }) && trimmed.dropFirst().contains(where: { $0.isLowercase }) {
+            return trimmed
+        }
+        guard let first = lowercase.first else { return trimmed }
+        return String(first).uppercased() + lowercase.dropFirst()
+    }
+
+    private static func isGenericBuildPrompt(_ value: String) -> Bool {
+        let normalized = normalizedComparisonValue(value)
+        return normalized.contains("what should") && normalized.contains("build")
+            || normalized.contains("what are we building")
+            || normalized.contains("project ideas")
+            || normalized.contains("next project")
+    }
+
+    private static func isGenericPrompt(_ value: String) -> Bool {
+        let normalized = normalizedComparisonValue(value)
+        return normalized.count < 18
+            || normalized == "hello"
+            || normalized == "hi"
+            || normalized == "hey"
+            || normalized.contains("what should")
+            || normalized.contains("what can")
+    }
+
+    private static func fallbackTitle(for repository: Repository) -> String? {
+        repository.isGeneralChat ? "General Chat" : repository.displayName
+    }
+
+    private static func placeholderTitles(for repository: Repository) -> Set<String> {
+        [
+            "",
+            "general chat",
+            "live workspace",
+            "live-workspace",
+            "new agent",
+            "new-agent",
+            "untitled chat",
+            normalizedComparisonValue(repository.displayName),
+            normalizedComparisonValue(repository.name),
+            normalizedComparisonValue(repository.url.lastPathComponent.replacingOccurrences(of: ".git", with: ""))
+        ]
+    }
+
+    private static func normalizedComparisonValue(_ value: String) -> String {
+        value
+            .lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+enum WorkspaceFileChangeAction: String, Hashable, Codable {
+    case added = "Added"
+    case modified = "Modified"
+    case deleted = "Deleted"
+    case renamed = "Renamed"
+    case unknown = "Changed"
+}
+
+struct WorkspaceFileChange: Identifiable, Hashable, Codable {
+    var id: String { path }
+    var path: String
+    var action: WorkspaceFileChangeAction
+    var additions: Int
+    var deletions: Int
+    var diff: String?
+}
+
+struct WorkspaceChangeSet: Identifiable, Hashable, Codable {
+    var id: String
+    var title: String
+    var changes: [WorkspaceFileChange]
+    var bodyText: String
+
+    var totalAdditions: Int {
+        changes.reduce(0) { $0 + $1.additions }
+    }
+
+    var totalDeletions: Int {
+        changes.reduce(0) { $0 + $1.deletions }
+    }
 }
 
 struct Artifact: Identifiable, Hashable, Codable {
@@ -291,6 +645,9 @@ struct ProviderCapabilities: Hashable, Codable {
     var supportsArchive = true
     var supportsDelete = true
     var supportsNativePullRequestReview = false
+    var supportsSDKBridge = false
+    var supportsLiveWorkspace = false
+    var supportsPRMetadata = true
 
     static let disconnected = ProviderCapabilities(
         supportsRepositoriesList: false,
@@ -301,6 +658,9 @@ struct ProviderCapabilities: Hashable, Codable {
         supportsAutoCreatePR: false,
         supportsArchive: false,
         supportsDelete: false,
-        supportsNativePullRequestReview: false
+        supportsNativePullRequestReview: false,
+        supportsSDKBridge: false,
+        supportsLiveWorkspace: false,
+        supportsPRMetadata: false
     )
 }
