@@ -1907,35 +1907,51 @@ private struct CloudActivityLog: View {
     var hiddenItemCount: Int
 
     var body: some View {
-        VStack(spacing: 0) {
-            if hiddenItemCount > 0 {
-                CloudActivityHiddenRow(count: hiddenItemCount)
+        HStack(alignment: .top, spacing: 12) {
+            CloudAvatar(systemName: groupSymbolName, tint: groupTint)
+                .padding(.top, 1)
 
-                if !items.isEmpty {
-                    Divider()
-                        .opacity(0.35)
-                        .padding(.leading, 46)
+            VStack(alignment: .leading, spacing: 6) {
+                if hiddenItemCount > 0 {
+                    CloudActivityHiddenRow(count: hiddenItemCount)
+                }
+
+                ForEach(items) { item in
+                    CloudActivityCompactRow(item: item)
                 }
             }
+            .frame(maxWidth: 680, alignment: .leading)
+            .padding(.top, 2)
 
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                CloudActivityCompactRow(item: item)
-
-                if index < items.index(before: items.endIndex) {
-                    Divider()
-                        .opacity(0.35)
-                        .padding(.leading, 46)
-                }
-            }
+            Spacer(minLength: 24)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.58))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 0.5)
-        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private var groupSymbolName: String {
+        if items.contains(where: { $0.kind == .error }) {
+            return "exclamationmark.triangle"
+        }
+        if items.contains(where: { $0.kind == .toolCall || $0.kind == .task }) {
+            return "terminal"
+        }
+        if items.contains(where: { $0.kind == .thinking }) {
+            return "brain"
+        }
+        return "ellipsis.message"
+    }
+
+    private var groupTint: Color {
+        if items.contains(where: { $0.kind == .error }) {
+            return .red
+        }
+        if items.contains(where: { $0.kind == .thinking }) {
+            return .orange
+        }
+        if items.contains(where: { $0.kind == .toolCall || $0.kind == .task }) {
+            return .blue
+        }
+        return .secondary
     }
 }
 
@@ -1943,20 +1959,19 @@ private struct CloudActivityHiddenRow: View {
     var count: Int
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: "ellipsis")
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 22)
+                .frame(width: 16)
 
-            Text("\(count) earlier activity update\(count == 1 ? "" : "s")")
+            Text("\(count) earlier update\(count == 1 ? "" : "s")")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.vertical, 1)
         .accessibilityElement(children: .combine)
     }
 }
@@ -1978,8 +1993,7 @@ private struct CloudActivityCompactRow: View {
                 label
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.vertical, 1)
         .sheet(item: $detailPresentation) { presentation in
             TimelineActivityDetailSheet(presentation: presentation)
         }
@@ -1987,19 +2001,21 @@ private struct CloudActivityCompactRow: View {
     }
 
     private var label: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: symbolName)
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(color)
-                .frame(width: 22)
+                .frame(width: 16)
+                .padding(.top, 3)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(compactTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .font(.callout)
+                    .foregroundStyle(titleColor)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                if item.allowsActivityDetailSheet,
+                if shouldShowCollapsedPreview,
                    collapsedPreview.localizedCaseInsensitiveCompare(compactTitle) != .orderedSame {
                     Text(collapsedPreview)
                         .font(.caption)
@@ -2010,16 +2026,14 @@ private struct CloudActivityCompactRow: View {
 
             Spacer(minLength: 8)
 
-            Text(item.timestamp)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-
             if item.allowsActivityDetailSheet {
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
             }
         }
+        .contentShape(Rectangle())
     }
 
     private var compactTitle: String {
@@ -2044,6 +2058,10 @@ private struct CloudActivityCompactRow: View {
 
     private var collapsedPreview: String {
         item.activityPreview(maxCharacters: 140)
+    }
+
+    private var shouldShowCollapsedPreview: Bool {
+        item.kind == .error || item.kind == .request
     }
 
     private var symbolName: String {
@@ -2084,6 +2102,10 @@ private struct CloudActivityCompactRow: View {
         default:
             .secondary
         }
+    }
+
+    private var titleColor: Color {
+        item.kind == .error ? .red : .secondary
     }
 
     private func toolCallTitle(from preview: String) -> String {
@@ -2289,7 +2311,7 @@ private extension ChatTimelineItem {
     var allowsActivityDetailSheet: Bool {
         guard hasUsefulActivityDetail else { return false }
         switch kind {
-        case .error, .request:
+        case .error:
             return true
         default:
             return false
