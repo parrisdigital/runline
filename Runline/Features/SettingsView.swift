@@ -71,8 +71,14 @@ struct SettingsFormContent: View {
             }
 
             Section {
-                LabeledContent("Status", value: appState.isSDKBridgeConfigured ? "Ready" : "Not configured")
-                LabeledContent("Provider", value: appState.isSDKBridgeConfigured ? "Runline Bridge" : "Build configuration")
+                LabeledContent("Status", value: appState.sdkBridgeStatusTitle)
+                LabeledContent("Provider", value: appState.sdkBridgeProviderTitle)
+
+                if let message = appState.sdkBridgeConnectionMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 Button {
                     Task {
@@ -151,6 +157,9 @@ struct SettingsFormContent: View {
         .scrollDismissesKeyboard(.interactively)
         .task {
             await appState.refreshNotificationStatus()
+            if appState.isSDKBridgeConfigured, !appState.isSDKBridgeVerified {
+                await appState.testSDKBridgeConnection()
+            }
         }
     }
 

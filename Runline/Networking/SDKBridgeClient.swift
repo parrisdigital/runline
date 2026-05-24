@@ -3,6 +3,7 @@ import Foundation
 enum SDKBridgeError: LocalizedError, Equatable {
     case invalidURL
     case missingBridge
+    case networkUnavailable(String)
     case requestFailed(statusCode: Int, message: String)
     case decodingFailed(String)
 
@@ -12,6 +13,8 @@ enum SDKBridgeError: LocalizedError, Equatable {
             "The SDK Bridge URL could not be created."
         case .missingBridge:
             "Configure the SDK Bridge before starting Cursor Chat."
+        case .networkUnavailable:
+            "Cursor Chat could not reach the Runline bridge. Check your connection and try again."
         case .requestFailed(let statusCode, let message):
             if statusCode == 429, message.localizedCaseInsensitiveContains("hard usage limit") {
                 message
@@ -27,6 +30,7 @@ enum SDKBridgeError: LocalizedError, Equatable {
 enum SDKBridgePreferences {
     static let isEnabledKey = "sdkBridge.isEnabled"
     static let baseURLKey = "sdkBridge.baseURL"
+    static let useCustomBaseURLKey = "sdkBridge.useCustomBaseURL"
     static let defaultBaseURLInfoKey = "RunlineSDKBridgeDefaultURL"
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
@@ -39,14 +43,20 @@ enum SDKBridgePreferences {
     }
 
     static func baseURLString(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> String {
-        if let configured = normalizedURLString(defaults.string(forKey: baseURLKey)) {
-            return configured
-        }
-        return bundledDefaultBaseURLString(bundle: bundle) ?? ""
+        resolvedBaseURLString(
+            configuredValue: defaults.string(forKey: baseURLKey),
+            bundledDefaultValue: bundle.object(forInfoDictionaryKey: defaultBaseURLInfoKey) as? String,
+            usesCustomOverride: defaults.bool(forKey: useCustomBaseURLKey)
+        )
     }
 
     static func setBaseURLString(_ value: String, defaults: UserDefaults = .standard) {
         defaults.set(value.trimmingCharacters(in: .whitespacesAndNewlines), forKey: baseURLKey)
+        defaults.set(true, forKey: useCustomBaseURLKey)
+    }
+
+    static func isUsingCustomBaseURL(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: useCustomBaseURLKey)
     }
 
     static func configuredBaseURL(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> URL? {
@@ -69,6 +79,20 @@ enum SDKBridgePreferences {
     static func bundledDefaultBaseURLString(bundle: Bundle = .main) -> String? {
         let value = bundle.object(forInfoDictionaryKey: defaultBaseURLInfoKey) as? String
         return normalizedURLString(value).flatMap { baseURL(from: $0) == nil ? nil : $0 }
+    }
+
+    static func resolvedBaseURLString(
+        configuredValue: String?,
+        bundledDefaultValue: String?,
+        usesCustomOverride: Bool
+    ) -> String {
+        let configured = normalizedURLString(configuredValue).flatMap { baseURL(from: $0) == nil ? nil : $0 }
+        let bundledDefault = normalizedURLString(bundledDefaultValue).flatMap { baseURL(from: $0) == nil ? nil : $0 }
+
+        if let bundledDefault, !usesCustomOverride {
+            return bundledDefault
+        }
+        return configured ?? bundledDefault ?? ""
     }
 
     private static func normalizedURLString(_ value: String?) -> String? {
@@ -257,7 +281,13 @@ final class SDKBridgeClient: @unchecked Sendable {
         body: (any Encodable)? = nil
     ) async throws -> Response {
         let request = try makeRequest(path, method: method, body: body, accept: "application/json")
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw normalizedNetworkError(error)
+        }
         try validate(response: response, data: data)
         do {
             return try decoder.decode(Response.self, from: data)
@@ -283,7 +313,13 @@ final class SDKBridgeClient: @unchecked Sendable {
 
         return try await withThrowingTaskGroup(of: [ServerSentEvent].self) { group in
             group.addTask {
-                let (bytes, response) = try await self.session.bytes(for: request)
+                let bytes: URLSession.AsyncBytes
+                let response: URLResponse
+                do {
+                    (bytes, response) = try await self.session.bytes(for: request)
+                } catch {
+                    throw self.normalizedNetworkError(error)
+                }
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw SDKBridgeError.requestFailed(statusCode: -1, message: "No HTTP response.")
                 }
@@ -325,6 +361,14 @@ final class SDKBridgeClient: @unchecked Sendable {
             group.cancelAll()
             return events
         }
+    }
+
+    private func normalizedNetworkError(_ error: Error) -> Error {
+        guard let urlError = error as? URLError,
+              urlError.code != .cancelled else {
+            return error
+        }
+        return SDKBridgeError.networkUnavailable(String(urlError.code.rawValue))
     }
 
     private static func isTerminalServerSentEvent(_ event: ServerSentEvent) -> Bool {
@@ -427,6 +471,19 @@ private extension JSONValue {
         }
         return nil
     }
+}
+
+extension URLSession {
+    static let runlineSDKBridge: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.waitsForConnectivity = true
+        configuration.allowsCellularAccess = true
+        configuration.allowsExpensiveNetworkAccess = true
+        configuration.allowsConstrainedNetworkAccess = true
+        configuration.timeoutIntervalForRequest = 45
+        configuration.timeoutIntervalForResource = 300
+        return URLSession(configuration: configuration)
+    }()
 }
 
 private extension Dictionary where Key == String, Value == JSONValue {

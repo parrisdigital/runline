@@ -21,7 +21,7 @@ final class CursorSDKBridgeProvider: AgentProvider {
     private var repositoryCache: [Repository] = []
     private var lastStreamEventIDByRunID: [AgentRun.ID: String] = [:]
 
-    init(apiKey: String, bridgeBaseURL: URL, bridgeSecret: String? = nil, session: URLSession = .shared) throws {
+    init(apiKey: String, bridgeBaseURL: URL, bridgeSecret: String? = nil, session: URLSession = .runlineSDKBridge) throws {
         client = try SDKBridgeClient(baseURL: bridgeBaseURL, apiKey: apiKey, bridgeSecret: bridgeSecret, session: session)
     }
 

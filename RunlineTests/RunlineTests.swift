@@ -464,6 +464,25 @@ final class RunlineTests: XCTestCase {
         )
     }
 
+    func testSDKBridgePreferencesPreferBundledBridgeUntilCustomOverrideIsEnabled() {
+        XCTAssertEqual(
+            SDKBridgePreferences.resolvedBaseURLString(
+                configuredValue: "https://stale-dev-bridge.test",
+                bundledDefaultValue: "https://bundled-bridge.test",
+                usesCustomOverride: false
+            ),
+            "https://bundled-bridge.test"
+        )
+        XCTAssertEqual(
+            SDKBridgePreferences.resolvedBaseURLString(
+                configuredValue: "https://custom-bridge.test",
+                bundledDefaultValue: "https://bundled-bridge.test",
+                usesCustomOverride: true
+            ),
+            "https://custom-bridge.test"
+        )
+    }
+
     @MainActor
     func testDeepLinksFocusChatsTabForAdaptiveShells() {
         let appState = AppState(provider: MockAgentProvider(), apiKeyStore: InMemoryAPIKeyStore())
@@ -597,6 +616,7 @@ final class RunlineTests: XCTestCase {
             SDKBridgePreferences.setBaseURLString(previous)
         } else {
             UserDefaults.standard.removeObject(forKey: SDKBridgePreferences.baseURLKey)
+            UserDefaults.standard.removeObject(forKey: SDKBridgePreferences.useCustomBaseURLKey)
         }
     }
 }

@@ -41,6 +41,8 @@ final class AppState {
     var isLaunching = false
     var isRefreshing = false
     var isCheckingSDKBridge = false
+    var isSDKBridgeVerified = false
+    var sdkBridgeConnectionMessage: String?
     var errorMessage: String?
     var statusMessage: String?
     var launchDraft: AgentLaunchDraft
@@ -98,6 +100,19 @@ final class AppState {
 
     var isSDKBridgeConfigured: Bool {
         SDKBridgePreferences.configuredBaseURL() != nil
+    }
+
+    var sdkBridgeStatusTitle: String {
+        guard isSDKBridgeConfigured else { return "Not configured" }
+        if isCheckingSDKBridge { return "Checking" }
+        if isSDKBridgeVerified { return "Connected" }
+        if sdkBridgeConnectionMessage != nil { return "Unavailable" }
+        return "Not tested"
+    }
+
+    var sdkBridgeProviderTitle: String {
+        guard isSDKBridgeConfigured else { return "Build configuration" }
+        return SDKBridgePreferences.isUsingCustomBaseURL() ? "Custom Bridge" : "Runline Bridge"
     }
 
     var activeAgents: [Agent] {
@@ -220,6 +235,7 @@ final class AppState {
 
     func setSDKBridgeEnabled(_ isEnabled: Bool) {
         SDKBridgePreferences.setEnabled(isEnabled)
+        resetSDKBridgeVerification()
         if !isEnabled, launchDraft.runtimeMode == .sdkBridge {
             launchDraft.applyRuntimeMode(.cloud)
         }
@@ -228,6 +244,7 @@ final class AppState {
 
     func setSDKBridgeURLString(_ value: String) {
         SDKBridgePreferences.setBaseURLString(value)
+        resetSDKBridgeVerification()
         saveCachedState()
     }
 
@@ -248,14 +265,19 @@ final class AppState {
     func testSDKBridgeConnection() async {
         isCheckingSDKBridge = true
         errorMessage = nil
+        sdkBridgeConnectionMessage = nil
+        isSDKBridgeVerified = false
         defer { isCheckingSDKBridge = false }
 
         do {
             let bridgeProvider = try agentProvider(for: .sdkBridge)
             _ = try await bridgeProvider.validateConnection()
+            isSDKBridgeVerified = true
             statusMessage = "SDK Bridge connection verified."
         } catch {
-            handleError(error)
+            let message = userMessage(from: error)
+            sdkBridgeConnectionMessage = message
+            statusMessage = message
         }
     }
 
@@ -1117,7 +1139,18 @@ final class AppState {
 
     private func handleError(_ error: Error) {
         guard !isCancellation(error) else { return }
+        if isSDKBridgeNetworkError(error) {
+            sdkBridgeConnectionMessage = userMessage(from: error)
+            isSDKBridgeVerified = false
+            statusMessage = sdkBridgeConnectionMessage
+            return
+        }
         errorMessage = userMessage(from: error)
+    }
+
+    private func resetSDKBridgeVerification() {
+        isSDKBridgeVerified = false
+        sdkBridgeConnectionMessage = nil
     }
 
     private func handleNonBlockingError(_ error: Error) {
@@ -1155,6 +1188,16 @@ final class AppState {
 
     private func shouldReport(_ error: Error) -> Bool {
         !isCancellation(error) && !isNotFound(error)
+    }
+
+    private func isSDKBridgeNetworkError(_ error: Error) -> Bool {
+        guard let bridgeError = error as? SDKBridgeError else {
+            return false
+        }
+        if case .networkUnavailable = bridgeError {
+            return true
+        }
+        return false
     }
 
     private func isCancellation(_ error: Error) -> Bool {

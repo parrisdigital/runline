@@ -6,6 +6,12 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 
 - No unreleased changes.
 
+## TestFlight 1.0 (27)
+
+- Fixed Cursor Chat bridge resolution so TestFlight builds prefer the bundled maintainer bridge unless a user explicitly configures a custom bridge.
+- Changed Settings to show Cursor Chat as `Not tested`, `Checking`, `Connected`, or `Unavailable` instead of reporting a configured bridge as ready before a live check succeeds.
+- Improved Cursor Chat network failures so bridge connectivity errors show as non-blocking status messages instead of generic server connection alerts.
+
 ## TestFlight 1.0 (26)
 
 - Uploaded build 26 to TestFlight and distributed it to the configured beta group.
