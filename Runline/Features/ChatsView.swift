@@ -475,7 +475,7 @@ struct CursorChatView: View {
             ComposerControlPill(
                 systemName: selectedRepository == nil ? "message" : "folder",
                 title: selectedRepository?.displayName ?? "General Chat",
-                maxWidth: 210
+                maxWidth: selectedRepository == nil ? nil : 210
             )
         }
         .menuIndicator(.hidden)
