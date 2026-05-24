@@ -285,6 +285,9 @@ final class SDKBridgeClient: @unchecked Sendable {
                         if line.last == "\r" { line.removeLast() }
                         if let event = parser.ingest(line) {
                             await accumulator.append(event)
+                            if Self.isTerminalServerSentEvent(event) {
+                                break
+                            }
                             if await accumulator.snapshot().count >= maxEvents {
                                 break
                             }
@@ -305,6 +308,31 @@ final class SDKBridgeClient: @unchecked Sendable {
             let events = try await group.next() ?? []
             group.cancelAll()
             return events
+        }
+    }
+
+    private static func isTerminalServerSentEvent(_ event: ServerSentEvent) -> Bool {
+        if isTerminalEventName(event.event) {
+            return true
+        }
+
+        guard let data = event.data.data(using: .utf8),
+              let json = try? JSONDecoder().decode(JSONValue.self, from: data) else {
+            return false
+        }
+
+        let eventName = json.objectValue?.stringValue(for: "event")
+            ?? json.objectValue?.objectValue(for: "data")?.stringValue(for: "type")
+            ?? json.objectValue?.stringValue(for: "type")
+        return isTerminalEventName(eventName)
+    }
+
+    private static func isTerminalEventName(_ eventName: String?) -> Bool {
+        switch eventName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "done", "complete", "completed":
+            return true
+        default:
+            return false
         }
     }
 
@@ -373,6 +401,27 @@ private extension String {
 
     var urlPathComponentEncoded: String {
         addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self
+    }
+}
+
+private extension JSONValue {
+    var objectValue: [String: JSONValue]? {
+        if case .object(let object) = self {
+            return object
+        }
+        return nil
+    }
+}
+
+private extension Dictionary where Key == String, Value == JSONValue {
+    func stringValue(for key: String) -> String? {
+        guard case .string(let value)? = self[key] else { return nil }
+        return value
+    }
+
+    func objectValue(for key: String) -> [String: JSONValue]? {
+        guard case .object(let object)? = self[key] else { return nil }
+        return object
     }
 }
 

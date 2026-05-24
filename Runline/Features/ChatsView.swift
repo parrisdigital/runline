@@ -85,25 +85,6 @@ struct CursorChatView: View {
         ZStack(alignment: .leading) {
             NavigationStack {
                 cursorChatContent
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                openConversationDrawer()
-                            } label: {
-                                Image(systemName: "sidebar.left")
-                            }
-                            .accessibilityLabel("Show conversations")
-                        }
-
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                resetCursorChatDraft(focusComposer: true)
-                            } label: {
-                                Image(systemName: "square.and.pencil")
-                            }
-                            .accessibilityLabel("New Cursor Chat")
-                        }
-                    }
                     .onChange(of: appState.focusedAgentID) { _, agentID in
                         guard let agentID,
                               appState.agent(id: agentID)?.runtimeMode == .sdkBridge else { return }
@@ -128,6 +109,12 @@ struct CursorChatView: View {
                             await loadPromptFiles(from: result)
                         }
                     }
+            }
+
+            if !isConversationDrawerOpen {
+                cursorChatChromeButtons
+                    .transition(.opacity)
+                    .zIndex(9)
             }
 
             if isConversationDrawerOpen {
@@ -163,6 +150,49 @@ struct CursorChatView: View {
                     cursorChatComposer
                 }
         }
+    }
+
+    private var cursorChatChromeButtons: some View {
+        VStack {
+            HStack(spacing: 10) {
+                cursorChatChromeButton(systemName: "sidebar.left", accessibilityLabel: "Show conversations") {
+                    openConversationDrawer()
+                }
+
+                Spacer(minLength: 0)
+
+                cursorChatChromeButton(systemName: "square.and.pencil", accessibilityLabel: "New Cursor Chat") {
+                    startNewCursorChat()
+                }
+                .padding(.trailing, activeAgentID == nil ? 0 : 52)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 58)
+
+            Spacer(minLength: 0)
+        }
+        .ignoresSafeArea(edges: .top)
+    }
+
+    private func cursorChatChromeButton(
+        systemName: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.body.weight(.medium))
+                .foregroundStyle(Color(uiColor: .label))
+                .frame(width: 38, height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 19, style: .continuous)
+                        .fill(Color(uiColor: .systemBackground).opacity(0.92))
+                )
+                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(accessibilityLabel == "Show conversations" ? "cursorChat.showConversations" : "cursorChat.newChat")
     }
 
     private var cursorChatHome: some View {
@@ -235,7 +265,11 @@ struct CursorChatView: View {
                     Button {
                         activeAgentID = agent.id
                     } label: {
-                        CursorChatRecentConversationRow(agent: agent, run: appState.runs(for: agent).first)
+                        CursorChatRecentConversationRow(
+                            agent: agent,
+                            run: appState.runs(for: agent).first,
+                            metadata: cursorChatMetadata(for: agent)
+                        )
                     }
                     .buttonStyle(.plain)
 
@@ -276,7 +310,11 @@ struct CursorChatView: View {
                     Button {
                         activeAgentID = agent.id
                     } label: {
-                        CursorChatActiveSessionRow(agent: agent, run: appState.runs(for: agent).first)
+                        CursorChatActiveSessionRow(
+                            agent: agent,
+                            run: appState.runs(for: agent).first,
+                            metadata: cursorChatMetadata(for: agent)
+                        )
                     }
                     .buttonStyle(.plain)
 
@@ -363,7 +401,7 @@ struct CursorChatView: View {
 
             Button {
                 closeConversationDrawer()
-                resetCursorChatDraft(focusComposer: true)
+                startNewCursorChat()
             } label: {
                 Image(systemName: "square.and.pencil")
                     .frame(width: 34, height: 34)
@@ -655,6 +693,12 @@ struct CursorChatView: View {
         }
     }
 
+    private func cursorChatMetadata(for agent: Agent) -> ConversationThreadMetadata {
+        let run = appState.runs(for: agent).first
+        let events = run.map { appState.events(for: $0.id) } ?? []
+        return ConversationThreadMetadataBuilder.metadata(for: agent, run: run, events: events)
+    }
+
     private var promptAttachmentStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -832,7 +876,7 @@ struct CursorChatView: View {
 
     private func openConversationDrawer() {
         isPromptFocused = false
-        selectedDrawerAgentID = activeAgentID
+        selectedDrawerAgentID = nil
         withAnimation(Self.drawerAnimation) {
             isConversationDrawerOpen = true
         }
@@ -845,17 +889,37 @@ struct CursorChatView: View {
     }
 
     private func resetCursorChatDraft(focusComposer: Bool) {
-        activeAgentID = nil
         prompt = ""
         promptImages = []
         promptFiles = []
         selectedPhotoItems = []
         fileImportMessage = nil
         prepareSDKDraft()
+        focusComposerIfNeeded(focusComposer)
+    }
 
+    private func startNewCursorChat() {
+        activeAgentID = nil
+        selectedDrawerAgentID = nil
+        isGeneralConversation = true
+        selectedRepositoryURL = nil
+        closeConversationDrawer()
+        prompt = ""
+        promptImages = []
+        promptFiles = []
+        selectedPhotoItems = []
+        fileImportMessage = nil
+        appState.launchDraft.applyRuntimeMode(.sdkBridge)
+        appState.launchDraft.source = .general
+        appState.launchDraft.modelID = currentCursorChatModelID
+        focusComposerIfNeeded(true)
+    }
+
+    private func focusComposerIfNeeded(_ focusComposer: Bool) {
         guard focusComposer else { return }
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 180_000_000)
+            isPromptFocused = false
+            try? await Task.sleep(nanoseconds: 280_000_000)
             isPromptFocused = true
         }
     }
@@ -864,6 +928,7 @@ struct CursorChatView: View {
 private struct CursorChatActiveSessionRow: View {
     var agent: Agent
     var run: AgentRun?
+    var metadata: ConversationThreadMetadata
 
     var body: some View {
         HStack(spacing: 12) {
@@ -877,12 +942,12 @@ private struct CursorChatActiveSessionRow: View {
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(agent.name)
+                Text(metadata.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                Text(agent.repository.displayName)
+                Text(agent.repository.isGeneralChat ? "General Chat" : agent.repository.displayName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -904,6 +969,7 @@ private struct CursorChatActiveSessionRow: View {
 private struct CursorChatRecentConversationRow: View {
     var agent: Agent
     var run: AgentRun?
+    var metadata: ConversationThreadMetadata
 
     var body: some View {
         HStack(spacing: 12) {
@@ -917,7 +983,7 @@ private struct CursorChatRecentConversationRow: View {
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(displayTitle)
+                Text(metadata.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -930,7 +996,7 @@ private struct CursorChatRecentConversationRow: View {
 
             Spacer(minLength: 8)
 
-            if let run {
+            if let run, !run.status.isTerminal {
                 RunStatusBadge(status: run.status)
             } else {
                 Text(agent.updatedAtDescription)
@@ -945,11 +1011,6 @@ private struct CursorChatRecentConversationRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var displayTitle: String {
-        let title = agent.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? "Untitled chat" : title
-    }
-
     private var contextTitle: String {
         agent.repository.isGeneralChat ? "General Chat" : agent.repository.displayName
     }
@@ -957,9 +1018,6 @@ private struct CursorChatRecentConversationRow: View {
     private var tint: Color {
         if run?.status == .error {
             return .red
-        }
-        if run?.status == .finished {
-            return .green
         }
         return agent.repository.isGeneralChat ? Color(uiColor: .systemGreen) : .secondary
     }
@@ -1592,48 +1650,8 @@ struct ChatListContent: View {
     }
 
     private func conversationMetadata(for agent: Agent, run: AgentRun?) -> ConversationThreadMetadata {
-        guard let run else {
-            return ConversationThreadMetadata(
-                preview: workspaceSubtitle(for: agent.repository),
-                changedFileCount: 0,
-                artifactCount: agent.artifactCount,
-                hasPullRequest: agent.pullRequestURL != nil,
-                isGeneralChat: isGeneralChat(agent.repository)
-            )
-        }
-
-        let events = appState.events(for: run.id)
-        let changedFileCount = Set(events.suffix(24).compactMap { event in
-            WorkspaceChangeSetParser.shouldInspect(event) ? WorkspaceChangeSetParser.changeSet(from: event) : nil
-        }
-            .flatMap { changeSet in
-                changeSet.changes.map(\.path)
-            })
-            .count
-        if let event = events.last(where: { event in
-            switch event.kind {
-            case .user, .assistant, .result, .task, .request, .status, .done, .error:
-                !event.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            default:
-                false
-            }
-        }) {
-            return ConversationThreadMetadata(
-                preview: conversationPreview(from: event.message),
-                changedFileCount: changedFileCount,
-                artifactCount: agent.artifactCount,
-                hasPullRequest: agent.pullRequestURL != nil,
-                isGeneralChat: isGeneralChat(agent.repository)
-            )
-        }
-
-        return ConversationThreadMetadata(
-            preview: run.status.isTerminal ? run.status.title : "\(agent.runtimeMode.title) is \(run.status.title.lowercased())",
-            changedFileCount: changedFileCount,
-            artifactCount: agent.artifactCount,
-            hasPullRequest: agent.pullRequestURL != nil,
-            isGeneralChat: isGeneralChat(agent.repository)
-        )
+        let events = run.map { appState.events(for: $0.id) } ?? []
+        return ConversationThreadMetadataBuilder.metadata(for: agent, run: run, events: events)
     }
 
     private func workspaceID(for agent: Agent) -> String {
@@ -1649,16 +1667,6 @@ struct ChatListContent: View {
             return "Repo-less conversations"
         }
         return repository.defaultBranch.isEmpty ? "Repository workspace" : repository.defaultBranch
-    }
-
-    private func conversationPreview(from message: String) -> String {
-        let collapsed = message
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        guard !collapsed.isEmpty else { return "Workspace conversation" }
-        guard collapsed.count > 140 else { return collapsed }
-        return String(collapsed.prefix(140)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
     }
 
     private func isGeneralChat(_ repository: Repository) -> Bool {
@@ -1746,11 +1754,103 @@ private enum CloudRunSection {
 }
 
 private struct ConversationThreadMetadata: Hashable {
+    var title: String
     var preview: String
     var changedFileCount: Int
     var artifactCount: Int
     var hasPullRequest: Bool
     var isGeneralChat: Bool
+}
+
+private enum ConversationThreadMetadataBuilder {
+    static func metadata(
+        for agent: Agent,
+        run: AgentRun?,
+        events: [AgentStreamEvent]
+    ) -> ConversationThreadMetadata {
+        let title = conversationTitle(for: agent, events: events)
+        let changedFileCount = Set(events.suffix(24).compactMap { event in
+            WorkspaceChangeSetParser.shouldInspect(event) ? WorkspaceChangeSetParser.changeSet(from: event) : nil
+        }
+            .flatMap { changeSet in
+                changeSet.changes.map(\.path)
+            })
+            .count
+
+        return ConversationThreadMetadata(
+            title: title,
+            preview: conversationPreview(for: agent, run: run, events: events, title: title),
+            changedFileCount: changedFileCount,
+            artifactCount: agent.artifactCount,
+            hasPullRequest: agent.pullRequestURL != nil,
+            isGeneralChat: agent.repository.isGeneralChat
+        )
+    }
+
+    private static func conversationTitle(for agent: Agent, events: [AgentStreamEvent]) -> String {
+        if let generatedTitle = ConversationTitleGenerator.title(from: events, repository: agent.repository) {
+            let shouldUseGeneratedTitle = ConversationTitleGenerator.shouldReplace(
+                currentTitle: agent.name,
+                with: generatedTitle,
+                repository: agent.repository,
+                firstPrompt: events.first { $0.kind == .user }?.message
+            ) || ConversationTitleGenerator.isPlaceholderTitle(agent.name, repository: agent.repository)
+            if shouldUseGeneratedTitle {
+                return generatedTitle
+            }
+        }
+
+        let title = agent.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.isEmpty || ConversationTitleGenerator.isPlaceholderTitle(title, repository: agent.repository) {
+            return agent.repository.isGeneralChat ? "Untitled General Chat" : agent.repository.displayName
+        }
+        return title
+    }
+
+    private static func conversationPreview(
+        for agent: Agent,
+        run: AgentRun?,
+        events: [AgentStreamEvent],
+        title: String
+    ) -> String {
+        if let event = events.last(where: isPreviewEvent) {
+            let preview = collapsedPreview(from: event.message)
+            if !preview.isEmpty && preview.localizedCaseInsensitiveCompare(title) != .orderedSame {
+                return preview
+            }
+        }
+
+        if let run, !run.status.isTerminal {
+            return "\(agent.runtimeMode.title) is \(run.status.title.lowercased())"
+        }
+        return agent.repository.isGeneralChat ? "General Chat" : workspaceSubtitle(for: agent.repository)
+    }
+
+    private static func isPreviewEvent(_ event: AgentStreamEvent) -> Bool {
+        switch event.kind {
+        case .user, .assistant, .result, .task, .request, .status, .done, .error:
+            !event.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        default:
+            false
+        }
+    }
+
+    private static func collapsedPreview(from message: String) -> String {
+        let collapsed = message
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !collapsed.isEmpty else { return "" }
+        guard collapsed.count > 140 else { return collapsed }
+        return String(collapsed.prefix(140)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+    }
+
+    private static func workspaceSubtitle(for repository: Repository) -> String {
+        if repository.isGeneralChat {
+            return "General Chat"
+        }
+        return repository.defaultBranch.isEmpty ? "Repository workspace" : repository.defaultBranch
+    }
 }
 
 private struct CloudRunReviewRow: View {
@@ -2185,7 +2285,7 @@ private struct ConversationThreadRow: View {
 
     @ViewBuilder
     private var statusAccessories: some View {
-        if let run {
+        if let run, !run.status.isTerminal {
             RunStatusBadge(status: run.status)
         }
 
@@ -2200,7 +2300,7 @@ private struct ConversationThreadRow: View {
     }
 
     private var displayTitle: String {
-        let title = agent.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = metadata.title.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? "Untitled chat" : title
     }
 
