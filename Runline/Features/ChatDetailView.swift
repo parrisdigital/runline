@@ -1420,7 +1420,7 @@ private struct ChatTimelineRow: View {
 private struct WorkspaceChangeSetCard: View {
     var changeSet: WorkspaceChangeSet
     var timestamp: String
-    @State private var isExpanded = false
+    @State private var isExpanded = true
     @State private var diffPresentation: WorkspaceDiffPresentation?
 
     var body: some View {
@@ -1428,10 +1428,9 @@ private struct WorkspaceChangeSetCard: View {
             header
 
             if isExpanded {
-                Divider()
-                    .opacity(0.45)
+                softDivider
 
-                ForEach(Array(changeSet.changes.enumerated()), id: \.element.id) { index, change in
+                ForEach(Array(visibleInlineChanges.enumerated()), id: \.element.id) { index, change in
                     Button {
                         diffPresentation = WorkspaceDiffPresentation(changeSet: changeSet, focusedPath: change.path)
                     } label: {
@@ -1439,20 +1438,45 @@ private struct WorkspaceChangeSetCard: View {
                     }
                     .buttonStyle(.plain)
 
-                    if index < changeSet.changes.count - 1 {
-                        Divider()
-                            .opacity(0.35)
+                    if index < visibleInlineChanges.count - 1 {
+                        softDivider
                             .padding(.leading, 12)
                     }
+                }
+
+                if hiddenInlineChangeCount > 0 {
+                    softDivider
+                        .padding(.leading, 12)
+
+                    Button {
+                        diffPresentation = WorkspaceDiffPresentation(changeSet: changeSet, focusedPath: nil)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "ellipsis")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+
+                            Text("Show \(hiddenInlineChangeCount) more file\(hiddenInlineChangeCount == 1 ? "" : "s")")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.72))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.68))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 0.5)
         )
         .sheet(item: $diffPresentation) { presentation in
@@ -1469,15 +1493,17 @@ private struct WorkspaceChangeSetCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(changeSet.title)
-                        .font(.subheadline.weight(.semibold))
+                    Text("Files changed")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
 
                     WorkspaceDiffCountsLabel(additions: changeSet.totalAdditions, deletions: changeSet.totalDeletions)
                 }
 
-                Text("\(changeSet.changes.count) file\(changeSet.changes.count == 1 ? "" : "s") changed")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(changeSummary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -1511,7 +1537,27 @@ private struct WorkspaceChangeSetCard: View {
         }
         .padding(.leading, 12)
         .padding(.trailing, 8)
-        .padding(.vertical, 10)
+        .padding(.top, 8)
+        .padding(.bottom, isExpanded ? 7 : 9)
+    }
+
+    private var visibleInlineChanges: [WorkspaceFileChange] {
+        Array(changeSet.changes.prefix(4))
+    }
+
+    private var hiddenInlineChangeCount: Int {
+        max(0, changeSet.changes.count - visibleInlineChanges.count)
+    }
+
+    private var changeSummary: String {
+        let count = changeSet.changes.count
+        return "\(count) file\(count == 1 ? "" : "s") changed"
+    }
+
+    private var softDivider: some View {
+        Rectangle()
+            .fill(Color(uiColor: .separator).opacity(0.35))
+            .frame(height: 0.5)
     }
 }
 
@@ -1519,7 +1565,14 @@ private struct WorkspaceFileChangeRow: View {
     var change: WorkspaceFileChange
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .center, spacing: 9) {
+            Text(change.action.rawValue)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(actionTint)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(actionTint.opacity(0.11)))
+
             Text(change.path)
                 .font(.subheadline)
                 .foregroundStyle(.primary)
@@ -1528,15 +1581,30 @@ private struct WorkspaceFileChangeRow: View {
 
             Spacer(minLength: 8)
 
-            Text(change.action.rawValue)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-
             WorkspaceDiffCountsLabel(additions: change.additions, deletions: change.deletions)
+
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .contentShape(Rectangle())
+    }
+
+    private var actionTint: Color {
+        switch change.action {
+        case .added:
+            .green
+        case .deleted:
+            .red
+        case .renamed:
+            .orange
+        case .modified:
+            .blue
+        case .unknown:
+            .secondary
+        }
     }
 }
 
@@ -1560,6 +1628,7 @@ private struct WorkspaceDiffCountsLabel: View {
             }
         }
         .font(.caption.monospacedDigit().weight(.semibold))
+        .lineLimit(1)
     }
 }
 
@@ -1590,8 +1659,20 @@ private struct WorkspaceDiffSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(presentation.visibleChanges) { change in
-                        diffBlock(change)
+                    diffSummaryHeader
+
+                    if presentation.visibleChanges.isEmpty {
+                        ContentUnavailableView(
+                            "No Diff Available",
+                            systemImage: "doc.text.magnifyingglass",
+                            description: Text("The runtime reported file changes without raw diff content.")
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 32)
+                    } else {
+                        ForEach(presentation.visibleChanges) { change in
+                            diffBlock(change)
+                        }
                     }
                 }
                 .padding(16)
@@ -1620,6 +1701,34 @@ private struct WorkspaceDiffSheet: View {
                 expandedPaths = Set(presentation.visibleChanges.prefix(3).map(\.path))
             }
         }
+    }
+
+    private var diffSummaryHeader: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.blue)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Color.blue.opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(presentation.visibleChanges.count) file\(presentation.visibleChanges.count == 1 ? "" : "s") changed")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                WorkspaceDiffCountsLabel(
+                    additions: presentation.visibleChanges.reduce(0) { $0 + $1.additions },
+                    deletions: presentation.visibleChanges.reduce(0) { $0 + $1.deletions }
+                )
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
     }
 
     private var allExpanded: Bool {
@@ -1661,13 +1770,20 @@ private struct WorkspaceDiffSheet: View {
 
             if isExpanded {
                 Divider().opacity(0.45)
-                ScrollView(.horizontal, showsIndicators: true) {
-                    Text((change.diff ?? "No raw diff was provided for this file.")
-                        .timelineBoundedText(maxCharacters: 16_000))
-                        .font(.caption.monospaced())
+                if let diff = change.diff?.nilIfBlank {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        Text(diff.timelineBoundedText(maxCharacters: 16_000))
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .padding(12)
+                    }
+                } else {
+                    Text("No raw diff was provided for this file.")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
                         .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
