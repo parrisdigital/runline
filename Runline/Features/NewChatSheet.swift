@@ -36,6 +36,7 @@ enum NewChatModelPickerOptions {
 
 struct NewChatForm: View {
     private enum SourceMode: String, CaseIterable, Identifiable {
+        case general = "General"
         case installed = "Repository"
         case manual = "URL"
         case pullRequest = "Pull Request"
@@ -141,7 +142,7 @@ struct NewChatForm: View {
             NewChatSectionHeader(title: targetSectionTitle, systemName: "folder")
 
             Picker("Source", selection: $sourceMode) {
-                ForEach(SourceMode.allCases) { mode in
+                ForEach(sourceModes) { mode in
                     Text(mode.rawValue).tag(mode)
                 }
             }
@@ -152,7 +153,7 @@ struct NewChatForm: View {
 
             sourceControls
 
-            if sourceMode != .pullRequest {
+            if sourceMode != .pullRequest, sourceMode != .general {
                 inlineTextField(
                     title: "Base ref",
                     placeholder: selectedRepository.flatMap { $0.defaultBranch.nilIfBlank } ?? "main",
@@ -360,6 +361,12 @@ struct NewChatForm: View {
     @ViewBuilder
     private var sourceControls: some View {
         switch sourceMode {
+        case .general:
+            NewChatSelectorLabel(
+                systemName: "message",
+                title: "General Chat",
+                subtitle: "No repository context"
+            )
         case .installed:
             if appState.repositories.isEmpty {
                 ContentUnavailableView("No Repositories", systemImage: "folder.badge.questionmark")
@@ -534,7 +541,17 @@ struct NewChatForm: View {
         appState.launchDraft.runtimeMode.preferredLaunchModelID
     }
 
+    private var sourceModes: [SourceMode] {
+        if appState.launchDraft.runtimeMode == .sdkBridge {
+            return [.general, .installed, .manual, .pullRequest]
+        }
+        return [.installed, .manual, .pullRequest]
+    }
+
     private var selectedRepository: Repository? {
+        if case .general = appState.launchDraft.source {
+            return nil
+        }
         if case .repository(let url, _) = appState.launchDraft.source,
            let repository = appState.repositories.first(where: { $0.url == url }) {
             return repository
@@ -690,7 +707,7 @@ struct NewChatForm: View {
     private func seedSourceFields() {
         switch appState.launchDraft.source {
         case .general:
-            sourceMode = .installed
+            sourceMode = appState.launchDraft.runtimeMode == .sdkBridge ? .general : .installed
         case .repository(let url, _):
             if appState.repositories.contains(where: { $0.url == url }) {
                 sourceMode = .installed
@@ -713,6 +730,13 @@ struct NewChatForm: View {
         appState.launchDraft.applyRuntimeMode(mode)
         if mode == .cloud {
             appState.launchDraft.modelID = CursorCloudModelPreference.selectedModelID()
+            if sourceMode == .general {
+                sourceMode = .installed
+            }
+            if case .general = appState.launchDraft.source,
+               let repository = appState.selectedRepository ?? appState.repositories.first {
+                selectRepository(repository)
+            }
         } else if mode == .sdkBridge {
             appState.launchDraft.modelID = CursorChatModelPreference.selectedModelID()
         }
@@ -721,6 +745,8 @@ struct NewChatForm: View {
     private func updateSourceMode(_ mode: SourceMode) {
         focusedField = nil
         switch mode {
+        case .general:
+            appState.launchDraft.source = .general
         case .installed:
             if let repository = appState.selectedRepository ?? appState.repositories.first {
                 selectRepository(repository)

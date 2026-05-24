@@ -14,6 +14,7 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Paused timeline auto-scroll during manual scrolling so live Cursor Chat updates do not fight the user's scroll gesture.
 - Bounded Cursor Chat thinking/tool-call rendering with compact activity rows, a details sheet, cached timeline snapshots, and collapsed diff cards to prevent freezes during active runs.
 - Refined Cursor Chat into a composer-first start screen with a Remodex-inspired slide-over conversation drawer, active sessions, grouped workspace conversations, and compact file-change, artifact, PR, model, and branch indicators.
+- Polished Cursor Chat drawer rows, context selector sizing, and regular-width General Chat startup so the chat path stays conversational across iPhone and iPad layouts.
 - Refined Cursor Chat detail screens with quieter live activity rows and removed redundant SDK runtime/status header chrome.
 - Refined Cursor Cloud into a cleaner run-review queue with Running, Ready for Review, Needs Attention, and Archived sections plus compact PR, artifact, file-change, branch, and model indicators.
 - Added a Cursor Cloud run-review header in detail screens with run state, repository context, diff, artifact, pull request, and cancel actions.

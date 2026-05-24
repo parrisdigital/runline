@@ -173,7 +173,7 @@ struct CursorChatView: View {
                 }
 
                 cursorChatHomePrompt
-                    .padding(.top, cursorChatAgents.isEmpty ? 122 : 22)
+                    .padding(.top, cursorChatAgents.isEmpty ? 88 : 18)
 
                 if !recentCursorChatAgents.isEmpty {
                     cursorChatRecentSection
@@ -299,7 +299,7 @@ struct CursorChatView: View {
 
     private var cursorChatConversationDrawer: some View {
         GeometryReader { proxy in
-            let width = min(max(proxy.size.width * 0.90, 300), 380)
+            let width = min(max(proxy.size.width * 0.84, 292), 360)
 
             ZStack(alignment: .leading) {
                 Color.black
@@ -347,10 +347,17 @@ struct CursorChatView: View {
     }
 
     private var cursorChatDrawerHeader: some View {
-        HStack(spacing: 10) {
-            Text("Conversations")
-                .font(.headline.weight(.semibold))
-                .lineLimit(1)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Chats")
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+
+                Text(drawerSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             Spacer(minLength: 0)
 
@@ -362,6 +369,7 @@ struct CursorChatView: View {
                     .frame(width: 34, height: 34)
             }
             .buttonStyle(.plain)
+            .background(Circle().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
             .accessibilityLabel("New Cursor Chat")
 
             Button {
@@ -371,12 +379,21 @@ struct CursorChatView: View {
                     .frame(width: 34, height: 34)
             }
             .buttonStyle(.plain)
+            .background(Circle().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
             .accessibilityLabel("Close conversations")
         }
         .padding(.horizontal, 16)
         .padding(.top, 60)
         .padding(.bottom, 10)
         .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    private var drawerSubtitle: String {
+        let count = cursorChatAgents.count
+        if count == 1 {
+            return "1 conversation"
+        }
+        return "\(count) conversations"
     }
 
     private var cursorChatComposer: some View {
@@ -510,7 +527,7 @@ struct CursorChatView: View {
             ComposerControlPill(
                 systemName: selectedRepository == nil ? "message" : "folder",
                 title: selectedRepository?.displayName ?? "General Chat",
-                maxWidth: selectedRepository == nil ? nil : 210
+                maxWidth: selectedRepository == nil ? 158 : 210
             )
         }
         .menuIndicator(.hidden)
@@ -1419,6 +1436,14 @@ struct ChatListContent: View {
                             .lineLimit(1)
                     }
 
+                    Text("\(group.agents.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
+
                     if hiddenCount > 0 {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.caption2.weight(.bold))
@@ -2007,13 +2032,14 @@ private struct ConversationThreadRow: View {
     }
 
     private var drawerBody: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .top, spacing: 9) {
             runningIndicator
+                .padding(.top, 7)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(displayTitle)
-                        .font(.body.weight(isSelected ? .semibold : .regular))
+                        .font(.subheadline.weight(isSelected ? .semibold : .medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -2024,22 +2050,24 @@ private struct ConversationThreadRow: View {
                 }
 
                 if shouldShowDrawerPreview {
+                    Text(metadata.preview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                if shouldShowDrawerIndicators {
                     HStack(spacing: 6) {
-                        Text(metadata.preview)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                        drawerOutputIndicators
 
                         Spacer(minLength: 0)
-
-                        drawerOutputIndicators
                     }
                 }
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .background {
             if isSelected {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -2082,26 +2110,33 @@ private struct ConversationThreadRow: View {
         return !preview.isEmpty && preview.localizedCaseInsensitiveCompare(displayTitle) != .orderedSame
     }
 
+    private var shouldShowDrawerIndicators: Bool {
+        metadata.changedFileCount > 0 || metadata.artifactCount > 0 || metadata.hasPullRequest
+    }
+
     @ViewBuilder
     private var drawerOutputIndicators: some View {
         if metadata.changedFileCount > 0 {
-            Label("\(metadata.changedFileCount)", systemImage: "doc.text.magnifyingglass")
-                .labelStyle(.iconOnly)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            drawerIndicator(systemName: "doc.text.magnifyingglass", title: "\(metadata.changedFileCount)")
         }
 
         if metadata.artifactCount > 0 {
-            Image(systemName: "tray.full")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            drawerIndicator(systemName: "tray.full", title: "\(metadata.artifactCount)")
         }
 
         if metadata.hasPullRequest {
-            Image(systemName: "arrow.up.right.square")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            drawerIndicator(systemName: "arrow.up.right.square", title: "PR")
         }
+    }
+
+    private func drawerIndicator(systemName: String, title: String) -> some View {
+        Label(title, systemImage: systemName)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
     }
 
     @ViewBuilder
