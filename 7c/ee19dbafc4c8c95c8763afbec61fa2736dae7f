@@ -1,0 +1,58 @@
+project.yml
+  s_984bf69dd03ef8::t_3a4144214df403 15,32
+Runline/Resources/Info.plist
+  s_984bf69dd03ef8::t_a04912983eec4c 38-39
+AGENTS.md
+  s_984bf69dd03ef8::t_20aa450b5933dd 11,32
+SELF_HOSTING_MODEL.md
+  s_984bf69dd03ef8::t_78f4eb46822491 7,32,73
+docs/CURSOR_SDK_CAPABILITIES.md
+  s_984bf69dd03ef8::t_477895a27eed71 1-37
+Runline/Core/DomainModels.swift
+  s_984bf69dd03ef8::t_35e8509415c190 240,253-254,267,283,618-647
+  s_984bf69dd03ef8::t_d00e8fcb832748 480-484,612-617
+RunlineTests/RunlineTests.swift
+  s_984bf69dd03ef8::t_d67d99414f7897 298-305
+  s_984bf69dd03ef8::t_a4c5d086e18939 104-106,136-138
+  s_984bf69dd03ef8::t_f449e7d9d8812d 92-93,97-103,107-125,129-135,139-142,145-161
+  s_984bf69dd03ef8::t_7fcceba361a2df 41-43,94-96,126-128,458-466,588-600
+  s_984bf69dd03ef8::t_be8afc64eea939 143-144
+Runline/Networking/SDKBridgeClient.swift
+  s_984bf69dd03ef8::t_79b48223006074 58
+  s_984bf69dd03ef8::t_3a3bf4fc9814c7 30,41-45,52-53,57,59-60,68-76
+Runline/Features/SettingsView.swift
+  s_984bf69dd03ef8::t_ea65a1946edba0 74-75,88,92
+CHANGELOG.md
+  s_984bf69dd03ef8::t_399a99034f9780 29
+  s_984bf69dd03ef8::t_33fce7ece18c0c 31
+README.md
+  s_984bf69dd03ef8::t_edeaf5eb040f56 129
+  s_984bf69dd03ef8::t_8fbbfc88a2d1cf 21,51,69,164
+docs/RELEASES.md
+  s_984bf69dd03ef8::t_323e7b4f9a443d 12,99,122
+Runline.xcodeproj/project.pbxproj
+  s_984bf69dd03ef8::t_c6b3de59c0a854 480,505,528,611
+Runline/App/AppState.swift
+  s_984bf69dd03ef8::t_5821a89ccc1543 16,54-57,66,939
+  s_984bf69dd03ef8::t_266d067a3a418f 955,960-966,970,972,976,985-986,989-998,1000-1001,1004-1010,1015-1016,1040
+  s_984bf69dd03ef8::t_73c19b56d231f2 377,624,716
+  s_984bf69dd03ef8::t_38052db5947097 99-102
+Runline/Features/ChatsView.swift
+  s_984bf69dd03ef8::t_2cef1dacd97584 1805-1809,1826-1829,1834,1862-1871
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "7cee19dbafc4c8c95c8763afbec61fa2736dae7f",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
