@@ -4,6 +4,11 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 
 ## Unreleased
 
+- No unreleased changes.
+
+## TestFlight 1.0 (26)
+
+- Uploaded build 26 to TestFlight and distributed it to the configured beta group.
 - Added a Fly-hosted Cursor SDK bridge for Cursor Chat.
 - Split Cursor Chat and Cursor Cloud into separate navigation experiences.
 - Added a conversational Cursor Chat start surface with a bottom composer, attachments, model picker, and separate repo/general-chat context selector.

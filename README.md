@@ -123,7 +123,7 @@ gitleaks detect --source . --no-git --redact --verbose
 | Channel | Current state | Notes |
 | --- | --- | --- |
 | GitHub | Public repository at `parrisdigital/runline` | Source, docs, issues, releases |
-| TestFlight | Runline `1.0 (25)` in beta testing | Requires App Store Connect access |
+| TestFlight | Runline `1.0 (26)` in beta testing | Requires App Store Connect access |
 | App Store | Preparing public publishing | Maintainer-managed |
 
 See [docs/RELEASES.md](docs/RELEASES.md) for the maintainer release checklist, [CHANGELOG.md](CHANGELOG.md) for public release notes, [docs/ROADMAP.md](docs/ROADMAP.md) for the beta roadmap, and [docs/CURSOR_SDK_CAPABILITIES.md](docs/CURSOR_SDK_CAPABILITIES.md) for the verified SDK capability map behind Cursor Chat.
