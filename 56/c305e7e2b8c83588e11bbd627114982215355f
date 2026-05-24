@@ -1,0 +1,34 @@
+CHANGELOG.md
+  s_984bf69dd03ef8::t_ac93cac1f3e750 30
+docs/RELEASES.md
+  s_984bf69dd03ef8::t_a176eb771c37f4 121
+Services/cursor-sdk-bridge/.dockerignore
+  s_984bf69dd03ef8::t_a176eb771c37f4 8
+README.md
+  s_984bf69dd03ef8::t_ac93cac1f3e750 37,51,65,67,69,77
+Services/cursor-sdk-bridge/fly.example.toml
+  s_984bf69dd03ef8::t_ac93cac1f3e750 1
+AGENTS.md
+  s_984bf69dd03ef8::t_ac93cac1f3e750 12,32,35
+SELF_HOSTING_MODEL.md
+  s_984bf69dd03ef8::t_ac93cac1f3e750 7,17,31,57,72,74,85
+  s_984bf69dd03ef8::t_a176eb771c37f4 73
+.gitignore
+  s_984bf69dd03ef8::t_ac93cac1f3e750 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "56c305e7e2b8c83588e11bbd627114982215355f",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
