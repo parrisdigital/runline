@@ -10,7 +10,8 @@
     "TESTFLIGHT_GROUP_ID": "replace-with-external-testflight-group-id",
     "INTERNAL_TESTFLIGHT_GROUP_ID": "replace-with-internal-testflight-group-id",
     "LOCALE": "en-US",
-    "TEST_NOTES": "Verify the Cloud-only Runline flow: API key setup, Chats, Repositories, Settings, chat composer, model selection, attachments, run updates, artifacts, iPhone and iPad layouts, light mode, and dark mode."
+    "RUNLINE_SDK_BRIDGE_URL": "",
+    "TEST_NOTES": "Verify Runline Cursor Chat and Cursor Cloud: API key setup, conversational chat, conversation drawer, general-to-repo workspace handoff, Cloud run review, model selection, attachments, artifacts, iPhone and iPad layouts, light mode, and dark mode."
   },
   "before_all": "asc --profile $ASC_PROFILE auth status --validate --output json >/dev/null",
   "after_all": "echo workflow_done >&2",
@@ -77,7 +78,7 @@
         },
         {
           "name": "archive",
-          "run": "asc --profile $ASC_PROFILE xcode archive --project $PROJECT --scheme $SCHEME --configuration Release --clean --overwrite --archive-path \".asc/artifacts/Runline-${VERSION}-${BUILD_NUMBER}.xcarchive\" --xcodebuild-flag=-destination --xcodebuild-flag=generic/platform=iOS --xcodebuild-flag=-allowProvisioningUpdates --output json"
+          "run": "asc --profile $ASC_PROFILE xcode archive --project $PROJECT --scheme $SCHEME --configuration Release --clean --overwrite --archive-path \".asc/artifacts/Runline-${VERSION}-${BUILD_NUMBER}.xcarchive\" --xcodebuild-flag=-destination --xcodebuild-flag=generic/platform=iOS --xcodebuild-flag=-allowProvisioningUpdates --xcodebuild-flag=RUNLINE_SDK_BRIDGE_URL=$RUNLINE_SDK_BRIDGE_URL --output json"
         },
         {
           "name": "upload",
