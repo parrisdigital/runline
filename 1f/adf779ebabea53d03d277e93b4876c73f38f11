@@ -1,0 +1,38 @@
+Runline/Features/SettingsView.swift
+  s_984bf69dd03ef8::t_d2d4cc147babf9 74-81,160-162
+Runline/App/AppState.swift
+  s_984bf69dd03ef8::t_d9f1d8d7337247 44-45,105-117,238,247,268-269,275,278-280,1142-1147,1151-1155,1193,1198-1200
+  s_984bf69dd03ef8::t_a187fc8f1d2d0b 1194-1197
+Runline/Providers/CursorSDKBridgeProvider.swift
+  s_984bf69dd03ef8::t_29aa5b6540e37d 24
+project.yml
+  s_984bf69dd03ef8::t_a6a8a34db052c1 13
+Runline/Networking/SDKBridgeClient.swift
+  s_984bf69dd03ef8::t_9c2bc1174a4f8d 6,16-17,33,46-50,55,84-97,284-290,316-322,366-369,476-486
+  s_984bf69dd03ef8::t_99b68cd19a9c7d 58-59
+  s_984bf69dd03ef8::t_af4ace6af79172 371
+docs/RELEASES.md
+  s_984bf69dd03ef8::t_01fb89108c4825 11
+Runline.xcodeproj/project.pbxproj
+  s_984bf69dd03ef8::t_0abd016f624179 462,584
+RunlineTests/RunlineTests.swift
+  s_984bf69dd03ef8::t_e7369f4ff5328d 467-485,619
+CHANGELOG.md
+  s_984bf69dd03ef8::t_63a8da6a18f817 9-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "1fadf779ebabea53d03d277e93b4876c73f38f11",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
