@@ -26,8 +26,9 @@ Runline is in public beta.
 - Lists Cursor repositories and models.
 - Starts conversational Cursor Chat sessions from a composer-first screen with repo-backed or general-chat context.
 - Tracks Cursor Chat conversations in a slide-over drawer grouped by workspace.
+- Continues a General Chat into a repository-backed workspace while carrying the chat topic and prior context.
 - Starts Cursor Cloud Agent runs from the structured native Cloud flow.
-- Shows agent chats with immediate user bubbles, grouped run events, status, artifacts, and pull request links.
+- Shows agent chats with immediate user bubbles, quiet live activity rows, grouped run events, status, artifacts, and pull request links.
 - Shows inline file-change summaries and diff sheets when SDK events include parseable change data.
 - Supports follow-up prompts, files, and images, including queued Cursor Chat follow-ups while a run is active.
 - Adds the included Fly-hostable Cursor SDK bridge for Cursor Chat.
@@ -134,7 +135,7 @@ gitleaks detect --source . --no-git --redact --verbose
 | Channel | Current state | Notes |
 | --- | --- | --- |
 | GitHub | Public repository at `parrisdigital/runline` | Source, docs, issues, releases |
-| TestFlight | Runline `1.0 (21)` in beta testing | Requires App Store Connect access |
+| TestFlight | Runline `1.0 (25)` in beta testing | Requires App Store Connect access |
 | App Store | Preparing public publishing | Maintainer-managed |
 
 See [docs/RELEASES.md](docs/RELEASES.md) for the maintainer release checklist, [CHANGELOG.md](CHANGELOG.md) for public release notes, and [docs/ROADMAP.md](docs/ROADMAP.md) for the beta roadmap.

@@ -67,6 +67,20 @@ Upload with an explicit build number:
 asc workflow run testflight BUILD_NUMBER:<next-build-number>
 ```
 
+## Cursor Chat QA
+
+Before uploading a Cursor Chat release candidate, validate:
+
+- General Chat starts from the Cursor Chat composer without selecting a repository.
+- Cursor Chat defaults to Composer 2.5 and preserves an explicit model selection.
+- Recent chats appear on the Cursor Chat home screen and in the conversation drawer.
+- Drawer filters separate all chats, general chats, and repository workspaces.
+- Follow-up messages render immediately while SDK events stream in.
+- Thinking and tool activity stay scrollable during an active run.
+- General Chat can continue into a repository workspace with prior context.
+- Cursor Cloud still opens the structured Cloud Agent flow and does not depend on the SDK bridge.
+- Closing and reopening the app restores cached chats and run timelines where available.
+
 ## App Store Review Notes
 
 Keep review notes clear and public-safe:

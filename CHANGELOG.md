@@ -14,6 +14,8 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Paused timeline auto-scroll during manual scrolling so live Cursor Chat updates do not fight the user's scroll gesture.
 - Bounded Cursor Chat thinking/tool-call rendering with compact activity rows, a details sheet, cached timeline snapshots, and collapsed diff cards to prevent freezes during active runs.
 - Refined Cursor Chat into a composer-first start screen with a Remodex-inspired slide-over conversation drawer, active sessions, grouped workspace conversations, and compact file-change, artifact, PR, model, and branch indicators.
+- Refined Cursor Chat detail screens with quieter live activity rows and removed redundant SDK runtime/status header chrome.
+- Added a clearer General Chat to repository workspace handoff that keeps the conversation topic and prior context.
 - Seeded new launches and follow-ups with an immediate local user message so the detail screen opens as a conversation while Cursor events stream in.
 - Added a durable Fly-volume session metadata store for Cursor Chat so SDK sessions can be listed and resumed after bridge restarts without persisting Cursor API keys or prompt text.
 - Added queued Cursor Chat follow-ups while an SDK run is active so users can keep the conversation moving without cancelling the current run.
