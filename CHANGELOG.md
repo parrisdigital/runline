@@ -6,6 +6,11 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 
 - No unreleased changes.
 
+## TestFlight 1.0 (28)
+
+- Deployed a Cursor Chat bridge update that nudges repo-less General Chat to answer directly instead of inspecting an empty workspace first.
+- Refined Cursor Chat active-run screens with a shorter navigation title, a compact queued follow-up row, an unclipped Continue in Repo action, and fewer duplicate working/status rows.
+
 ## TestFlight 1.0 (27)
 
 - Fixed Cursor Chat bridge resolution so TestFlight builds prefer the bundled maintainer bridge unless a user explicitly configures a custom bridge.

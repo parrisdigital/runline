@@ -5,6 +5,18 @@ import { EventHub } from "./events.js";
 import type { SessionCreateInput, SessionMessageInput } from "./schemas.js";
 import type { BridgeRunState, BridgeSession, SessionStore } from "./sessionStore.js";
 
+type PromptTextInput = {
+  prompt: string;
+  repo?: SessionCreateInput["repo"];
+  repositoryUrl?: string;
+  startingRef?: string;
+  prUrl?: string;
+};
+
+type UserMessageInput = PromptTextInput & {
+  images?: SessionCreateInput["images"];
+};
+
 export type BridgeContext = {
   sessions: SessionStore;
   events: EventHub;
@@ -68,7 +80,7 @@ export async function sendSDKSessionMessage(
     });
   }
   const agent = await Agent.resume(session.agentId, { apiKey });
-  const run = await agent.send(userMessage(input), sendOptions(input));
+  const run = await agent.send(userMessage(userMessageInput(input, session)), sendOptions(input));
   const runState = bridgeRunState(agent.agentId, run);
   const updatedSession = context.sessions.appendRun(sessionID, runState);
   collectRun(sessionID, run, context);
@@ -206,18 +218,42 @@ function sendOptions(input: SessionMessageInput): SendOptions {
   return options;
 }
 
-function userMessage(input: Pick<SessionCreateInput, "prompt" | "images">): string | SDKUserMessage {
+function userMessage(input: UserMessageInput): string | SDKUserMessage {
+  const text = promptText(input);
   if (!input.images?.length) {
-    return input.prompt;
+    return text;
   }
   return {
-    text: input.prompt,
+    text,
     images: input.images.map((image): SDKImage => ({
       data: image.data,
       mimeType: image.mimeType,
       dimension: image.dimension,
     })),
   };
+}
+
+function userMessageInput(input: SessionMessageInput, session: BridgeSession): UserMessageInput {
+  return {
+    ...input,
+    repositoryUrl: session.repositoryUrl,
+    startingRef: session.startingRef,
+    prUrl: session.prUrl,
+  };
+}
+
+export function promptText(input: PromptTextInput): string {
+  if (normalizedRepo(input)) {
+    return input.prompt;
+  }
+
+  return [
+    "You are in Runline General Chat, a repo-less Cursor Chat conversation.",
+    "Answer conversationally and directly. Do not inspect the workspace, search files, run terminal commands, or create files unless the user explicitly asks to create or inspect a repository-backed workspace.",
+    "",
+    "User message:",
+    input.prompt,
+  ].join("\n");
 }
 
 function bridgeRunState(agentId: string, run: Run): BridgeRunState {
@@ -233,7 +269,7 @@ function bridgeRunState(agentId: string, run: Run): BridgeRunState {
   };
 }
 
-function normalizedRepo(input: SessionCreateInput): { url: string; startingRef?: string; prUrl?: string } | undefined {
+function normalizedRepo(input: PromptTextInput): { url: string; startingRef?: string; prUrl?: string } | undefined {
   if (input.repo) {
     return input.repo;
   }

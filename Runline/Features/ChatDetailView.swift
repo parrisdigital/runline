@@ -93,7 +93,8 @@ struct ChatDetailView: View {
                             }
                         }
 
-                        if appState.isObserving(runID: latestRun.id) {
+                        if appState.isObserving(runID: latestRun.id),
+                           shouldShowListeningRow(agent: currentAgent, timelineItems: timelineItems) {
                             CloudRunListeningRow(runtimeMode: currentAgent.runtimeMode)
                         }
                     } else {
@@ -141,7 +142,7 @@ struct ChatDetailView: View {
                 followUpComposer(agent: currentAgent, run: latestRun)
             }
         }
-        .navigationTitle(currentAgent.name)
+        .navigationTitle(navigationTitle(for: currentAgent))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             await appState.refreshAgentDetail(agentID: currentAgent.id)
@@ -286,6 +287,16 @@ struct ChatDetailView: View {
             return true
         }
         return false
+    }
+
+    private func shouldShowListeningRow(agent: Agent, timelineItems: [ChatTimelineItem]) -> Bool {
+        guard agent.runtimeMode == .sdkBridge else { return true }
+        return timelineItems.isEmpty
+    }
+
+    private func navigationTitle(for agent: Agent) -> String {
+        guard agent.runtimeMode == .sdkBridge else { return agent.name }
+        return agent.repository.isGeneralChat ? "General Chat" : agent.repository.displayName
     }
 
     private func canCreateWorkspaceFromGeneralChat(agent: Agent) -> Bool {
@@ -753,28 +764,31 @@ private struct QueuedFollowUpRow: View {
     var onCancel: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(spacing: 10) {
             Image(systemName: "text.bubble")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.blue)
-                .frame(width: 28, height: 28)
+                .frame(width: 26, height: 26)
                 .background(Circle().fill(Color.blue.opacity(0.12)))
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Queued follow-up")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text("Queued")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    if !attachmentSummary.isEmpty {
+                        Text(attachmentSummary)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
 
                 Text(draft.prompt.text)
-                    .font(.callout)
-                    .lineLimit(2)
+                    .font(.subheadline)
+                    .lineLimit(1)
                     .foregroundStyle(.primary)
-
-                if !draft.prompt.files.isEmpty || !draft.prompt.images.isEmpty {
-                    Text(attachmentSummary)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
             }
 
             Spacer(minLength: 8)
@@ -783,7 +797,7 @@ private struct QueuedFollowUpRow: View {
                 onEdit()
             } label: {
                 Image(systemName: "pencil")
-                    .frame(width: 30, height: 30)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Edit queued follow-up")
@@ -792,13 +806,13 @@ private struct QueuedFollowUpRow: View {
                 onCancel()
             } label: {
                 Image(systemName: "xmark")
-                    .frame(width: 30, height: 30)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Cancel queued follow-up")
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 9)
         .background(Color(uiColor: .secondarySystemBackground).opacity(0.70), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1495,27 +1509,44 @@ private struct ConversationHeaderCard: View {
                     .lineLimit(1)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    if !agent.repository.isGeneralChat, let branchName = agent.branchName.nilIfBlank {
-                        CloudChatContextChip(systemName: "arrow.triangle.branch", title: branchName)
-                    }
-                    CloudChatContextChip(systemName: "cpu", title: agent.modelID)
-                    if let run {
-                        CloudChatContextChip(systemName: "clock", title: run.updatedAtDescription)
-                    }
-
-                    if agent.artifactCount > 0 {
-                        CloudChatContextChip(systemName: "tray.full", title: "\(agent.artifactCount) artifact\(agent.artifactCount == 1 ? "" : "s")")
-                    }
-
-                    if let onCreateWorkspace {
-                        Button(action: onCreateWorkspace) {
-                            CloudChatContextChip(systemName: "folder.badge.plus", title: "Continue in Repo", tint: Color(uiColor: .systemBlue))
+            VStack(alignment: .leading, spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        if !agent.repository.isGeneralChat, let branchName = agent.branchName.nilIfBlank {
+                            CloudChatContextChip(systemName: "arrow.triangle.branch", title: branchName)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Create repository workspace from this chat")
+                        CloudChatContextChip(systemName: "cpu", title: agent.modelID)
+                        if let run {
+                            CloudChatContextChip(systemName: "clock", title: run.updatedAtDescription)
+                        }
+
+                        if agent.artifactCount > 0 {
+                            CloudChatContextChip(systemName: "tray.full", title: "\(agent.artifactCount) artifact\(agent.artifactCount == 1 ? "" : "s")")
+                        }
                     }
+                }
+
+                if let onCreateWorkspace {
+                    Button(action: onCreateWorkspace) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "folder.badge.plus")
+                            Text("Continue in Repo")
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Color(uiColor: .systemBlue))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color(uiColor: .systemBlue).opacity(0.10))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Create repository workspace from this chat")
                 }
             }
         }

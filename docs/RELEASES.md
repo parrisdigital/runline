@@ -8,7 +8,7 @@ Runline's default Cloud Agent mode is backendless. Release work should not make 
 
 | Area | State |
 | --- | --- |
-| iOS app | Runline `1.0 (27)` in beta sequence |
+| iOS app | Runline `1.0 (28)` in beta sequence |
 | Runtime | Maintainer-configured SDK bridge for Cursor Chat; direct Cursor Cloud Agents API for Cursor Cloud |
 | Public source | Safe to build without maintainer credentials |
 | ASC config | Live `.asc/workflow.json` remains local and ignored |
