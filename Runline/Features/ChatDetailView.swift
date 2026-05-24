@@ -809,14 +809,14 @@ private struct GeneralChatWorkspaceHandoffSheet: View {
 
     @State private var selectedRepositoryID = ""
     @State private var branchText = ""
-    @State private var instruction = "Continue with the next concrete implementation step."
+    @State private var instruction = "Use this conversation as context and continue with the next concrete implementation step."
     @State private var isCreating = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    sourceRow
+                VStack(alignment: .leading, spacing: 20) {
+                    handoffRouteCard
 
                     if availableRepositories.isEmpty {
                         emptyRepositoriesView
@@ -834,7 +834,7 @@ private struct GeneralChatWorkspaceHandoffSheet: View {
                 .padding(.bottom, 112)
             }
             .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("Create Workspace")
+            .navigationTitle("Continue in Workspace")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -858,33 +858,53 @@ private struct GeneralChatWorkspaceHandoffSheet: View {
         }
     }
 
-    private var sourceRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color(uiColor: .systemGreen))
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(Color(uiColor: .systemGreen).opacity(0.12)))
+    private var handoffRouteCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(presentation.agent.name)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(presentation.agent.name)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+            HStack(spacing: 8) {
+                handoffRouteChip(
+                    systemName: "bubble.left.and.bubble.right",
+                    title: "General Chat",
+                    tint: Color(uiColor: .systemGreen)
+                )
 
-                Text("General Chat")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Image(systemName: "arrow.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+
+                handoffRouteChip(
+                    systemName: "folder",
+                    title: selectedRepository?.displayName ?? "Repository",
+                    tint: Color(uiColor: .systemBlue)
+                )
             }
-
-            Spacer(minLength: 8)
         }
-        .padding(.vertical, 4)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(uiColor: .separator).opacity(0.12), lineWidth: 0.5)
+        )
+    }
+
+    private func handoffRouteChip(systemName: String, title: String, tint: Color) -> some View {
+        Label(title, systemImage: systemName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(Capsule().fill(tint.opacity(0.10)))
     }
 
     private var repositorySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Workspace")
+            Text("Repository")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 2)
@@ -911,7 +931,7 @@ private struct GeneralChatWorkspaceHandoffSheet: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
 
-                        Text(selectedRepository?.defaultBranch.nilIfBlank ?? "Repository")
+                        Text(selectedRepository?.defaultBranch.nilIfBlank ?? "Choose where Cursor should work")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -943,12 +963,12 @@ private struct GeneralChatWorkspaceHandoffSheet: View {
 
     private var instructionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Instruction")
+            Text("Next step")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 2)
 
-            TextField("Next step", text: $instruction, axis: .vertical)
+            TextField("Tell Cursor what to do in this repository", text: $instruction, axis: .vertical)
                 .lineLimit(3...7)
                 .padding(14)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -957,7 +977,7 @@ private struct GeneralChatWorkspaceHandoffSheet: View {
 
     private var contextSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Context")
+            Text("Conversation context")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 2)
@@ -975,9 +995,9 @@ private struct GeneralChatWorkspaceHandoffSheet: View {
     private var emptyRepositoriesView: some View {
         VStack(spacing: 14) {
             ContentUnavailableView(
-                "No Repositories",
+                "No Repository Workspaces",
                 systemImage: "folder.badge.questionmark",
-                description: Text("Refresh repositories before creating a workspace from this chat.")
+                description: Text("Refresh repositories before continuing this chat in a workspace.")
             )
 
             Button {
@@ -1002,7 +1022,7 @@ private struct GeneralChatWorkspaceHandoffSheet: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
             } else {
-                Label("Create Workspace", systemImage: "arrow.right")
+                Label("Continue in Workspace", systemImage: "arrow.right")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
@@ -1166,7 +1186,7 @@ private struct ConversationHeaderCard: View {
 
                     if let onCreateWorkspace {
                         Button(action: onCreateWorkspace) {
-                            CloudChatContextChip(systemName: "folder.badge.plus", title: "Add Repo", tint: Color(uiColor: .systemBlue))
+                            CloudChatContextChip(systemName: "folder.badge.plus", title: "Continue in Repo", tint: Color(uiColor: .systemBlue))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Create repository workspace from this chat")
