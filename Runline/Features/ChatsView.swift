@@ -167,46 +167,16 @@ struct CursorChatView: View {
 
     private var cursorChatHome: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 24) {
                 if !runningCursorChatAgents.isEmpty {
                     activeSessionsSection
                 }
 
-                VStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color(uiColor: .systemGreen).opacity(0.12))
+                cursorChatHomePrompt
+                    .padding(.top, cursorChatAgents.isEmpty ? 122 : 22)
 
-                        Image(systemName: "bubble.left.and.text.bubble.right")
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(Color(uiColor: .systemGreen))
-                    }
-                    .frame(width: 58, height: 58)
-
-                    Text("What are we building?")
-                        .font(.title2.weight(.semibold))
-                        .multilineTextAlignment(.center)
-
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, runningCursorChatAgents.isEmpty ? 122 : 42)
-
-                if !cursorChatAgents.isEmpty {
-                    Button {
-                        openConversationDrawer()
-                    } label: {
-                        Label("Open conversations", systemImage: "sidebar.left")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
-                    .padding(.top, 6)
+                if !recentCursorChatAgents.isEmpty {
+                    cursorChatRecentSection
                 }
             }
             .padding(.horizontal, 20)
@@ -218,6 +188,71 @@ struct CursorChatView: View {
         .scrollDismissesKeyboard(.interactively)
         .onTapGesture {
             isPromptFocused = false
+        }
+    }
+
+    private var cursorChatHomePrompt: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color(uiColor: .systemGreen).opacity(0.12))
+
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color(uiColor: .systemGreen))
+            }
+            .frame(width: 58, height: 58)
+
+            Text("What are we building?")
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var cursorChatRecentSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Recent")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    openConversationDrawer()
+                } label: {
+                    Text("View all")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color(uiColor: .systemBlue))
+            }
+            .padding(.horizontal, 2)
+
+            VStack(spacing: 0) {
+                ForEach(Array(recentCursorChatAgents.prefix(4).enumerated()), id: \.element.id) { index, agent in
+                    Button {
+                        activeAgentID = agent.id
+                    } label: {
+                        CursorChatRecentConversationRow(agent: agent, run: appState.runs(for: agent).first)
+                    }
+                    .buttonStyle(.plain)
+
+                    if index < min(recentCursorChatAgents.count, 4) - 1 {
+                        Divider()
+                            .padding(.leading, 52)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color(uiColor: .separator).opacity(0.12), lineWidth: 0.5)
+            )
         }
     }
 
@@ -596,6 +631,13 @@ struct CursorChatView: View {
         }
     }
 
+    private var recentCursorChatAgents: [Agent] {
+        cursorChatAgents.filter { agent in
+            let status = appState.runs(for: agent).first?.status
+            return status != .running && status != .creating
+        }
+    }
+
     private var promptAttachmentStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -842,6 +884,159 @@ private struct CursorChatActiveSessionRow: View {
     }
 }
 
+private struct CursorChatRecentConversationRow: View {
+    var agent: Agent
+    var run: AgentRun?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.12))
+                Image(systemName: agent.repository.isGeneralChat ? "bubble.left.and.bubble.right" : "folder")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(displayTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(contextTitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if let run {
+                RunStatusBadge(status: run.status)
+            } else {
+                Text(agent.updatedAtDescription)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    private var displayTitle: String {
+        let title = agent.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Untitled chat" : title
+    }
+
+    private var contextTitle: String {
+        agent.repository.isGeneralChat ? "General Chat" : agent.repository.displayName
+    }
+
+    private var tint: Color {
+        if run?.status == .error {
+            return .red
+        }
+        if run?.status == .finished {
+            return .green
+        }
+        return agent.repository.isGeneralChat ? Color(uiColor: .systemGreen) : .secondary
+    }
+}
+
+private enum CursorChatConversationScope: String, CaseIterable, Identifiable {
+    case all
+    case general
+    case workspaces
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            "All"
+        case .general:
+            "General"
+        case .workspaces:
+            "Workspaces"
+        }
+    }
+
+    var systemName: String {
+        switch self {
+        case .all:
+            "rectangle.stack"
+        case .general:
+            "bubble.left.and.bubble.right"
+        case .workspaces:
+            "folder"
+        }
+    }
+
+    var emptyTitle: String {
+        switch self {
+        case .all:
+            "No Cursor Chats"
+        case .general:
+            "No General Chats"
+        case .workspaces:
+            "No Workspace Chats"
+        }
+    }
+
+    var emptyDescription: String {
+        switch self {
+        case .all:
+            "Message Cursor from the composer to start a workspace chat."
+        case .general:
+            "Start a General Chat from the composer."
+        case .workspaces:
+            "Choose a repository from the composer to start a workspace chat."
+        }
+    }
+}
+
+private struct CursorChatScopePicker: View {
+    @Binding var selection: CursorChatConversationScope
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(CursorChatConversationScope.allCases) { scope in
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        selection = scope
+                    }
+                } label: {
+                    Label(scope.title, systemImage: scope.systemName)
+                        .labelStyle(.titleOnly)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(selection == scope ? Color(uiColor: .systemBackground) : .primary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 11)
+                        .frame(height: 30)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(selection == scope ? Color.primary : Color(uiColor: .secondarySystemGroupedBackground))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Color(uiColor: .separator).opacity(selection == scope ? 0 : 0.16), lineWidth: 0.5)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(scope.title)
+                .accessibilityAddTraits(selection == scope ? .isSelected : [])
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
 struct ChatListContent: View {
     enum Presentation {
         case navigation
@@ -941,6 +1136,7 @@ struct ChatListContent: View {
     var currentAgentID: Agent.ID?
     var presentation: Presentation
     @State private var expandedWorkspaceGroupIDs: Set<WorkspaceAgentGroup.ID> = []
+    @State private var cursorChatScope: CursorChatConversationScope = .all
 
     private static let collapsedWorkspaceThreadLimit = 6
 
@@ -954,6 +1150,10 @@ struct ChatListContent: View {
                     runningCount: runningAgents.count,
                     repositoryCount: appState.repositories.count
                 )
+
+                if case .cursorChat = experience {
+                    CursorChatScopePicker(selection: $cursorChatScope)
+                }
 
                 listContent
             }
@@ -983,7 +1183,7 @@ struct ChatListContent: View {
     }
 
     private var archivedAgents: [Agent] {
-        filteredAgents.filter { agent in
+        scopedFilteredAgents.filter { agent in
             if case .archived = agent.status { return true }
             return false
         }
@@ -1049,6 +1249,19 @@ struct ChatListContent: View {
         }
     }
 
+    private var scopedFilteredAgents: [Agent] {
+        guard experience == .cursorChat else { return filteredAgents }
+
+        switch cursorChatScope {
+        case .all:
+            return filteredAgents
+        case .general:
+            return filteredAgents.filter { isGeneralChat($0.repository) }
+        case .workspaces:
+            return filteredAgents.filter { !isGeneralChat($0.repository) }
+        }
+    }
+
     private var activeAgents: [Agent] {
         cloudAgents.filter { agent in
             guard case .archived = agent.status else { return true }
@@ -1057,7 +1270,7 @@ struct ChatListContent: View {
     }
 
     private var filteredActiveAgents: [Agent] {
-        filteredAgents.filter { agent in
+        scopedFilteredAgents.filter { agent in
             guard case .archived = agent.status else { return true }
             return false
         }
@@ -1076,6 +1289,12 @@ struct ChatListContent: View {
                 "No Matches",
                 systemImage: "magnifyingglass",
                 description: Text("Try a repository, branch, model, or status.")
+            )
+        } else if case .cursorChat = experience, scopedFilteredAgents.isEmpty {
+            ContentUnavailableView(
+                cursorChatScope.emptyTitle,
+                systemImage: cursorChatScope.systemName,
+                description: Text(cursorChatScope.emptyDescription)
             )
         } else if case .cursorChat = experience {
             cursorChatListContent
