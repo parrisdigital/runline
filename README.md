@@ -34,7 +34,7 @@ Runline is in public beta.
 - Shows agent chats with immediate user bubbles, quiet live activity rows, grouped run events, status, artifacts, and pull request links.
 - Shows inline file-change summaries and diff sheets when SDK events include parseable change data.
 - Supports follow-up prompts, files, and images, including queued Cursor Chat follow-ups while a run is active.
-- Adds the included Fly-hostable Cursor SDK bridge for Cursor Chat.
+- Uses the hosted Runline SDK bridge for Cursor Chat, with bridge source included for auditability and maintainer deployment.
 - Provides search, iPhone tab navigation, and iPad split-view navigation.
 - Supports system appearance, light mode, dark mode, and notification preferences.
 - Keeps the non-affiliation disclaimer visible in the app and docs.
@@ -48,7 +48,7 @@ Runline has two runtime paths. Cursor Cloud remains fully backendless, while Cur
 | Cursor Chat | iOS to the Runline SDK bridge, then `@cursor/sdk` to Cursor cloud runtime | Cursor-like live sessions, SDK event streaming, follow-up iteration | Cursor API key |
 | Cursor Cloud | Directly from iOS to Cursor Cloud Agents | Repository tasks, artifacts, PR workflows, release checks | Cursor API key |
 
-Runline does not require Node, a Mac relay, or a user-run backend for Cursor Cloud. Cursor Chat uses the hosted Runline bridge by default; advanced users can self-host the included `Services/cursor-sdk-bridge` service.
+Runline does not require Node, a Mac relay, or a user-run backend for Cursor Cloud. Cursor Chat uses the hosted Runline bridge by default, so normal iOS users and contributors do not need to install or run the bridge locally.
 
 ## Install the iOS Beta
 
@@ -62,17 +62,11 @@ The iOS beta is distributed through TestFlight by the maintainer. Once installed
 
 Cursor API keys stay on device in Keychain. Cursor Cloud uses the key directly from the app; Cursor Chat sends it over HTTPS to the Runline bridge only for SDK-backed requests.
 
-## Optional Cursor Chat Bridge
+## Cursor Chat Bridge Source
 
-The SDK bridge is a small Node service in `Services/cursor-sdk-bridge`. Local development uses an in-memory session store by default. Fly deployments should mount a volume and set `RUNLINE_BRIDGE_SESSION_STORE_PATH` so session IDs, run IDs, repo metadata, model IDs, run status, and PR metadata can survive Machine restarts. The bridge does not persist Cursor API keys or prompt text.
+The SDK bridge source is included in `Services/cursor-sdk-bridge` for transparency and maintainer deployment. It is not part of the normal iOS setup path, and contributors do not need npm, Node, Fly, or a local bridge to build and inspect the app.
 
-Fly setup for the included `fly.toml`:
-
-```bash
-cd Services/cursor-sdk-bridge
-fly volumes create runline_sdk_bridge_data --app runline-sdk-bridge --region iad --size 1
-fly deploy --app runline-sdk-bridge
-```
+Bridge deployments should keep live Fly configuration, bridge secrets, and tokens outside git. The service includes `fly.example.toml` only as a public-safe shape for maintainers or advanced self-hosters. The bridge does not persist Cursor API keys or prompt text.
 
 ## Repository Layout
 
@@ -80,7 +74,7 @@ fly deploy --app runline-sdk-bridge
 Runline/                  SwiftUI app source
 RunlineTests/             Unit tests for app state, providers, cache, routing, and Cursor API mapping
 Services/cursor-sdk-bridge/
-                          Optional Fly-hostable Cursor SDK bridge for Cursor Chat
+                          Cursor SDK bridge source for auditability and hosted Cursor Chat
 DesignAssets/             Public logo and app icon source previews
 Legal/                    Trademark and branding guidance
 Tools/                    Maintainer utilities such as build-number updates
@@ -107,15 +101,6 @@ xcodebuild test \
   -project Runline.xcodeproj \
   -scheme Runline \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1'
-```
-
-Run the optional SDK bridge checks:
-
-```bash
-npm --prefix Services/cursor-sdk-bridge run typecheck
-npm --prefix Services/cursor-sdk-bridge test
-npm --prefix Services/cursor-sdk-bridge run build
-npm --prefix Services/cursor-sdk-bridge audit --omit=dev --audit-level=high
 ```
 
 Run metadata checks:

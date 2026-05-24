@@ -4,7 +4,7 @@ This file explains what the public Runline repository is for, what it includes, 
 
 Runline's default runtime path is backendless: the iOS app talks directly to Cursor's Cloud Agents API using the user's Cursor API key.
 
-Runline also includes an SDK-backed Cursor Chat bridge under `Services/cursor-sdk-bridge`. The app can use the hosted Runline bridge by default, and advanced users can host the same service themselves, for example on Fly.io.
+Runline also includes SDK-backed Cursor Chat bridge source under `Services/cursor-sdk-bridge` for auditability and maintainer deployment. The app uses the hosted Runline bridge by default, and normal iOS users and contributors do not need npm, Node, Fly, or a local bridge.
 
 Runline is independent and is not affiliated with, endorsed by, or connected to Cursor or Anysphere.
 
@@ -14,7 +14,7 @@ The public repository includes:
 
 - the native iOS and iPadOS app source
 - Cursor Cloud Agent client, models, providers, and tests
-- the optional Cursor SDK bridge source for Cursor Chat
+- the Cursor SDK bridge source used by the hosted Cursor Chat runtime
 - release, contribution, security, support, and roadmap documentation
 - a sanitized App Store Connect workflow example
 - public design assets used by the app
@@ -28,7 +28,7 @@ The public repository does not include:
 - private App Store Connect app IDs or TestFlight group IDs
 - Apple API keys, signing certificates, provisioning profiles, archives, or IPAs
 - private Cursor API keys
-- private Fly tokens, bridge shared secrets, or deployment credentials
+- private Fly tokens, bridge shared secrets, live `fly.toml`, or deployment credentials
 - private APNs credentials
 - private deployment defaults
 
@@ -54,7 +54,7 @@ In the Cursor Chat runtime:
 - the iOS app sends the key over HTTPS to the configured SDK bridge only for SDK requests
 - the bridge uses `@cursor/sdk` to create, resume, stream, and cancel Cursor cloud sessions
 - the bridge is designed not to persist Cursor API keys
-- self-hosted Fly deployments can mount a `/data` volume and set `RUNLINE_BRIDGE_SESSION_STORE_PATH` so session metadata survives Machine restarts
+- hosted or self-hosted Fly deployments can mount a `/data` volume and set `RUNLINE_BRIDGE_SESSION_STORE_PATH` so session metadata survives Machine restarts
 - self-hosted bridges can use an optional shared secret to prevent random public access
 - the bridge exposes redacted SDK event-shape snapshots for validation; these snapshots record event types, field names, and structural types, not prompt text, file contents, artifact URLs, or API keys
 
@@ -69,8 +69,9 @@ The public repo stays generic so users can inspect and run the iOS app without b
 That means:
 
 - Cursor Cloud requests remain direct from iOS.
-- Cursor Chat uses the hosted Runline bridge by default, with self-hosting available for advanced deployments.
-- public source does not contain private hosted endpoints
+- Cursor Chat uses the hosted Runline bridge by default; public-source contributors do not need to install or run the bridge locally.
+- public source does not contain private bridge secrets, private deployment config, or private credentials
+- public source contains `fly.example.toml`, not live Fly app configuration
 - local release automation uses examples instead of live maintainer config
 - contributors can audit what the app does with Cursor API keys
 
@@ -81,7 +82,7 @@ Official TestFlight or App Store releases may use private signing and release co
 Keep these out of Git:
 
 - Cursor API keys
-- Fly tokens, bridge shared secrets, and private deployment config
+- Fly tokens, bridge shared secrets, live `fly.toml`, and private deployment config
 - Apple API keys and signing assets
 - APNs keys and certificates
 - `.asc/workflow.json`

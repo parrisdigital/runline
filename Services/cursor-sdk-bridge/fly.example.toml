@@ -1,4 +1,4 @@
-app = "runline-sdk-bridge"
+app = "your-runline-sdk-bridge"
 primary_region = "iad"
 
 [build]

@@ -19,6 +19,7 @@ Package.resolved
 node_modules/
 **/node_modules/
 Services/*/dist/
+Services/cursor-sdk-bridge/fly.toml
 
 # Local ASC release config and generated artifacts
 .asc/*

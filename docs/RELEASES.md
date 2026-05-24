@@ -118,5 +118,6 @@ Before opening or publishing source, confirm:
 - `.asc/workflow.json` is ignored and absent from the diff.
 - no Cursor API keys, Apple credentials, APNs credentials, or private repository data are present.
 - generated archives, IPAs, and Xcode result bundles are absent.
+- live Fly app config is absent; only `Services/cursor-sdk-bridge/fly.example.toml` is tracked.
 - docs describe the backendless Cursor Cloud runtime and hosted Cursor Chat bridge accurately.
 - the non-affiliation disclaimer is present in app-facing docs.

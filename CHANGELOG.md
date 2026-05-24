@@ -27,6 +27,7 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Added defensive SDK event payload preservation plus inline file-change cards and diff sheets when Cursor Chat streams diff data.
 - Added Settings status and connection testing for Cursor Chat without requiring users to configure a bridge URL.
 - Kept Cursor API keys in iOS Keychain and designed the bridge to use per-request keys without persistence.
+- Cleaned the public repo shape by removing root-level npm bridge setup instructions and replacing live Fly app config with a public-safe example.
 - Updated public docs and contributor rules to distinguish backendless Cursor Cloud from SDK-backed Cursor Chat.
 
 ## TestFlight 1.0 (25)

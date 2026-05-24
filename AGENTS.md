@@ -9,6 +9,7 @@ Runline is a native iOS app with two separate Cursor development experiences: SD
 - Cursor Cloud talks directly from iOS to Cursor Cloud Agents and remains the backendless fallback.
 - The app must keep working without Node, a hosted backend, or any local companion service.
 - Cursor Chat uses the hosted Runline bridge by default and may use a self-hosted `Services/cursor-sdk-bridge` Node service for advanced deployments.
+- Normal iOS development must not require npm, Node, Fly, or a local bridge install.
 - API keys stay in Keychain on iOS.
 - In Cursor Cloud, the Cursor API key is used only for direct Cursor API requests.
 - In Cursor Chat, the Cursor API key may be sent over HTTPS to the configured SDK bridge for SDK execution. Do not persist it on the bridge.
@@ -28,8 +29,10 @@ Never commit:
 - APNs credentials
 - private MCP credentials
 - Fly tokens, bridge shared secrets, or private deployment config
+- generated Node artifacts such as `node_modules/` or `Services/*/dist/`
 
 Only `.asc/workflow.example.json` is safe to track for App Store Connect workflow shape.
+Only `Services/cursor-sdk-bridge/fly.example.toml` is safe to track for Fly deployment shape.
 
 Before public-facing commits, run:
 
