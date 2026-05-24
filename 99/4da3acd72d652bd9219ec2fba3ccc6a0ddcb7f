@@ -1,0 +1,19 @@
+Runline/Features/ChatDetailView.swift
+  s_984bf69dd03ef8::t_db5d3d0c175315 1150-1151,1192-1203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "994da3acd72d652bd9219ec2fba3ccc6a0ddcb7f",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
