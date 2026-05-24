@@ -92,33 +92,61 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(AppLayoutMode.resolve(horizontalSizeClass: nil), .compactTabs)
     }
 
-    func testNewChatModelPickerCollapsesDefaultModelSentinel() {
+    func testNewChatModelPickerUsesPreferredModelForDefaultSentinel() {
         let models = [
             AgentModel(id: "default", displayName: "default", subtitle: "Cursor default", category: .default, qualityScore: 4, costTier: 2),
             AgentModel(id: "composer-2", displayName: "composer-2", subtitle: "Composer", category: .coding, qualityScore: 4, costTier: 2),
         ]
 
         XCTAssertEqual(NewChatModelPickerOptions.visibleModels(from: models).map(\.id), ["composer-2"])
-        XCTAssertNil(NewChatModelPickerOptions.selection(from: "default"))
-        XCTAssertNil(NewChatModelPickerOptions.modelID(from: "Default"))
+        XCTAssertEqual(NewChatModelPickerOptions.selection(from: "default"), "composer-2.5")
+        XCTAssertEqual(NewChatModelPickerOptions.modelID(from: "Default"), "composer-2.5")
         XCTAssertEqual(NewChatModelPickerOptions.selection(from: "composer-2"), "composer-2")
         XCTAssertEqual(NewChatModelPickerOptions.modelID(from: "composer-2"), "composer-2")
     }
 
-    func testSDKRuntimeUsesComposer25InsteadOfCursorDefault() {
+    func testCloudAndSDKRuntimesUseComposer25InsteadOfCursorDefault() {
         let models = [
             AgentModel(id: "default", displayName: "default", subtitle: "Cursor default", category: .default, qualityScore: 4, costTier: 2),
             AgentModel(id: "composer-2.5", displayName: "composer-2.5", subtitle: "Composer", category: .coding, qualityScore: 5, costTier: 2),
             AgentModel(id: "gpt-5.2", displayName: "gpt-5.2", subtitle: "Reasoning", category: .coding, qualityScore: 5, costTier: 3),
         ]
 
+        XCTAssertEqual(AgentRuntimeMode.cloud.preferredLaunchModelID, "composer-2.5")
+        XCTAssertEqual(NewChatModelPickerOptions.selection(from: nil, runtimeMode: .cloud), "composer-2.5")
+        XCTAssertEqual(NewChatModelPickerOptions.modelID(from: "default", runtimeMode: .cloud), "composer-2.5")
         XCTAssertEqual(AgentRuntimeMode.sdkBridge.preferredLaunchModelID, "composer-2.5")
         XCTAssertEqual(NewChatModelPickerOptions.selection(from: nil, runtimeMode: .sdkBridge), "composer-2.5")
         XCTAssertEqual(NewChatModelPickerOptions.modelID(from: "default", runtimeMode: .sdkBridge), "composer-2.5")
         XCTAssertEqual(
+            NewChatModelPickerOptions.visibleModels(from: models, excluding: AgentRuntimeMode.cloud.preferredLaunchModelID).map(\.id),
+            ["gpt-5.2"]
+        )
+        XCTAssertEqual(
             NewChatModelPickerOptions.visibleModels(from: models, excluding: AgentRuntimeMode.sdkBridge.preferredLaunchModelID).map(\.id),
             ["gpt-5.2"]
         )
+    }
+
+    func testCursorCloudModelPreferenceDefaultsToComposerAndRetainsExplicitSelection() {
+        let suiteName = "RunlineTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        XCTAssertEqual(CursorCloudModelPreference.selectedModelID(defaults: defaults), "composer-2.5")
+        XCTAssertEqual(CursorCloudModelPreference.resolvedModelID(nil, defaults: defaults), "composer-2.5")
+
+        CursorCloudModelPreference.saveSelectedModelID("gpt-5.2", defaults: defaults)
+
+        XCTAssertEqual(CursorCloudModelPreference.selectedModelID(defaults: defaults), "gpt-5.2")
+        XCTAssertEqual(CursorCloudModelPreference.resolvedModelID(nil, defaults: defaults), "gpt-5.2")
+        XCTAssertEqual(CursorCloudModelPreference.resolvedModelID("claude-4.5-sonnet-thinking", defaults: defaults), "claude-4.5-sonnet-thinking")
+
+        CursorCloudModelPreference.saveSelectedModelID("default", defaults: defaults)
+
+        XCTAssertEqual(CursorCloudModelPreference.selectedModelID(defaults: defaults), "composer-2.5")
     }
 
     func testCursorChatModelPreferenceDefaultsToComposerAndRetainsExplicitSelection() {
@@ -318,7 +346,7 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(startingRef, "main")
     }
 
-    func testLaunchDraftClearsComposer25WhenSwitchingBackToCloud() {
+    func testLaunchDraftKeepsComposer25WhenSwitchingBackToCloud() {
         var draft = AgentLaunchDraft(
             prompt: AgentPrompt(text: "Build a chat flow"),
             modelID: nil,
@@ -334,7 +362,7 @@ final class RunlineTests: XCTestCase {
         XCTAssertEqual(draft.modelID, "composer-2.5")
 
         draft.applyRuntimeMode(.cloud)
-        XCTAssertNil(draft.modelID)
+        XCTAssertEqual(draft.modelID, "composer-2.5")
     }
 
     func testSDKBridgeUsageLimitErrorKeepsActionableMessage() {

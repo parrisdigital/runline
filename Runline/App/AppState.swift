@@ -344,9 +344,9 @@ final class AppState {
             launchDraft.source = .repository(url: url, startingRef: nil)
         }
         if launchDraft.modelID == nil {
-            launchDraft.modelID = launchDraft.runtimeMode == .sdkBridge
-                ? CursorChatModelPreference.selectedModelID()
-                : models.first?.id
+            launchDraft.modelID = launchDraft.runtimeMode == .cloud
+                ? CursorCloudModelPreference.selectedModelID()
+                : CursorChatModelPreference.selectedModelID()
         }
 
         for agent in agents {
@@ -600,9 +600,12 @@ final class AppState {
         isLaunching = true
         errorMessage = nil
         var draft = launchDraft
-        draft.modelID = draft.runtimeMode == .sdkBridge
-            ? CursorChatModelPreference.resolvedModelID(draft.modelID)
-            : draft.runtimeMode.normalizedLaunchModelID(draft.modelID)
+        draft.modelID = switch draft.runtimeMode {
+        case .cloud:
+            CursorCloudModelPreference.resolvedModelID(draft.modelID)
+        case .sdkBridge:
+            CursorChatModelPreference.resolvedModelID(draft.modelID)
+        }
         defer { isLaunching = false }
 
         do {

@@ -40,20 +40,44 @@ struct ChatDetailView: View {
         let timelineSections = timelineSnapshot.runID == latestRun?.id ? timelineSnapshot.sections : []
         let timelineItemIDs = timelineSnapshot.runID == latestRun?.id ? timelineSnapshot.itemIDs : []
         let showsComposer = shouldShowComposer(agent: currentAgent, run: latestRun)
+        let activeRun = latestRun?.status.isTerminal == false ? latestRun : nil
 
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    ConversationHeaderCard(
-                        agent: currentAgent,
-                        run: latestRun,
-                        onCreateWorkspace: canCreateWorkspaceFromGeneralChat(agent: currentAgent) ? {
-                            workspaceHandoffPresentation = WorkspaceHandoffPresentation(
-                                agent: currentAgent,
-                                events: events
-                            )
-                        } : nil
-                    )
+                    if currentAgent.runtimeMode == .cloud {
+                        CloudRunReviewHeader(
+                            agent: currentAgent,
+                            run: latestRun,
+                            events: events,
+                            isObserving: latestRun.map { appState.isObserving(runID: $0.id) } ?? false,
+                            isStreamExpired: latestRun.map { appState.isStreamExpired(runID: $0.id) } ?? false,
+                            onOpenArtifacts: {
+                                isArtifactsPresented = true
+                            },
+                            onOpenPullRequest: currentAgent.pullRequestURL.map { url in
+                                { openURL(url) }
+                            },
+                            onCancel: activeRun.map { run in
+                                {
+                                    Task {
+                                        await appState.cancel(agent: currentAgent, run: run)
+                                    }
+                                }
+                            }
+                        )
+                    } else {
+                        ConversationHeaderCard(
+                            agent: currentAgent,
+                            run: latestRun,
+                            onCreateWorkspace: canCreateWorkspaceFromGeneralChat(agent: currentAgent) ? {
+                                workspaceHandoffPresentation = WorkspaceHandoffPresentation(
+                                    agent: currentAgent,
+                                    events: events
+                                )
+                            } : nil
+                        )
+                    }
 
                     if let latestRun {
                         if timelineItems.isEmpty {
@@ -195,7 +219,7 @@ struct ChatDetailView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("Chat actions")
+                .accessibilityLabel(currentAgent.runtimeMode == .cloud ? "Run actions" : "Chat actions")
             }
         }
         .task {
@@ -632,10 +656,14 @@ struct ChatDetailView: View {
             selectedFollowUpModelID(for: agent)
         } set: { modelID in
             followUpModelAgentID = agent.id
-            selectedFollowUpModelID = NewChatModelPickerOptions.modelID(
+            let resolvedModelID = NewChatModelPickerOptions.modelID(
                 from: modelID,
                 runtimeMode: agent.runtimeMode
             )
+            selectedFollowUpModelID = resolvedModelID
+            if agent.runtimeMode == .cloud {
+                CursorCloudModelPreference.saveSelectedModelID(resolvedModelID)
+            }
         }
     }
 
@@ -1137,6 +1165,311 @@ enum WorkspaceHandoffPromptBuilder {
         }
 
         return rows.joined(separator: "\n\n").timelineBoundedText(maxCharacters: 5_000)
+    }
+}
+
+private struct CloudRunReviewHeader: View {
+    var agent: Agent
+    var run: AgentRun?
+    var events: [AgentStreamEvent]
+    var isObserving: Bool
+    var isStreamExpired: Bool
+    var onOpenArtifacts: () -> Void
+    var onOpenPullRequest: (() -> Void)?
+    var onCancel: (() -> Void)?
+    @State private var diffPresentation: WorkspaceDiffPresentation?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            titleRow
+            contextChips
+            reviewMetrics
+            actionRow
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(uiColor: .separator).opacity(0.16), lineWidth: 0.5)
+        )
+        .sheet(item: $diffPresentation) { presentation in
+            WorkspaceDiffSheet(presentation: presentation)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var titleRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: stateSymbolName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(stateTint)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(stateTint.opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Label("Cursor Cloud Run", systemImage: "cloud.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color(uiColor: .systemBlue))
+
+                    Spacer(minLength: 8)
+
+                    if let run {
+                        RunStatusBadge(status: run.status)
+                    } else {
+                        Text("No Run")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
+                    }
+                }
+
+                Text(agent.name)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                Text(agent.repository.displayName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+    }
+
+    private var contextChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                CloudChatContextChip(systemName: "arrow.triangle.branch", title: agent.branchName.nilIfBlank ?? "main")
+                CloudChatContextChip(systemName: "cpu", title: agent.modelID)
+                if let run {
+                    CloudChatContextChip(systemName: "clock", title: run.updatedAtDescription)
+                }
+                if agent.pullRequestURL != nil {
+                    CloudChatContextChip(systemName: "arrow.up.right.square", title: "Pull request", tint: Color(uiColor: .systemGreen))
+                }
+            }
+        }
+    }
+
+    private var reviewMetrics: some View {
+        HStack(spacing: 8) {
+            CloudRunReviewMetric(
+                title: "State",
+                value: stateTitle,
+                systemName: stateSymbolName,
+                tint: stateTint
+            )
+
+            CloudRunReviewMetric(
+                title: "Changes",
+                value: changedFileCount == 0 ? "None" : "\(changedFileCount)",
+                systemName: "doc.text.magnifyingglass",
+                tint: changedFileCount == 0 ? .secondary : Color(uiColor: .systemBlue)
+            )
+
+            CloudRunReviewMetric(
+                title: "Artifacts",
+                value: "\(agent.artifactCount)",
+                systemName: "tray.full",
+                tint: agent.artifactCount == 0 ? .secondary : Color(uiColor: .systemGreen)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var actionRow: some View {
+        let hasActions = latestChangeSet != nil || agent.artifactCount > 0 || onOpenPullRequest != nil || onCancel != nil
+
+        if hasActions {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    actionButtons
+                    Spacer(minLength: 0)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    actionButtons
+                }
+            }
+        } else {
+            HStack(spacing: 8) {
+                Image(systemName: "text.bubble")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("Use the composer below to ask for follow-up changes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        if let latestChangeSet {
+            CloudRunReviewActionButton(title: "Diffs", systemName: "doc.text.magnifyingglass") {
+                diffPresentation = WorkspaceDiffPresentation(changeSet: latestChangeSet, focusedPath: nil)
+            }
+        }
+
+        if agent.artifactCount > 0 {
+            CloudRunReviewActionButton(title: "Artifacts", systemName: "tray.full") {
+                onOpenArtifacts()
+            }
+        }
+
+        if let onOpenPullRequest {
+            CloudRunReviewActionButton(title: "Open PR", systemName: "arrow.up.right.square") {
+                onOpenPullRequest()
+            }
+        }
+
+        if let onCancel {
+            CloudRunReviewActionButton(title: "Cancel", systemName: "stop.circle", role: .destructive) {
+                onCancel()
+            }
+        }
+    }
+
+    private var latestChangeSet: WorkspaceChangeSet? {
+        changeSets.last
+    }
+
+    private var changeSets: [WorkspaceChangeSet] {
+        events.compactMap { event in
+            WorkspaceChangeSetParser.shouldInspect(event) ? WorkspaceChangeSetParser.changeSet(from: event) : nil
+        }
+    }
+
+    private var changedFileCount: Int {
+        Set(changeSets.flatMap { changeSet in
+            changeSet.changes.map(\.path)
+        })
+        .count
+    }
+
+    private var stateTitle: String {
+        if isStreamExpired, run?.status.isTerminal == false {
+            return "Paused"
+        }
+        if isObserving, run?.status == .running || run?.status == .creating {
+            return "Live"
+        }
+        return run?.status.title ?? "Pending"
+    }
+
+    private var stateSymbolName: String {
+        if isStreamExpired, run?.status.isTerminal == false {
+            return "clock.badge.exclamationmark"
+        }
+        switch run?.status {
+        case .some(.finished):
+            return "checkmark.circle"
+        case .some(.error):
+            return "exclamationmark.triangle"
+        case .some(.cancelled), .some(.expired):
+            return "stop.circle"
+        case .some(.running), .some(.creating):
+            return "dot.radiowaves.left.and.right"
+        case .some(.unknown), .none:
+            return "cloud"
+        }
+    }
+
+    private var stateTint: Color {
+        if isStreamExpired, run?.status.isTerminal == false {
+            return Color(uiColor: .systemOrange)
+        }
+        switch run?.status {
+        case .some(.finished):
+            return Color(uiColor: .systemGreen)
+        case .some(.error):
+            return .red
+        case .some(.cancelled), .some(.expired):
+            return .secondary
+        case .some(.running), .some(.creating):
+            return Color(uiColor: .systemBlue)
+        case .some(.unknown), .none:
+            return Color(uiColor: .systemBlue)
+        }
+    }
+}
+
+private struct CloudRunReviewMetric: View {
+    var title: String
+    var value: String
+    var systemName: String
+    var tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: systemName)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(tint)
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(value)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(uiColor: .tertiarySystemGroupedBackground))
+        )
+    }
+}
+
+private struct CloudRunReviewActionButton: View {
+    var title: String
+    var systemName: String
+    var role: ButtonRole?
+    var action: () -> Void
+
+    init(title: String, systemName: String, role: ButtonRole? = nil, action: @escaping () -> Void) {
+        self.title = title
+        self.systemName = systemName
+        self.role = role
+        self.action = action
+    }
+
+    var body: some View {
+        Button(role: role) {
+            action()
+        } label: {
+            Label(title, systemImage: systemName)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(Capsule().fill(backgroundColor))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(foregroundColor)
+    }
+
+    private var foregroundColor: Color {
+        role == nil ? Color(uiColor: .systemBlue) : .red
+    }
+
+    private var backgroundColor: Color {
+        foregroundColor.opacity(0.10)
     }
 }
 

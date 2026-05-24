@@ -16,7 +16,9 @@ Runline is in public beta. Versions may move quickly while the iOS app, TestFlig
 - Refined Cursor Chat into a composer-first start screen with a Remodex-inspired slide-over conversation drawer, active sessions, grouped workspace conversations, and compact file-change, artifact, PR, model, and branch indicators.
 - Refined Cursor Chat detail screens with quieter live activity rows and removed redundant SDK runtime/status header chrome.
 - Refined Cursor Cloud into a cleaner run-review queue with Running, Ready for Review, Needs Attention, and Archived sections plus compact PR, artifact, file-change, branch, and model indicators.
+- Added a Cursor Cloud run-review header in detail screens with run state, repository context, diff, artifact, pull request, and cancel actions.
 - Tightened the New Cursor Cloud sheet around Workspace, Task, and Review steps while keeping Cursor Chat separate.
+- Set Cursor Cloud to default to `composer-2.5` while retaining an explicit user model selection for later Cloud runs.
 - Added a clearer General Chat to repository workspace handoff that keeps the conversation topic and prior context.
 - Seeded new launches and follow-ups with an immediate local user message so the detail screen opens as a conversation while Cursor events stream in.
 - Added a durable Fly-volume session metadata store for Cursor Chat so SDK sessions can be listed and resumed after bridge restarts without persisting Cursor API keys or prompt text.

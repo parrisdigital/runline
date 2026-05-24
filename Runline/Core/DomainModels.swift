@@ -5,7 +5,8 @@ enum AgentRuntimeMode: String, CaseIterable, Identifiable, Hashable, Codable {
     case cloud = "cloud"
     case sdkBridge = "sdk_bridge"
 
-    static let cursorChatPreferredModelID = "composer-2.5"
+    static let preferredComposerModelID = "composer-2.5"
+    static let cursorChatPreferredModelID = preferredComposerModelID
 
     var id: String { rawValue }
 
@@ -48,9 +49,9 @@ enum AgentRuntimeMode: String, CaseIterable, Identifiable, Hashable, Codable {
     var preferredLaunchModelID: String? {
         switch self {
         case .cloud:
-            nil
+            Self.preferredComposerModelID
         case .sdkBridge:
-            Self.cursorChatPreferredModelID
+            Self.preferredComposerModelID
         }
     }
 
@@ -67,13 +68,31 @@ enum AgentRuntimeMode: String, CaseIterable, Identifiable, Hashable, Codable {
     }
 
     func launchModelIDAfterSwitch(from previousMode: AgentRuntimeMode, currentModelID: String?) -> String? {
-        let trimmed = currentModelID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if self == .cloud,
-           previousMode == .sdkBridge,
-           trimmed == Self.cursorChatPreferredModelID {
-            return nil
-        }
         return normalizedLaunchModelID(currentModelID)
+    }
+}
+
+enum CursorCloudModelPreference {
+    static let selectedModelIDKey = "runline.cursorCloud.selectedModelID"
+
+    static func normalizedModelID(_ modelID: String?) -> String {
+        AgentRuntimeMode.cloud.normalizedLaunchModelID(modelID) ?? AgentRuntimeMode.preferredComposerModelID
+    }
+
+    static func selectedModelID(defaults: UserDefaults = .standard) -> String {
+        normalizedModelID(defaults.string(forKey: selectedModelIDKey))
+    }
+
+    static func resolvedModelID(_ modelID: String?, defaults: UserDefaults = .standard) -> String {
+        let trimmed = modelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty, !trimmed.isCursorDefaultModelIdentifier else {
+            return selectedModelID(defaults: defaults)
+        }
+        return normalizedModelID(trimmed)
+    }
+
+    static func saveSelectedModelID(_ modelID: String?, defaults: UserDefaults = .standard) {
+        defaults.set(normalizedModelID(modelID), forKey: selectedModelIDKey)
     }
 }
 
@@ -81,7 +100,7 @@ enum CursorChatModelPreference {
     static let selectedModelIDKey = "runline.cursorChat.selectedModelID"
 
     static func normalizedModelID(_ modelID: String?) -> String {
-        AgentRuntimeMode.sdkBridge.normalizedLaunchModelID(modelID) ?? AgentRuntimeMode.cursorChatPreferredModelID
+        AgentRuntimeMode.sdkBridge.normalizedLaunchModelID(modelID) ?? AgentRuntimeMode.preferredComposerModelID
     }
 
     static func selectedModelID(defaults: UserDefaults = .standard) -> String {

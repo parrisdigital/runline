@@ -630,7 +630,9 @@ struct NewChatForm: View {
                 runtimeMode: appState.launchDraft.runtimeMode
             )
             appState.launchDraft.modelID = resolvedModelID
-            if appState.launchDraft.runtimeMode == .sdkBridge {
+            if appState.launchDraft.runtimeMode == .cloud {
+                CursorCloudModelPreference.saveSelectedModelID(resolvedModelID)
+            } else if appState.launchDraft.runtimeMode == .sdkBridge {
                 CursorChatModelPreference.saveSelectedModelID(resolvedModelID)
             }
         }
@@ -709,7 +711,9 @@ struct NewChatForm: View {
 
     private func applyRuntimeMode(_ mode: AgentRuntimeMode) {
         appState.launchDraft.applyRuntimeMode(mode)
-        if mode == .sdkBridge {
+        if mode == .cloud {
+            appState.launchDraft.modelID = CursorCloudModelPreference.selectedModelID()
+        } else if mode == .sdkBridge {
             appState.launchDraft.modelID = CursorChatModelPreference.selectedModelID()
         }
     }

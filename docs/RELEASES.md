@@ -80,6 +80,8 @@ Before uploading a Cursor Chat release candidate, validate:
 - General Chat can continue into a repository workspace with prior context.
 - Cursor Cloud still opens the structured Cloud Agent flow and does not depend on the SDK bridge.
 - Cursor Cloud groups runs into Running, Ready for Review, Needs Attention, and Archived without routing users into Cursor Chat.
+- Cursor Cloud detail screens show a run-review header with state, repository context, diff/artifact/PR actions, and active-run cancellation.
+- Cursor Cloud defaults to Composer 2.5 and keeps an explicit Cloud model choice for later Cloud runs.
 - Closing and reopening the app restores cached chats and run timelines where available.
 
 ## App Store Review Notes

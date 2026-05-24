@@ -29,6 +29,8 @@ Runline is in public beta.
 - Continues a General Chat into a repository-backed workspace while carrying the chat topic and prior context.
 - Starts Cursor Cloud Agent runs from the structured native Cloud flow.
 - Organizes Cursor Cloud into running, review-ready, attention, and archived run queues with compact output indicators.
+- Shows Cursor Cloud run-review detail headers with state, repository context, diffs, artifacts, pull requests, and cancel actions.
+- Defaults Cursor Cloud and Cursor Chat to Composer 2.5 while preserving explicit model selections.
 - Shows agent chats with immediate user bubbles, quiet live activity rows, grouped run events, status, artifacts, and pull request links.
 - Shows inline file-change summaries and diff sheets when SDK events include parseable change data.
 - Supports follow-up prompts, files, and images, including queued Cursor Chat follow-ups while a run is active.
