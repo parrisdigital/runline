@@ -77,7 +77,7 @@ struct CursorChatView: View {
     @State private var isLoadingPromptFiles = false
     @State private var fileImportMessage: String?
     @State private var selectedRepositoryURL: URL?
-    @State private var isGeneralConversation = false
+    @State private var isGeneralConversation = true
     @AppStorage(CursorChatModelPreference.selectedModelIDKey) private var selectedModelID = AgentRuntimeMode.cursorChatPreferredModelID
     @FocusState private var isPromptFocused: Bool
 
@@ -187,13 +187,6 @@ struct CursorChatView: View {
                         .font(.title2.weight(.semibold))
                         .multilineTextAlignment(.center)
 
-                    Text(selectedRepository?.displayName ?? "General Chat")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(Color(uiColor: .secondarySystemGroupedBackground)))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, runningCursorChatAgents.isEmpty ? 122 : 42)
@@ -353,7 +346,7 @@ struct CursorChatView: View {
 
     private var cursorChatComposer: some View {
         VStack(spacing: 8) {
-            cursorChatContextBar
+            cursorChatWorkspaceStrip
 
             if shouldShowPromptAttachments {
                 promptAttachmentStrip
@@ -374,22 +367,22 @@ struct CursorChatView: View {
         .padding(.bottom, 6)
     }
 
-    private var cursorChatContextBar: some View {
+    private var cursorChatWorkspaceStrip: some View {
         HStack(spacing: 8) {
             repositoryMenu
 
             if let selectedRepository {
-                Label(selectedRepository.defaultBranch.nilIfBlank ?? "main", systemImage: "arrow.triangle.branch")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .padding(.horizontal, 10)
-                    .frame(height: 32)
-                    .cursorChatComposerSurface(cornerRadius: 16)
+                ComposerControlPill(
+                    systemName: "arrow.triangle.branch",
+                    title: selectedRepository.defaultBranch.nilIfBlank ?? "main",
+                    showsChevron: false,
+                    maxWidth: 122
+                )
             }
 
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 2)
     }
 
     private var cursorChatInputSurface: some View {
@@ -413,9 +406,6 @@ struct CursorChatView: View {
                     .padding(.bottom, 12)
             }
 
-            Divider()
-                .opacity(0.32)
-
             HStack(spacing: 10) {
                 attachmentMenuButton
                 modelMenu
@@ -425,7 +415,8 @@ struct CursorChatView: View {
                 cursorChatSendButton
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
         }
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -481,24 +472,11 @@ struct CursorChatView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "folder")
-                    .font(.caption.weight(.semibold))
-
-                Text(selectedRepository?.displayName ?? "General Chat")
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .frame(height: 32)
-                .frame(maxWidth: 170)
-                .cursorChatComposerSurface(cornerRadius: 16, interactive: true)
+            ComposerControlPill(
+                systemName: selectedRepository == nil ? "message" : "folder",
+                title: selectedRepository?.displayName ?? "General Chat",
+                maxWidth: 210
+            )
         }
         .menuIndicator(.hidden)
     }
@@ -523,8 +501,8 @@ struct CursorChatView: View {
             }
             .disabled(isLoadingPromptFiles || promptFiles.count >= PromptFileLoader.maxFiles)
         } label: {
-            Image(systemName: "paperclip")
-                .font(.system(size: 17, weight: .semibold))
+            Image(systemName: "plus")
+                .font(.system(size: 20, weight: .regular))
                 .foregroundStyle(Color(uiColor: .systemBlue))
                 .frame(width: Self.composerControlSize, height: Self.composerControlSize)
                 .cursorChatComposerSurface(cornerRadius: Self.composerControlSize / 2, interactive: true)
@@ -544,7 +522,7 @@ struct CursorChatView: View {
                 selectedModelID = cursorChatPreferredModelID
             } label: {
                 Label(
-                    AgentRuntimeMode.sdkBridge.preferredLaunchModelTitle,
+                    ComposerLabelFormatter.modelTitle(AgentRuntimeMode.sdkBridge.preferredLaunchModelTitle),
                     systemImage: currentCursorChatModelID == cursorChatPreferredModelID ? "checkmark" : "cpu"
                 )
             }
@@ -553,27 +531,18 @@ struct CursorChatView: View {
                 Button {
                     selectedModelID = model.id
                 } label: {
-                    Label(model.displayName, systemImage: currentCursorChatModelID == model.id ? "checkmark" : "cpu")
+                    Label(
+                        ComposerLabelFormatter.modelTitle(model.displayName),
+                        systemImage: currentCursorChatModelID == model.id ? "checkmark" : "cpu"
+                    )
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "cpu")
-                    .font(.caption.weight(.semibold))
-
-                Text(selectedModelTitle)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .frame(height: 32)
-                .cursorChatComposerSurface(cornerRadius: 16, interactive: true)
+            ComposerControlPill(
+                systemName: "sparkles",
+                title: selectedModelTitle,
+                maxWidth: 160
+            )
         }
         .menuIndicator(.hidden)
     }
@@ -597,7 +566,8 @@ struct CursorChatView: View {
 
     private var selectedModelTitle: String {
         let modelID = currentCursorChatModelID
-        return appState.models.first(where: { $0.id == modelID })?.displayName ?? modelID
+        let rawTitle = appState.models.first(where: { $0.id == modelID })?.displayName ?? modelID
+        return ComposerLabelFormatter.modelTitle(rawTitle)
     }
 
     private var canStartCursorChat: Bool {

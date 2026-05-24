@@ -419,8 +419,8 @@ struct ChatDetailView: View {
             }
             .disabled(isLoadingFollowUpFiles || followUpFiles.count >= PromptFileLoader.maxFiles)
         } label: {
-            Image(systemName: "paperclip")
-                .font(.system(size: 17, weight: .semibold))
+            Image(systemName: "plus")
+                .font(.system(size: 20, weight: .regular))
                 .foregroundStyle(Color(uiColor: .systemBlue))
                 .frame(width: Self.composerControlSize, height: Self.composerControlSize)
                 .composerGlassSurface(cornerRadius: Self.composerControlSize / 2, interactive: true)
@@ -2200,7 +2200,7 @@ private struct CloudComposerModelMenu: View {
                 selection = preferredModelID
             } label: {
                 modelMenuLabel(
-                    title: runtimeMode.preferredLaunchModelTitle,
+                    title: displayTitle(for: runtimeMode.preferredLaunchModelTitle),
                     isSelected: selection == preferredModelID
                 )
             }
@@ -2209,34 +2209,42 @@ private struct CloudComposerModelMenu: View {
                 Button {
                     selection = model.id
                 } label: {
-                    modelMenuLabel(title: model.displayName, isSelected: selection == model.id)
+                    modelMenuLabel(title: displayTitle(for: model.displayName), isSelected: selection == model.id)
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: runtimeMode == .sdkBridge ? "message" : "cloud")
-                    .font(.caption.weight(.semibold))
+            if runtimeMode == .sdkBridge {
+                ComposerControlPill(
+                    systemName: "sparkles",
+                    title: modelTitle,
+                    maxWidth: 160
+                )
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "cloud")
+                        .font(.caption.weight(.semibold))
 
-                Text(runtimeMode == .sdkBridge ? "Chat" : "Cloud")
-                    .font(.caption.weight(.medium))
+                    Text("Cloud")
+                        .font(.caption.weight(.medium))
 
-                Rectangle()
-                    .fill(Color(uiColor: .separator).opacity(0.45))
-                    .frame(width: 1, height: 12)
+                    Rectangle()
+                        .fill(Color(uiColor: .separator).opacity(0.45))
+                        .frame(width: 1, height: 12)
 
-                Text(modelTitle)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
+                    Text(modelTitle)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
 
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .frame(height: 32)
+                .composerGlassSurface(cornerRadius: 16, interactive: true)
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .frame(height: 32)
-            .composerGlassSurface(cornerRadius: 16, interactive: true)
         }
         .menuIndicator(.hidden)
         .tint(.secondary)
@@ -2248,9 +2256,9 @@ private struct CloudComposerModelMenu: View {
         let modelID = runtimeMode.normalizedLaunchModelID(selection)
         guard let modelID else { return runtimeMode.preferredLaunchModelTitle }
         if let model = models.first(where: { $0.id == modelID }) {
-            return model.displayName
+            return displayTitle(for: model.displayName)
         }
-        return modelID
+        return displayTitle(for: modelID)
     }
 
     private var preferredModelID: String? {
@@ -2259,6 +2267,10 @@ private struct CloudComposerModelMenu: View {
 
     private func modelMenuLabel(title: String, isSelected: Bool) -> some View {
         Label(title, systemImage: isSelected ? "checkmark" : "cpu")
+    }
+
+    private func displayTitle(for title: String) -> String {
+        runtimeMode == .sdkBridge ? ComposerLabelFormatter.modelTitle(title) : title
     }
 }
 

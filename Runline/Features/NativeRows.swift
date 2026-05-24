@@ -171,6 +171,98 @@ struct ModelListRow: View {
     }
 }
 
+enum ComposerLabelFormatter {
+    static func modelTitle(_ title: String) -> String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return title }
+
+        let parts = trimmed
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .split(separator: " ")
+            .map(String.init)
+
+        guard !parts.isEmpty else { return trimmed }
+
+        return parts.map { part in
+            switch part.lowercased() {
+            case "gpt":
+                "GPT"
+            case "claude":
+                "Claude"
+            case "sonnet":
+                "Sonnet"
+            case "thinking":
+                "Thinking"
+            case "composer":
+                "Composer"
+            default:
+                part
+            }
+        }
+        .joined(separator: " ")
+    }
+}
+
+struct ComposerControlPill: View {
+    var systemName: String?
+    var title: String
+    var detail: String?
+    var showsChevron = true
+    var maxWidth: CGFloat?
+    var tint: Color = .secondary
+
+    var body: some View {
+        content
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .frame(maxWidth: maxWidth, alignment: .leading)
+            .composerControlPillSurface
+            .contentShape(Capsule())
+    }
+
+    private var content: some View {
+        HStack(spacing: 6) {
+            if let systemName {
+                Image(systemName: systemName)
+                    .font(.caption.weight(.semibold))
+            }
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+
+            if let detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+
+            if showsChevron {
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    var composerControlPillSurface: some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular.interactive(), in: Capsule())
+                .overlay(Capsule().stroke(Color(uiColor: .separator).opacity(0.24), lineWidth: 0.5))
+        } else {
+            background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().stroke(Color(uiColor: .separator).opacity(0.24), lineWidth: 0.5))
+        }
+    }
+}
+
 struct RunStatusBadge: View {
     var status: RunStatus
 
