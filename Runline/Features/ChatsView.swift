@@ -18,7 +18,7 @@ struct CursorCloudView: View {
                 presentation: .navigation
             )
                 .navigationTitle("Cursor Cloud")
-                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
@@ -1113,7 +1113,7 @@ struct ChatListContent: View {
         var overviewSubtitle: String {
             switch self {
             case .cursorCloud:
-                "Direct Cursor Cloud Agent workflow"
+                "Direct Cloud Agent workflow"
             case .cursorChat:
                 "SDK-backed workspace conversations"
             }
@@ -1148,7 +1148,8 @@ struct ChatListContent: View {
                     query: $query,
                     activeCount: activeAgents.count,
                     runningCount: runningAgents.count,
-                    repositoryCount: appState.repositories.count
+                    reviewCount: reviewReadyAgents.count,
+                    attentionCount: attentionAgents.count
                 )
 
                 if case .cursorChat = experience {
@@ -1193,6 +1194,28 @@ struct ChatListContent: View {
         recentAgents.filter { agent in
             if case .archived = agent.status { return false }
             return true
+        }
+    }
+
+    private var reviewReadyAgents: [Agent] {
+        activeRecentAgents.filter { agent in
+            switch appState.runs(for: agent).first?.status {
+            case .some(.error), .some(.cancelled), .some(.expired):
+                return false
+            default:
+                return true
+            }
+        }
+    }
+
+    private var attentionAgents: [Agent] {
+        activeRecentAgents.filter { agent in
+            switch appState.runs(for: agent).first?.status {
+            case .some(.error), .some(.cancelled), .some(.expired):
+                return true
+            default:
+                return false
+            }
         }
     }
 
@@ -1299,10 +1322,16 @@ struct ChatListContent: View {
         } else if case .cursorChat = experience {
             cursorChatListContent
         } else {
-            agentSection("Running", agents: runningAgents)
-            agentSection("Recent", agents: recentAgents)
-            agentSection("Archived", agents: archivedAgents)
+            cursorCloudListContent
         }
+    }
+
+    @ViewBuilder
+    private var cursorCloudListContent: some View {
+        cloudRunSection(.running, agents: runningAgents)
+        cloudRunSection(.review, agents: reviewReadyAgents)
+        cloudRunSection(.attention, agents: attentionAgents)
+        cloudRunSection(.archived, agents: archivedAgents)
     }
 
     @ViewBuilder
@@ -1431,41 +1460,22 @@ struct ChatListContent: View {
     }
 
     @ViewBuilder
-    private func agentSection(_ title: String, agents: [Agent]) -> some View {
-        if !agents.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(title)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    Text("\(agents.count)")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 2)
-
-                VStack(spacing: 8) {
-                    ForEach(agents) { agent in
-                        agentRow(agent)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func conversationSection(_ title: String, subtitle: String, agents: [Agent]) -> some View {
+    private func cloudRunSection(_ section: CloudRunSection, agents: [Agent]) -> some View {
         if !agents.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
+                HStack(alignment: .center, spacing: 9) {
+                    Image(systemName: section.symbolName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(section.tint)
+                        .frame(width: 22)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(section.title)
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
 
-                        Text(subtitle)
+                        Text(section.subtitle)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -1475,13 +1485,16 @@ struct ChatListContent: View {
 
                     Text("\(agents.count)")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, 4)
 
                 VStack(spacing: 0) {
                     ForEach(Array(agents.enumerated()), id: \.element.id) { index, agent in
-                        conversationRow(agent, style: .card)
+                        cloudRunRow(agent)
 
                         if index < agents.count - 1 {
                             Divider()
@@ -1502,21 +1515,23 @@ struct ChatListContent: View {
     }
 
     @ViewBuilder
-    private func agentRow(_ agent: Agent) -> some View {
+    private func cloudRunRow(_ agent: Agent) -> some View {
         let run = appState.runs(for: agent).first
+        let metadata = conversationMetadata(for: agent, run: run)
         switch presentation {
         case .navigation:
             NavigationLink(value: agent.id) {
-                AgentListRow(agent: agent, run: run)
+                CloudRunReviewRow(agent: agent, run: run, metadata: metadata)
             }
             .buttonStyle(.plain)
         case .selection(let selectedAgentID):
             Button {
                 selectedAgentID.wrappedValue = agent.id
             } label: {
-                AgentListRow(
+                CloudRunReviewRow(
                     agent: agent,
                     run: run,
+                    metadata: metadata,
                     isSelected: selectedAgentID.wrappedValue == agent.id
                 )
             }
@@ -1646,12 +1661,279 @@ private struct WorkspaceAgentGroup: Identifiable {
     }
 }
 
+private enum CloudRunSection {
+    case running
+    case review
+    case attention
+    case archived
+
+    var title: String {
+        switch self {
+        case .running:
+            "Running"
+        case .review:
+            "Ready for Review"
+        case .attention:
+            "Needs Attention"
+        case .archived:
+            "Archived"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .running:
+            "Live Cloud Agent work"
+        case .review:
+            "Results, artifacts, and pull requests"
+        case .attention:
+            "Failed, cancelled, or expired runs"
+        case .archived:
+            "Completed history"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .running:
+            "dot.radiowaves.left.and.right"
+        case .review:
+            "tray.full"
+        case .attention:
+            "exclamationmark.triangle"
+        case .archived:
+            "archivebox"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .running:
+            Color(uiColor: .systemBlue)
+        case .review:
+            Color(uiColor: .systemGreen)
+        case .attention:
+            Color(uiColor: .systemOrange)
+        case .archived:
+            .secondary
+        }
+    }
+}
+
 private struct ConversationThreadMetadata: Hashable {
     var preview: String
     var changedFileCount: Int
     var artifactCount: Int
     var hasPullRequest: Bool
     var isGeneralChat: Bool
+}
+
+private struct CloudRunReviewRow: View {
+    var agent: Agent
+    var run: AgentRun?
+    var metadata: ConversationThreadMetadata
+    var isSelected = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.12))
+
+                Image(systemName: symbolName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 36, height: 36)
+            .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(agent.name)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Spacer(minLength: 6)
+
+                    CloudRunActionBadge(title: actionTitle, tint: tint)
+                }
+
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(agent.repository.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Text(agent.updatedAtDescription)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                cloudRunMetadata
+            }
+
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.body)
+                    .foregroundStyle(.blue)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.blue.opacity(0.10))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 4)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var cloudRunMetadata: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                CloudRunPill(systemName: "arrow.triangle.branch", title: branchTitle)
+                CloudRunPill(systemName: "cpu", title: agent.modelID)
+                outputPills
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 6) {
+                CloudRunPill(systemName: "arrow.triangle.branch", title: branchTitle)
+                outputPills
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var outputPills: some View {
+        if metadata.changedFileCount > 0 {
+            CloudRunPill(systemName: "doc.text.magnifyingglass", title: changedFileTitle)
+        }
+
+        if metadata.artifactCount > 0 {
+            CloudRunPill(systemName: "tray.full", title: "\(metadata.artifactCount)")
+        }
+
+        if metadata.hasPullRequest {
+            CloudRunPill(systemName: "arrow.up.right.square", title: "PR")
+        }
+    }
+
+    private var branchTitle: String {
+        agent.branchName.nilIfBlank ?? "main"
+    }
+
+    private var changedFileTitle: String {
+        "\(metadata.changedFileCount) \(metadata.changedFileCount == 1 ? "file" : "files")"
+    }
+
+    private var actionTitle: String {
+        if case .archived = agent.status {
+            return "Archived"
+        }
+
+        switch run?.status {
+        case .some(.creating):
+            return "Creating"
+        case .some(.running):
+            return "Live"
+        case .some(.finished):
+            return hasReviewOutput ? "Review" : "Finished"
+        case .some(.error):
+            return "Issue"
+        case .some(.cancelled):
+            return "Cancelled"
+        case .some(.expired):
+            return "Expired"
+        case .some(.unknown(let value)):
+            return value
+        case .none:
+            return "Open"
+        }
+    }
+
+    private var hasReviewOutput: Bool {
+        metadata.changedFileCount > 0 || metadata.artifactCount > 0 || metadata.hasPullRequest
+    }
+
+    private var symbolName: String {
+        if case .archived = agent.status {
+            return "archivebox"
+        }
+
+        switch run?.status {
+        case .some(.finished):
+            return hasReviewOutput ? "tray.full" : "checkmark.circle"
+        case .some(.error):
+            return "exclamationmark.triangle"
+        case .some(.cancelled), .some(.expired):
+            return "stop.circle"
+        case .some(.running), .some(.creating):
+            return "dot.radiowaves.left.and.right"
+        case .some(.unknown), .none:
+            return "cloud"
+        }
+    }
+
+    private var tint: Color {
+        if case .archived = agent.status {
+            return .secondary
+        }
+
+        switch run?.status {
+        case .some(.finished):
+            return hasReviewOutput ? Color(uiColor: .systemGreen) : .green
+        case .some(.error):
+            return .red
+        case .some(.cancelled), .some(.expired):
+            return .secondary
+        case .some(.running), .some(.creating):
+            return Color(uiColor: .systemBlue)
+        case .some(.unknown), .none:
+            return Color(uiColor: .systemBlue)
+        }
+    }
+}
+
+private struct CloudRunPill: View {
+    var systemName: String
+    var title: String
+
+    var body: some View {
+        Label(title, systemImage: systemName)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Color(uiColor: .tertiarySystemGroupedBackground)))
+    }
+}
+
+private struct CloudRunActionBadge: View {
+    var title: String
+    var tint: Color
+
+    var body: some View {
+        Text(title)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(tint.opacity(0.11)))
+    }
 }
 
 private enum ConversationThreadRowStyle {
@@ -1938,32 +2220,23 @@ private struct AgentSessionScreenHeader: View {
     @Binding var query: String
     var activeCount: Int
     var runningCount: Int
-    var repositoryCount: Int
+    var reviewCount: Int
+    var attentionCount: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if case .cursorCloud = experience {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(experience.title)
-                        .font(.largeTitle.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-
-                    Text(experience.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-
-            CloudChatSearchField(query: $query)
+            CloudChatSearchField(
+                query: $query,
+                placeholder: experience == .cursorCloud ? "Search runs" : "Search chats"
+            )
 
             if case .cursorCloud = experience {
                 CloudChatOverviewPanel(
                     experience: experience,
                     activeCount: activeCount,
                     runningCount: runningCount,
-                    repositoryCount: repositoryCount
+                    reviewCount: reviewCount,
+                    attentionCount: attentionCount
                 )
             }
         }
@@ -1972,6 +2245,7 @@ private struct AgentSessionScreenHeader: View {
 
 private struct CloudChatSearchField: View {
     @Binding var query: String
+    var placeholder: String
 
     var body: some View {
         HStack(spacing: 9) {
@@ -1979,7 +2253,7 @@ private struct CloudChatSearchField: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
 
-            TextField("Search chats", text: $query)
+            TextField(placeholder, text: $query)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
 
@@ -2012,7 +2286,8 @@ private struct CloudChatOverviewPanel: View {
     var experience: ChatListContent.Experience
     var activeCount: Int
     var runningCount: Int
-    var repositoryCount: Int
+    var reviewCount: Int
+    var attentionCount: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -2036,18 +2311,18 @@ private struct CloudChatOverviewPanel: View {
 
                 Spacer(minLength: 8)
 
-                Label(experience.statusLabel, systemImage: "checkmark.circle.fill")
+                Label(summaryStatusTitle, systemImage: summaryStatusSymbol)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(experience.tint)
+                    .foregroundStyle(summaryStatusTint)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 5)
-                    .background(Capsule().fill(experience.tint.opacity(0.11)))
+                    .background(Capsule().fill(summaryStatusTint.opacity(0.11)))
             }
 
             HStack(spacing: 8) {
-                CloudChatMetric(title: "Active", value: activeCount)
                 CloudChatMetric(title: "Running", value: runningCount)
-                CloudChatMetric(title: "Repos", value: repositoryCount)
+                CloudChatMetric(title: "Review", value: reviewCount)
+                CloudChatMetric(title: "Attention", value: attentionCount)
             }
         }
         .padding(14)
@@ -2060,6 +2335,45 @@ private struct CloudChatOverviewPanel: View {
                 .stroke(Color(uiColor: .separator).opacity(0.12), lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
+    }
+
+    private var summaryStatusTitle: String {
+        if attentionCount > 0 {
+            return "\(attentionCount) attention"
+        }
+        if runningCount > 0 {
+            return "\(runningCount) live"
+        }
+        if reviewCount > 0 {
+            return "\(reviewCount) ready"
+        }
+        return "\(activeCount) active"
+    }
+
+    private var summaryStatusSymbol: String {
+        if attentionCount > 0 {
+            return "exclamationmark.triangle.fill"
+        }
+        if runningCount > 0 {
+            return "dot.radiowaves.left.and.right"
+        }
+        if reviewCount > 0 {
+            return "tray.full.fill"
+        }
+        return "checkmark.circle.fill"
+    }
+
+    private var summaryStatusTint: Color {
+        if attentionCount > 0 {
+            return Color(uiColor: .systemOrange)
+        }
+        if runningCount > 0 {
+            return Color(uiColor: .systemBlue)
+        }
+        if reviewCount > 0 {
+            return Color(uiColor: .systemGreen)
+        }
+        return experience.tint
     }
 }
 

@@ -138,7 +138,7 @@ struct NewChatForm: View {
 
     private var targetCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            NewChatSectionHeader(title: "Target", systemName: "folder")
+            NewChatSectionHeader(title: targetSectionTitle, systemName: "folder")
 
             Picker("Source", selection: $sourceMode) {
                 ForEach(SourceMode.allCases) { mode in
@@ -168,9 +168,16 @@ struct NewChatForm: View {
 
     private var promptComposerCard: some View {
         VStack(spacing: 0) {
+            if appState.launchDraft.runtimeMode == .cloud {
+                cloudTaskHeader
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+                    .padding(.bottom, 2)
+            }
+
             promptStarterChips
                 .padding(.horizontal, 12)
-                .padding(.top, 12)
+                .padding(.top, appState.launchDraft.runtimeMode == .cloud ? 6 : 12)
                 .padding(.bottom, 4)
 
             promptEditor
@@ -201,7 +208,7 @@ struct NewChatForm: View {
 
     private var outputCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            NewChatSectionHeader(title: "Output", systemName: "arrow.triangle.branch")
+            NewChatSectionHeader(title: outputSectionTitle, systemName: "arrow.triangle.branch")
 
             VStack(spacing: 0) {
                 NewChatOutputToggleRow(
@@ -278,7 +285,7 @@ struct NewChatForm: View {
     private var promptEditor: some View {
         ZStack(alignment: .topLeading) {
             if appState.launchDraft.prompt.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Ask Cursor to build, fix, review, or prepare a release...")
+                Text(promptPlaceholder)
                     .foregroundStyle(.secondary)
                     .padding(.top, 14)
                     .padding(.leading, 16)
@@ -320,6 +327,33 @@ struct NewChatForm: View {
             appState.launchDraft.prompt.text
         } set: { value in
             appState.launchDraft.prompt.text = value
+        }
+    }
+
+    private var cloudTaskHeader: some View {
+        HStack(alignment: .center, spacing: 10) {
+            NewChatSectionHeader(title: "Task", systemName: "text.bubble")
+
+            Spacer(minLength: 8)
+
+            NewChatInlinePill(systemName: "cloud.fill", title: "Cloud Run")
+        }
+    }
+
+    private var targetSectionTitle: String {
+        appState.launchDraft.runtimeMode == .cloud ? "Workspace" : "Target"
+    }
+
+    private var outputSectionTitle: String {
+        appState.launchDraft.runtimeMode == .cloud ? "Review" : "Output"
+    }
+
+    private var promptPlaceholder: String {
+        switch appState.launchDraft.runtimeMode {
+        case .cloud:
+            "Describe the Cloud Agent task..."
+        case .sdkBridge:
+            "Ask Cursor to build, fix, review, or prepare a release..."
         }
     }
 
@@ -516,7 +550,7 @@ struct NewChatForm: View {
     private var launchButtonTitle: String {
         switch appState.launchDraft.runtimeMode {
         case .cloud:
-            "Start Cursor Cloud"
+            "Start Cloud Run"
         case .sdkBridge:
             "Start Cursor Chat"
         }
@@ -525,7 +559,7 @@ struct NewChatForm: View {
     private var navigationTitle: String {
         switch runtimeMode {
         case .cloud:
-            "New Cursor Cloud"
+            "New Cloud Run"
         case .sdkBridge:
             "New Cursor Chat"
         case nil:
