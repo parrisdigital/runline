@@ -1,0 +1,39 @@
+Runline/Features/NewChatSheet.swift
+  s_984bf69dd03ef8::t_859bc03e8253a7 633-635,714-716
+README.md
+  s_984bf69dd03ef8::t_c0edcaaef8d247 32
+  s_984bf69dd03ef8::t_285a4aaf4d6cca 33
+docs/RELEASES.md
+  s_984bf69dd03ef8::t_b0dfb311f77851 83
+  s_984bf69dd03ef8::t_0b313f05910a79 84
+Runline/Features/ChatDetailView.swift
+  s_984bf69dd03ef8::t_72b9f33de21da9 43,48-80,222
+  s_984bf69dd03ef8::t_58d2076493bc50 659,663-666
+  s_984bf69dd03ef8::t_738eb7661fcf7b 1171-1467,1469-1475
+  s_984bf69dd03ef8::t_a420c0bebb5451 1468
+Runline/App/AppState.swift
+  s_984bf69dd03ef8::t_3b80dc58e36d6a 347-349,603-608
+RunlineTests/RunlineTests.swift
+  s_984bf69dd03ef8::t_81f181e1181947 95,102-103,108,115-117,121-124,131-151,349,365
+CHANGELOG.md
+  s_984bf69dd03ef8::t_f4d5a7070cc775 19
+  s_984bf69dd03ef8::t_43b5264b70ded4 21
+Runline/Core/DomainModels.swift
+  s_984bf69dd03ef8::t_29e864c43d5ad7 8-9,52,54,75-98,103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "e4fbd6dd6f4ceafee8c7a4e9d61abc3cfc3e17aa",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
