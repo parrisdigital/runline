@@ -364,9 +364,9 @@ private struct EventSignature: Equatable {
 }
 
 enum ChatTimelineTextProjection {
-    private static let maxAssistantCharacters = 32_000
-    private static let maxActivityCharacters = 8_000
-    private static let maxActivityDetailCharacters = 6_000
+    private static let maxAssistantCharacters = 18_000
+    private static let maxActivityCharacters = 2_000
+    private static let maxActivityDetailCharacters = 2_400
 
     static func displayMessage(for event: AgentStreamEvent) -> String {
         bounded(

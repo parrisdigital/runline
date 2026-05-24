@@ -59,6 +59,7 @@ struct ChatDetailView: View {
                         if timelineItems.isEmpty {
                             CloudChatEmptyTimeline(
                                 runtimeMode: currentAgent.runtimeMode,
+                                runStatus: latestRun.status,
                                 isStreamExpired: appState.isStreamExpired(runID: latestRun.id)
                             )
                         } else {
@@ -101,8 +102,12 @@ struct ChatDetailView: View {
             )
             .onChange(of: timelineItemIDs) { _, _ in
                 guard !isTimelineScrollPaused else { return }
-                withAnimation(.snappy(duration: 0.2)) {
+                if currentAgent.runtimeMode == .sdkBridge {
                     proxy.scrollTo("bottom", anchor: .bottom)
+                } else {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
                 }
             }
         }
@@ -293,6 +298,7 @@ struct ChatDetailView: View {
     private func pauseTimelineAutoScroll() {
         timelineScrollResumeTask?.cancel()
         timelineScrollResumeTask = nil
+        guard !isTimelineScrollPaused else { return }
         isTimelineScrollPaused = true
     }
 
@@ -1208,25 +1214,26 @@ private struct CloudChatContextChip: View {
 
 private struct CloudChatEmptyTimeline: View {
     var runtimeMode: AgentRuntimeMode
+    var runStatus: RunStatus
     var isStreamExpired: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             CloudAvatar(
-                systemName: isStreamExpired ? "clock.badge.exclamationmark" : "dot.radiowaves.left.and.right",
-                tint: isStreamExpired ? .orange : .blue
+                systemName: symbolName,
+                tint: tint
             )
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("Cursor")
                         .font(.caption.weight(.semibold))
-                    Text(isStreamExpired ? "Paused" : "Starting")
+                    Text(stateTitle)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
 
-                Text(isStreamExpired ? "Live updates are paused for this run. Pull to refresh for the latest \(runtimeMode.title) state." : "Waiting for the first \(runtimeMode.title) update.")
+                Text(message)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1236,6 +1243,37 @@ private struct CloudChatEmptyTimeline: View {
             Spacer(minLength: 24)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var symbolName: String {
+        if runStatus.isTerminal {
+            return "checkmark.circle"
+        }
+        return isStreamExpired ? "clock.badge.exclamationmark" : "dot.radiowaves.left.and.right"
+    }
+
+    private var tint: Color {
+        if runStatus.isTerminal {
+            return .secondary
+        }
+        return isStreamExpired ? .orange : .blue
+    }
+
+    private var stateTitle: String {
+        if runStatus.isTerminal {
+            return "No visible updates"
+        }
+        return isStreamExpired ? "Paused" : "Starting"
+    }
+
+    private var message: String {
+        if runStatus.isTerminal {
+            return "This turn finished, but no saved timeline messages are available locally."
+        }
+        if isStreamExpired {
+            return "Live updates are paused for this run. Pull to refresh for the latest \(runtimeMode.title) state."
+        }
+        return "Waiting for the first \(runtimeMode.title) update."
     }
 }
 
@@ -1291,7 +1329,7 @@ private struct ChatTimelineSnapshot {
 }
 
 private struct ChatTimelineSection: Identifiable, Hashable {
-    private static let maxVisibleActivityItems = 5
+    private static let maxVisibleActivityItems = 4
 
     var id: String
     var items: [ChatTimelineItem]
@@ -1650,7 +1688,7 @@ private struct CloudActivityDisclosureRow: View {
 
     var body: some View {
         Group {
-            if item.hasUsefulActivityDetail {
+            if item.allowsActivityDetailSheet {
                 Button {
                     detailPresentation = TimelineActivityDetailPresentation(item: item)
                 } label: {
@@ -1683,7 +1721,7 @@ private struct CloudActivityDisclosureRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                if item.hasUsefulActivityDetail {
+                if item.allowsActivityDetailSheet {
                     Text(item.activityPreview(maxCharacters: 150))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1697,7 +1735,7 @@ private struct CloudActivityDisclosureRow: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
 
-            if item.hasUsefulActivityDetail {
+            if item.allowsActivityDetailSheet {
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
@@ -1813,7 +1851,7 @@ private struct CloudActivityCompactRow: View {
 
     var body: some View {
         Group {
-            if item.hasUsefulActivityDetail {
+            if item.allowsActivityDetailSheet {
                 Button {
                     detailPresentation = TimelineActivityDetailPresentation(item: item)
                 } label: {
@@ -1845,8 +1883,7 @@ private struct CloudActivityCompactRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                if item.hasUsefulActivityDetail,
-                   shouldShowCollapsedPreview,
+                if item.allowsActivityDetailSheet,
                    collapsedPreview.localizedCaseInsensitiveCompare(compactTitle) != .orderedSame {
                     Text(collapsedPreview)
                         .font(.caption)
@@ -1861,7 +1898,7 @@ private struct CloudActivityCompactRow: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
 
-            if item.hasUsefulActivityDetail {
+            if item.allowsActivityDetailSheet {
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
@@ -1889,17 +1926,8 @@ private struct CloudActivityCompactRow: View {
         }
     }
 
-    private var shouldShowCollapsedPreview: Bool {
-        switch item.kind {
-        case .thinking, .toolCall, .task, .request, .error:
-            true
-        default:
-            false
-        }
-    }
-
     private var collapsedPreview: String {
-        item.activityPreview(maxCharacters: 180)
+        item.activityPreview(maxCharacters: 140)
     }
 
     private var symbolName: String {
@@ -2142,6 +2170,16 @@ private extension ChatTimelineItem {
             && normalizedMessage != "Stream closed"
     }
 
+    var allowsActivityDetailSheet: Bool {
+        guard hasUsefulActivityDetail else { return false }
+        switch kind {
+        case .error, .request:
+            return true
+        default:
+            return false
+        }
+    }
+
     var normalizedActivityMessage: String {
         activityDetailText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -2294,7 +2332,7 @@ private struct CloudRunListeningRow: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
-            Text(runtimeMode == .sdkBridge ? "Waiting for Cursor updates" : "Listening for Cursor events")
+            Text(runtimeMode == .sdkBridge ? "Cursor is working" : "Listening for Cursor events")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
@@ -2325,6 +2363,9 @@ private struct CloudRunProgressBar: View {
     private var statusText: String {
         if hasQueuedFollowUp {
             return "Follow-up queued for the next turn"
+        }
+        if runtimeMode == .sdkBridge {
+            return status == .creating ? "Starting Cursor Chat" : "Cursor is working"
         }
         return status == .creating ? "Starting \(runtimeMode.title)" : "\(runtimeMode.title) running"
     }

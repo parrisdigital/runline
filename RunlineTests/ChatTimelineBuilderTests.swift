@@ -131,7 +131,7 @@ final class ChatTimelineBuilderTests: XCTestCase {
 
         XCTAssertEqual(items.count, 1)
         XCTAssertLessThanOrEqual(items[0].activityPreviewText.count, 220)
-        XCTAssertLessThanOrEqual(items[0].activityDetailText.count, 6_100)
+        XCTAssertLessThanOrEqual(items[0].activityDetailText.count, 2_500)
         XCTAssertTrue(items[0].message.contains("Details truncated"))
     }
 

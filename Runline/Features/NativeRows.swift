@@ -407,7 +407,7 @@ struct TimelineMessageText: View {
 
     var body: some View {
         Group {
-            if isTechnical || !rendersMarkdown {
+            if isTechnical || !shouldRenderMarkdown {
                 Text(message)
                     .font(isTechnical ? .caption.monospaced() : .callout)
             } else {
@@ -420,6 +420,10 @@ struct TimelineMessageText: View {
         }
         .foregroundStyle(foregroundColor)
         .textSelection(.enabled)
+    }
+
+    private var shouldRenderMarkdown: Bool {
+        rendersMarkdown && message.count <= 12_000
     }
 
     @ViewBuilder
