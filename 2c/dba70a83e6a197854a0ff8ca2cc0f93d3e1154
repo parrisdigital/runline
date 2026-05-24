@@ -1,0 +1,28 @@
+Runline/Features/ChatsView.swift
+  s_984bf69dd03ef8::t_d260b0b67bfb47 80
+  s_984bf69dd03ef8::t_e0d9c3e4bec620 418-419
+  s_984bf69dd03ef8::t_af9a070d2bb6dd 349,370,375-380,385
+  s_984bf69dd03ef8::t_e3e954cbe4580a 475-479,504-505,541-545,569-570
+  s_984bf69dd03ef8::t_2e9bdc3c87f3db 525,534-537
+Runline/Features/NativeRows.swift
+  s_984bf69dd03ef8::t_4d83ef0bd8daca 174-265
+Runline/Features/ChatDetailView.swift
+  s_984bf69dd03ef8::t_eec4bcd10ed7c4 2203,2212,2216-2225,2227-2228,2230-2232,2234-2237,2239-2246,2259,2261,2271-2273
+  s_984bf69dd03ef8::t_86b1f7a3b96627 422-423
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "2cdba70a83e6a197854a0ff8ca2cc0f93d3e1154",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
