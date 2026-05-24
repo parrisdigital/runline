@@ -1,0 +1,34 @@
+Runline/Features/ChatDetailView.swift
+  s_984bf69dd03ef8::t_923863fe363aed 96-97,145,292-299
+  s_984bf69dd03ef8::t_fbb5d6bb1c3311 767,771,774-786,789-790,800,809,815
+  s_984bf69dd03ef8::t_48811f505dfaa8 1512-1521,1523-1525,1527,1529-1537,1539-1546,1548-1549
+Services/cursor-sdk-bridge/src/cursorSdk.ts
+  s_984bf69dd03ef8::t_14aa1759b0d0b5 8-19,83,221,236-241,245,272
+  s_984bf69dd03ef8::t_61ed34d850d6ec 222,224,227,243-244,246-256
+Runline.xcodeproj/project.pbxproj
+  s_984bf69dd03ef8::t_352fa1822375b4 462,584
+docs/RELEASES.md
+  s_984bf69dd03ef8::t_352fa1822375b4 11
+Services/cursor-sdk-bridge/test/cursorSdkPrompt.test.ts
+  s_984bf69dd03ef8::t_efa317f112446d 1-32
+CHANGELOG.md
+  s_984bf69dd03ef8::t_352fa1822375b4 9-13
+project.yml
+  s_984bf69dd03ef8::t_352fa1822375b4 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "81475ae5873e0bea57ecde29d48eba0024181e55",
+  "prompts": {},
+  "sessions": {
+    "s_984bf69dd03ef8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e557d-1680-70a0-8319-524b04fb8e3e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Parris Digital <parrisdigital@gmail.com>"
+    }
+  }
+}
